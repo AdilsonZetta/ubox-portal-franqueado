@@ -1,38 +1,13 @@
 import { Link, useParams } from 'react-router-dom'
-import { Logo } from '../components/Logo'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
 import { useAuth } from '../lib/auth'
 import { primeiroNome } from '../lib/format'
-import { useVisao } from '../lib/visao'
-
-function FaixaFranqueado() {
-  const { comoFranqueado, alternar } = useVisao()
-  if (!comoFranqueado) return null
-  return (
-    <div className="flex items-center justify-between gap-3 bg-brand px-4 py-2 text-sm font-semibold text-white md:px-8">
-      <span>Visualizando como franqueado</span>
-      <button type="button" onClick={alternar} className="rounded-lg bg-white px-3 py-1 text-brand-dark">
-        Voltar para franqueadora
-      </button>
-    </div>
-  )
-}
 
 export function ModulosPage() {
-  const { user, sair } = useAuth()
+  const { user } = useAuth()
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <FaixaFranqueado />
-      <header className="flex items-center justify-between gap-4 border-b border-line bg-white px-4 py-4 md:px-8">
-        <Logo />
-        <div className="flex items-center gap-3 text-sm">
-          <span className="hidden text-ink/60 sm:block">{user?.nome}</span>
-          <button type="button" onClick={() => void sair()} className="rounded-lg border border-line px-3 py-1.5 font-semibold">
-            Sair
-          </button>
-        </div>
-      </header>
-      <main className="mx-auto max-w-6xl px-4 py-8 md:px-8">
+    <div>
+      <div className="mx-auto max-w-6xl">
         <p className="text-sm font-medium text-ink/50">UBOX · Portal do Franqueado</p>
         <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Olá, {primeiroNome(user?.nome ?? '')}. Escolha um módulo.</h1>
         <p className="mt-2 max-w-2xl text-sm text-ink/60">
@@ -69,7 +44,7 @@ export function ModulosPage() {
             </section>
           ))}
         </div>
-      </main>
+      </div>
     </div>
   )
 }
@@ -86,12 +61,7 @@ export function ModuloEmBrevePage() {
   }
   const Icone = modulo.icon
   return (
-    <div className="min-h-screen bg-paper text-ink">
-      <FaixaFranqueado />
-      <header className="border-b border-line bg-white px-4 py-4 md:px-8">
-        <Link to="/" className="text-sm font-semibold text-brand">Voltar aos módulos</Link>
-      </header>
-      <main className="mx-auto max-w-2xl px-4 py-10">
+    <div className="mx-auto max-w-2xl">
         <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/10 text-brand">
           <Icone className="h-7 w-7" />
         </span>
@@ -109,7 +79,6 @@ export function ModuloEmBrevePage() {
         <Link to="/" className="mt-8 inline-flex rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white">
           Voltar aos módulos
         </Link>
-      </main>
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react'
-import { HashRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { Carregando } from './components/ui'
 import { firebaseConfigured } from './lib/firebase'
@@ -13,6 +13,7 @@ import { CertificadoPage } from './pages/Certificado'
 import { DocumentoPage } from './pages/Documento'
 import { AtribuicoesPage } from './pages/Atribuicoes'
 import { HomePage } from './pages/Home'
+import { MeusCertificadosPage } from './pages/MeusCertificados'
 import { ModuloEmBrevePage, ModulosPage } from './pages/Modulos'
 import { ModelosPage } from './pages/Modelos'
 import { NotificacoesPage } from './pages/Notificacoes'
@@ -28,10 +29,6 @@ const CategoriasPage = lazy(() => import('./pages/admin/Categorias').then((mod) 
 const DocumentoEditor = lazy(() => import('./pages/admin/DocumentoEditor'))
 const TrilhasAdminPage = lazy(() => import('./pages/admin/TrilhasAdmin').then((mod) => ({ default: mod.TrilhasAdminPage })))
 const TrilhaEditor = lazy(() => import('./pages/admin/TrilhasAdmin'))
-
-function OutletReady() {
-  return <Outlet />
-}
 
 function Admin({ children }: { children: ReactNode }) {
   const { user } = useAuth()
@@ -61,7 +58,9 @@ function Area() {
         <Route
           element={
             status === 'ready' ? (
-              <OutletReady />
+              <PortalProvider>
+                <Layout />
+              </PortalProvider>
             ) : (
               <Navigate to={status === 'incomplete' ? '/completar' : status === 'signedOut' ? '/entrar' : '/aguardando'} replace />
             )
@@ -69,7 +68,6 @@ function Area() {
         >
           <Route path="/" element={<ModulosPage />} />
           <Route path="/modulos/:slug" element={<ModuloEmBrevePage />} />
-          <Route element={<PortalProvider><Layout /></PortalProvider>}>
           <Route path="/manuais" element={<HomePage />} />
           <Route path="/atribuicoes" element={<AtribuicoesPage />} />
           <Route path="/modelos" element={<ModelosPage />} />
@@ -78,6 +76,7 @@ function Area() {
           <Route path="/documento/:id" element={<DocumentoPage />} />
           <Route path="/documento/:id/imprimir" element={<DocumentoPage />} />
           <Route path="/busca" element={<BuscaPage />} />
+          <Route path="/meus-certificados" element={<MeusCertificadosPage />} />
           <Route path="/trilhas" element={<TrilhasPage />} />
           <Route path="/trilhas/:id" element={<TrilhaPage />} />
           <Route path="/trilhas/:trilhaId/quiz/:quizId" element={<QuizPage />} />
@@ -94,7 +93,6 @@ function Area() {
           <Route path="/admin/trilhas" element={<Admin><TrilhasAdminPage /></Admin>} />
           <Route path="/admin/trilhas/nova" element={<Admin><TrilhaEditor /></Admin>} />
           <Route path="/admin/trilhas/:id" element={<Admin><TrilhaEditor /></Admin>} />
-          </Route>
         </Route>
         <Route path="*" element={<Navigate to={status === 'ready' ? '/' : '/entrar'} replace />} />
       </Routes>
