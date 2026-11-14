@@ -40,6 +40,7 @@ import type {
 import { calcularUids } from './access'
 import { requireDb } from './firebase'
 import { idAvisoLeitura, idCertificado, idLeitura } from './ids'
+import { aplicarGabarito, extrairItensTrilha, extrairPerguntas, publicadoNoDado } from './quizSchema'
 import { htmlParaTexto, limitar, textoParaIndice } from './text'
 
 function texto(valor: unknown, fallback = ''): string {
@@ -150,52 +151,31 @@ export function mapDocumento(id: string, data: DocumentData): Documento {
   }
 }
 
-function mapItens(valor: unknown): TrilhaItem[] {
-  if (!Array.isArray(valor)) return []
-  return valor.flatMap((item) => {
-    if (!item || typeof item !== 'object') return []
-    const registro = item as Record<string, unknown>
-    const tipo = registro.tipo === 'quiz' ? 'quiz' : registro.tipo === 'documento' ? 'documento' : null
-    const refId = texto(registro.refId)
-    if (!tipo || !refId) return []
-    return [{ id: texto(registro.id, refId), tipo, refId, titulo: texto(registro.titulo, 'Item') }]
-  })
-}
-
 export function mapTrilha(id: string, data: DocumentData): Trilha {
+  const nota = data.notaMinima ?? data.nota_minima
   return {
     id,
-    titulo: texto(data.titulo, 'Trilha'),
+    titulo: texto(data.titulo) || texto(data.nome, 'Trilha'),
     descricao: texto(data.descricao),
-    notaMinima: typeof data.notaMinima === 'number' ? data.notaMinima : 70,
-    publicado: data.publicado === true,
-    itens: mapItens(data.itens),
+    notaMinima: typeof nota === 'number' ? nota : 70,
+    publicado: publicadoNoDado(data),
+    itens: extrairItensTrilha(data),
     ...audiencia(data, true),
     criadoEm: data.criadoEm,
     atualizadoEm: data.atualizadoEm,
   }
 }
 
-function mapPerguntas(valor: unknown): Pergunta[] {
-  if (!Array.isArray(valor)) return []
-  return valor.flatMap((item, indice) => {
-    if (!item || typeof item !== 'object') return []
-    const registro = item as Record<string, unknown>
-    const opcoes = listaTexto(registro.opcoes)
-    if (!texto(registro.enunciado) || opcoes.length < 2) return []
-    const correta = typeof registro.correta === 'number' ? registro.correta : 0
-    return [{ id: texto(registro.id, `p${indice + 1}`), enunciado: texto(registro.enunciado), opcoes, correta }]
-  })
-}
-
 export function mapQuiz(id: string, data: DocumentData): Quiz {
+  const nota = data.notaMinima ?? data.nota_minima
+  const perguntas = aplicarGabarito(extrairPerguntas(data), data.gabarito)
   return {
     id,
-    trilhaId: texto(data.trilhaId),
-    titulo: texto(data.titulo, 'Quiz'),
-    notaMinima: typeof data.notaMinima === 'number' ? data.notaMinima : 70,
-    perguntas: mapPerguntas(data.perguntas),
-    publicado: data.publicado === true,
+    trilhaId: texto(data.trilhaId) || texto(data.trilha),
+    titulo: texto(data.titulo) || texto(data.nome, 'Quiz'),
+    notaMinima: typeof nota === 'number' ? nota : 70,
+    perguntas,
+    publicado: publicadoNoDado(data),
     ...audiencia(data, true),
     criadoEm: data.criadoEm,
     atualizadoEm: data.atualizadoEm,
@@ -239,6 +219,14 @@ export async function carregarPortal(usuario: Usuario): Promise<{
     }),
   )
 
+  let trilhaFormacao: Trilha | null = null
+  try {
+    const snap = await getDoc(doc(banco, 'trilhas', 'trilha-formacao-inicial'))
+    if (snap.exists()) trilhaFormacao = mapTrilha(snap.id, snap.data())
+  } catch {
+    trilhaFormacao = null
+  }
+
   const [catPublicas, catMinhas, docsPublicos, docsMeus, trilhasPublicas, trilhasMinhas] = await Promise.all([
     getDocs(query(collection(banco, 'categorias'), where('publico', '==', true))),
     getDocs(query(collection(banco, 'categorias'), where('uids', 'array-contains', usuario.uid))),
@@ -259,6 +247,7 @@ export async function carregarPortal(usuario: Usuario): Promise<{
       docsMeus.docs.map((item) => mapDocumento(item.id, item.data())),
     ]),
     trilhas: mesclar([
+      trilhaFormacao ? [trilhaFormacao] : [],
       trilhasPublicas.docs.map((item) => mapTrilha(item.id, item.data())),
       trilhasMinhas.docs.map((item) => mapTrilha(item.id, item.data())),
     ]),
@@ -502,9 +491,28 @@ export async function excluirTrilha(id: string): Promise<void> {
   await deleteDoc(doc(banco, 'trilhas', id))
 }
 
+async function lerGabarito(id: string): Promise<unknown> {
+  const banco = requireDb()
+  const leituras = await Promise.allSettled([
+    getDoc(doc(banco, 'gabarito', id)),
+    getDoc(doc(banco, 'quizzes', id, 'gabarito', 'oficial')),
+    getDocs(collection(banco, 'quizzes', id, 'gabarito')),
+  ])
+  for (const leitura of leituras) {
+    if (leitura.status !== 'fulfilled') continue
+    const snap = leitura.value
+    if ('exists' in snap && snap.exists()) return snap.data()
+    if ('docs' in snap && snap.docs[0]) return snap.docs[0].data()
+  }
+  return null
+}
+
 export async function obterQuiz(id: string): Promise<Quiz | null> {
   const snap = await getDoc(doc(requireDb(), 'quizzes', id))
-  return snap.exists() ? mapQuiz(snap.id, snap.data()) : null
+  if (!snap.exists()) return null
+  const quiz = mapQuiz(snap.id, snap.data())
+  const externo = await lerGabarito(id)
+  return externo ? { ...quiz, perguntas: aplicarGabarito(quiz.perguntas, externo) } : quiz
 }
 
 export async function listarQuizzesDaTrilha(trilhaId: string): Promise<Quiz[]> {

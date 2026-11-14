@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import type { Aviso, Categoria, Certificado, Documento, Leitura, Aceite, Tentativa, Trilha } from '../types'
 import { carregarAvisos, carregarMeuProgresso, carregarPortal, marcarAvisoLido } from './api'
 import { useAuth } from './auth'
+import { documentoVisivelAoFranqueado, trilhaVisivelAoFranqueado, useVisao } from './visao'
 import { mensagemErro } from './errors'
 import { paraMillis } from './format'
 
@@ -25,6 +26,7 @@ const PortalContext = createContext<PortalValue | null>(null)
 
 export function PortalProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
+  const { comoFranqueado } = useVisao()
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [documentos, setDocumentos] = useState<Documento[]>([])
   const [trilhas, setTrilhas] = useState<Trilha[]>([])
@@ -67,11 +69,27 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     }
   }, [user, tick])
 
+  const documentosVisiveis = useMemo(
+    () => (comoFranqueado && user ? documentos.filter((documento) => documentoVisivelAoFranqueado(documento, user)) : documentos),
+    [comoFranqueado, documentos, user],
+  )
+  const trilhasVisiveis = useMemo(
+    () => (comoFranqueado && user ? trilhas.filter((trilha) => trilhaVisivelAoFranqueado(trilha, user)) : trilhas),
+    [comoFranqueado, trilhas, user],
+  )
+  const categoriasVisiveis = useMemo(
+    () =>
+      comoFranqueado && user
+        ? categorias.filter((categoria) => categoria.publico || categoria.uids.includes(user.uid))
+        : categorias,
+    [comoFranqueado, categorias, user],
+  )
+
   const valor = useMemo<PortalValue>(
     () => ({
-      categorias,
-      documentos,
-      trilhas,
+      categorias: categoriasVisiveis,
+      documentos: documentosVisiveis,
+      trilhas: trilhasVisiveis,
       leituras,
       aceites,
       tentativas,
@@ -87,7 +105,7 @@ export function PortalProvider({ children }: { children: ReactNode }) {
         setAvisosLidos((atual) => (atual.includes(avisoId) ? atual : [...atual, avisoId]))
       },
     }),
-    [categorias, documentos, trilhas, leituras, aceites, tentativas, certificados, avisos, avisosLidos, carregando, erro, user],
+    [categoriasVisiveis, documentosVisiveis, trilhasVisiveis, leituras, aceites, tentativas, certificados, avisos, avisosLidos, carregando, erro, user],
   )
 
   return <PortalContext.Provider value={valor}>{children}</PortalContext.Provider>

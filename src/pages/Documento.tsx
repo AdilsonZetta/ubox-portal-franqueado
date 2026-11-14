@@ -8,6 +8,7 @@ import { mensagemErro } from '../lib/errors'
 import { formatarData, rotuloTipo } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
+import { useVisao } from '../lib/visao'
 import { aplicarSumario } from '../lib/text'
 import { cadeiaCategoria } from '../lib/trilha'
 import type { VersaoDocumento } from '../types'
@@ -16,6 +17,7 @@ export function DocumentoPage() {
   const { id = '' } = useParams()
   const imprimir = window.location.hash.includes('/imprimir')
   const { user } = useAuth()
+  const { ehAdmin } = useVisao()
   const portal = usePortal()
   const documento = portal.documentos.find((item) => item.id === id)
   const [erro, setErro] = useState('')
@@ -40,9 +42,9 @@ export function DocumentoPage() {
   }, [imprimir])
 
   useEffect(() => {
-    if (user?.papel !== 'admin' || !documento) return
+    if (!ehAdmin || !documento) return
     void listarVersoes(documento.id).then(setVersoes).catch(() => undefined)
-  }, [user?.papel, documento?.id])
+  }, [ehAdmin, documento?.id])
 
   if (!user) return null
   if (portal.carregando && !documento) return <p>Carregando documento…</p>
@@ -99,7 +101,7 @@ export function DocumentoPage() {
         <Link to={`/documento/${documento.id}/imprimir`} className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
           Imprimir / PDF
         </Link>
-        {user.papel === 'admin' ? (
+        {ehAdmin ? (
           <Link to={`/admin/documento/${documento.id}`} className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
             Editar
           </Link>

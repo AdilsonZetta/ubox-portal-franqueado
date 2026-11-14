@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom'
 import { MODELOS } from '../data/modelos'
-import { useAuth } from '../lib/auth'
+import { useVisao } from '../lib/visao'
 import { rotuloTipo } from '../lib/format'
 
 export function ModelosPage() {
-  const { user } = useAuth()
+  const { ehAdmin } = useVisao()
   const areas = [...new Set(MODELOS.map((modelo) => modelo.area))]
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -20,7 +20,7 @@ export function ModelosPage() {
               <article key={modelo.id} className="rounded-2xl border border-line bg-white p-4">
                 <p className="text-xs font-semibold uppercase tracking-wide text-brand">{rotuloTipo(modelo.tipo)}</p>
                 <h3 className="mt-1 font-semibold">{modelo.nome}</h3>
-                {user?.papel === 'admin' ? (
+                {ehAdmin ? (
                   <Link to={`/admin/documento/novo?modelo=${modelo.id}`} className="mt-3 inline-block text-sm font-semibold text-brand">
                     Usar modelo
                   </Link>

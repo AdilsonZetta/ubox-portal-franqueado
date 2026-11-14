@@ -520,10 +520,18 @@ service cloud.firestore {
       }
     }
 
+    function legadoPublicado() {
+      return resource.data.publicado == true || !('publicado' in resource.data);
+    }
+
+    function legadoPublico() {
+      return resource.data.publico == true || !('publico' in resource.data);
+    }
+
     match /trilhas/{id} {
       allow read: if isAdmin();
-      allow read: if isActive() && resource.data.publicado == true && resource.data.publico == true;
-      allow read: if isActive() && resource.data.publicado == true && uidsContemUsuario();
+      allow read: if isActive() && legadoPublicado() && legadoPublico();
+      allow read: if isActive() && legadoPublicado() && uidsContemUsuario();
 
       allow create: if isAdmin()
         && isValidTrilha(request.resource.data)
@@ -537,8 +545,8 @@ service cloud.firestore {
 
     match /quizzes/{id} {
       allow read: if isAdmin();
-      allow read: if isActive() && resource.data.publicado == true && resource.data.publico == true;
-      allow read: if isActive() && resource.data.publicado == true && uidsContemUsuario();
+      allow read: if isActive() && legadoPublicado() && legadoPublico();
+      allow read: if isActive() && legadoPublicado() && uidsContemUsuario();
 
       allow create: if isAdmin()
         && isValidQuiz(request.resource.data)
@@ -548,6 +556,16 @@ service cloud.firestore {
         && isValidQuiz(request.resource.data)
         && atualizacaoValida();
       allow delete: if isAdmin();
+
+      match /gabarito/{gabaritoId} {
+        allow read: if isAdmin() || isActive();
+        allow write: if isAdmin();
+      }
+    }
+
+    match /gabarito/{id} {
+      allow read: if isAdmin() || isActive();
+      allow write: if isAdmin();
     }
 
     match /avisos/{id} {

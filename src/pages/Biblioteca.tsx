@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Aviso, Carregando, Selo, Vazio } from '../components/ui'
-import { useAuth } from '../lib/auth'
+import { useVisao } from '../lib/visao'
 import { formatarData, rotuloTipo } from '../lib/format'
 import { usePortal } from '../lib/portal'
 import { cadeiaCategoria, filhosDe } from '../lib/trilha'
@@ -11,7 +11,7 @@ const filtros = ['todos', 'pop', 'manual', 'processo', 'politica', 'checklist', 
 
 export function BibliotecaPage() {
   const { categoriaId } = useParams()
-  const { user } = useAuth()
+  const { ehAdmin } = useVisao()
   const { categorias, documentos, carregando, erro } = usePortal()
   const [filtro, setFiltro] = useState<(typeof filtros)[number]>('todos')
   const atual = categorias.find((categoria) => categoria.id === categoriaId)
@@ -19,11 +19,11 @@ export function BibliotecaPage() {
   const trilha = atual ? cadeiaCategoria(categorias, atual.id) : []
   const lista = useMemo(() => {
     return documentos
-      .filter((documento) => (user?.papel === 'admin' ? true : documento.status === 'publicado'))
+      .filter((documento) => (ehAdmin ? true : documento.status === 'publicado'))
       .filter((documento) => (atual ? documento.categoriaId === atual.id : true))
       .filter((documento) => (filtro === 'todos' ? true : documento.tipo === filtro))
       .sort((a, b) => paraMillis(b.atualizadoEm) - paraMillis(a.atualizadoEm))
-  }, [documentos, atual, filtro, user?.papel])
+  }, [documentos, atual, filtro, ehAdmin])
 
   return (
     <div className="mx-auto max-w-5xl space-y-4">
@@ -42,7 +42,7 @@ export function BibliotecaPage() {
             <h1 className="text-2xl font-extrabold">{atual ? atual.nome.replace(/^\d+\s*/, '') : 'Todos os documentos'}</h1>
             <p className="text-sm text-ink/55">{atual?.descricao || 'POPs, manuais, políticas e processos da rede.'}</p>
           </div>
-          {user?.papel === 'admin' ? (
+          {ehAdmin ? (
             <Link to="/admin/documento/novo" className="rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white">
               Novo documento
             </Link>

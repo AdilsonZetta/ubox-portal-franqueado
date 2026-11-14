@@ -5,16 +5,18 @@ import { useAuth } from '../lib/auth'
 import { primeiroNome, rotuloTipo, paraMillis } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
+import { useVisao } from '../lib/visao'
 import { filhosDe } from '../lib/trilha'
 
 export function HomePage() {
   const { user } = useAuth()
+  const { ehAdmin } = useVisao()
   const portal = usePortal()
   const navigate = useNavigate()
   const [pergunta, setPergunta] = useState('')
   if (!user) return null
   const raizes = filhosDe(portal.categorias, null)
-  const publicados = portal.documentos.filter((documento) => documento.status === 'publicado' || user.papel === 'admin')
+  const publicados = portal.documentos.filter((documento) => documento.status === 'publicado' || ehAdmin)
   const pendentes = publicados.filter(
     (documento) =>
       documento.leituraObrigatoria &&

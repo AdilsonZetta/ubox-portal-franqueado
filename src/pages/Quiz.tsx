@@ -28,7 +28,21 @@ export function QuizPage() {
   }, [quizId])
 
   if (erro) return <Aviso tom="erro">{erro}</Aviso>
-  if (!quiz || !user) return <p>Carregando quiz…</p>
+  if (!user) return null
+  if (!quiz) {
+    return (
+      <Aviso tom="erro">
+        Não encontrei este quiz. Confira se o documento em quizzes/{quizId} existe e se o franqueado pode lê-lo (publicado e público, ou o uid na lista).
+      </Aviso>
+    )
+  }
+  if (!quiz.perguntas.length) {
+    return (
+      <Aviso tom="erro">
+        O quiz abriu, mas não há perguntas reconhecidas. O app espera perguntas, questoes ou questions, cada uma com enunciado/pergunta e opcoes/alternativas. O gabarito pode vir no campo gabarito ou na coleção gabarito/{quizId}.
+      </Aviso>
+    )
+  }
 
   async function enviar() {
     if (!quiz || !user) return

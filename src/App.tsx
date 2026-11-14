@@ -4,6 +4,7 @@ import { Layout } from './components/Layout'
 import { Carregando } from './components/ui'
 import { firebaseConfigured } from './lib/firebase'
 import { AuthProvider, useAuth } from './lib/auth'
+import { useVisao, VisaoProvider } from './lib/visao'
 import { PortalProvider } from './lib/portal'
 import { AguardandoPage, CadastroPage, CompletarPage, ConfigPendentePage, EntrarPage, RecuperarPage } from './pages/AuthPages'
 import { BibliotecaPage } from './pages/Biblioteca'
@@ -29,7 +30,8 @@ const TrilhaEditor = lazy(() => import('./pages/admin/TrilhasAdmin'))
 
 function Admin({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  if (user?.papel !== 'admin') return <Navigate to="/" replace />
+  const { ehAdmin } = useVisao()
+  if (user?.papel !== 'admin' || !ehAdmin) return <Navigate to="/" replace />
   return <Suspense fallback={<Carregando />}>{children}</Suspense>
 }
 
@@ -97,7 +99,9 @@ export function App() {
   if (!firebaseConfigured) return <ConfigPendentePage />
   return (
     <AuthProvider>
-      <Area />
+      <VisaoProvider>
+        <Area />
+      </VisaoProvider>
     </AuthProvider>
   )
 }

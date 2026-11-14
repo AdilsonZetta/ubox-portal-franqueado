@@ -5,12 +5,13 @@ import { emitirCertificado } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { codigoCertificado } from '../lib/format'
 import { usePortal } from '../lib/portal'
+import { useVisao } from '../lib/visao'
 import { quizAprovado, trilhaConcluida, ultimaTentativaAprovada } from '../lib/quiz'
 
 export function TrilhasPage() {
   const { trilhas, carregando } = usePortal()
-  const { user } = useAuth()
-  const visiveis = trilhas.filter((trilha) => trilha.publicado || user?.papel === 'admin')
+  const { ehAdmin } = useVisao()
+  const visiveis = trilhas.filter((trilha) => trilha.publicado || ehAdmin)
   return (
     <div className="space-y-4">
       <h1 className="text-3xl font-extrabold">Trilhas de treinamento</h1>

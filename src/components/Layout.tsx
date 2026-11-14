@@ -3,21 +3,23 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { usePortal } from '../lib/portal'
+import { useVisao } from '../lib/visao'
 import { filhosDe } from '../lib/trilha'
 import { Logo } from './Logo'
 import { cx } from './ui'
 
-const links = [
+const links: { to: string; label: string; icon: typeof Home; fim?: boolean; admin?: boolean }[] = [
   { to: '/', label: 'Início', icon: Home, fim: true },
   { to: '/biblioteca', label: 'Documentos', icon: BookOpen },
   { to: '/trilhas', label: 'Trilhas', icon: GraduationCap },
-  { to: '/atribuicoes', label: 'Atribuições', icon: ClipboardCheck },
-  { to: '/modelos', label: 'Modelos', icon: LayoutTemplate },
+  { to: '/atribuicoes', label: 'Atribuições', icon: ClipboardCheck, admin: true },
+  { to: '/modelos', label: 'Modelos', icon: LayoutTemplate, admin: true },
   { to: '/pergunte', label: 'Pergunte', icon: MessageCircle },
 ]
 
 export function Layout() {
   const { user, sair } = useAuth()
+  const { comoFranqueado, ehAdmin, alternar } = useVisao()
   const { avisos, avisosLidos, categorias, documentos } = usePortal()
   const [aberto, setAberto] = useState(false)
   const [consulta, setConsulta] = useState('')
@@ -62,7 +64,7 @@ export function Layout() {
         />
       </form>
       <nav className="mt-4 flex flex-col gap-0.5">
-        {links.map((link) => (
+        {links.filter((link) => !link.admin || ehAdmin).map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
@@ -79,7 +81,7 @@ export function Layout() {
             {link.label}
           </NavLink>
         ))}
-        {user?.papel === 'admin' ? (
+        {ehAdmin ? (
           <NavLink
             to="/admin"
             onClick={() => setAberto(false)}
@@ -95,7 +97,7 @@ export function Layout() {
       <p className="mb-2 mt-6 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/40">Áreas</p>
       <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
         {areas.map((area) => {
-          const quantidade = documentos.filter((documento) => documento.categoriaId === area.id && (documento.status === 'publicado' || user?.papel === 'admin')).length
+          const quantidade = documentos.filter((documento) => documento.categoriaId === area.id && (documento.status === 'publicado' || ehAdmin)).length
           return (
             <NavLink
               key={area.id}
@@ -112,10 +114,15 @@ export function Layout() {
           )
         })}
       </div>
+      {user?.papel === 'admin' ? (
+        <button type="button" onClick={alternar} className="mt-3 w-full rounded-xl border border-brand/40 px-3 py-2 text-left text-sm font-semibold text-brand-dark hover:bg-brand/10">
+          {comoFranqueado ? 'Voltar para franqueadora' : 'Ver como franqueado'}
+        </button>
+      ) : null}
       <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
         <NavLink to="/perfil" className="min-w-0 flex-1" onClick={() => setAberto(false)}>
           <span className="block truncate text-sm font-semibold">{user?.nome}</span>
-          <span className="block truncate text-[11px] text-ink/45">{user?.papel === 'admin' ? 'Franqueadora' : user?.unidade || 'Franqueado'}</span>
+          <span className="block truncate text-[11px] text-ink/45">{ehAdmin ? 'Franqueadora' : user?.unidade || 'Franqueado'}</span>
         </NavLink>
         <button onClick={() => void sair()} className="rounded-lg p-2 text-ink/50 hover:bg-paper" aria-label="Sair">
           <LogOut className="h-4 w-4" />
@@ -158,6 +165,14 @@ export function Layout() {
             <ChevronRight className="h-3.5 w-3.5" />
           </NavLink>
         </div>
+        {comoFranqueado ? (
+          <div className="no-print flex items-center justify-between gap-3 bg-brand px-4 py-2 text-sm font-semibold text-white md:px-8">
+            <span>Visualizando como franqueado</span>
+            <button type="button" onClick={alternar} className="rounded-lg bg-white px-3 py-1 text-brand-dark">
+              Voltar para franqueadora
+            </button>
+          </div>
+        ) : null}
         <main className="px-4 py-5 md:px-8 md:py-6">
           <Outlet />
         </main>
