@@ -1,6 +1,7 @@
 import { initializeApp, type FirebaseApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth'
 import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore'
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { resolveFirebaseConfig } from '../firebaseConfig'
 
 const resolved = resolveFirebaseConfig()
@@ -16,13 +17,13 @@ if (firebaseApp && auth && db && import.meta.env.VITE_USE_EMULATOR === 'true') {
   connectFirestoreEmulator(db, '127.0.0.1', 8080)
 }
 
-if (firebaseApp && import.meta.env.VITE_APPCHECK_SITE_KEY?.trim()) {
-  const siteKey = import.meta.env.VITE_APPCHECK_SITE_KEY.trim()
-  void import('firebase/app-check').then(({ initializeAppCheck, ReCaptchaV3Provider }) => {
-    initializeAppCheck(firebaseApp, {
-      provider: new ReCaptchaV3Provider(siteKey),
-      isTokenAutoRefreshEnabled: true,
-    })
+const APPCHECK_SITE_KEY =
+  import.meta.env.VITE_APPCHECK_SITE_KEY?.trim() || '6Ldo4B8uAAAAACE-UJ9wwSs9GittnvvbBKi1Jq7R'
+
+if (firebaseApp && APPCHECK_SITE_KEY && typeof window !== 'undefined') {
+  initializeAppCheck(firebaseApp, {
+    provider: new ReCaptchaEnterpriseProvider(APPCHECK_SITE_KEY),
+    isTokenAutoRefreshEnabled: true,
   })
 }
 
