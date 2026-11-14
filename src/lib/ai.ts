@@ -1,7 +1,7 @@
 import { aiHabilitado, modeloAi } from '../firebaseConfig'
 import type { Documento } from '../types'
 import { firebaseApp } from './firebase'
-import { limitar, pontuarBusca, trecho } from './text'
+import { htmlParaTexto, limitar, pontuarBusca, trecho } from './text'
 
 export interface FonteResposta {
   id: string
@@ -10,44 +10,73 @@ export interface FonteResposta {
   trecho: string
 }
 
+function corpoPesquisavel(documento: Documento): string {
+  const texto = documento.conteudoTexto
+  const sujo = !texto || texto.includes('data:image') || texto.includes('base64') || texto.length > 20000
+  if (!sujo) return texto
+  return htmlParaTexto(documento.conteudoHtml || documento.htmlConteudo || texto)
+}
+
 export function fontesDaPergunta(pergunta: string, documentos: Documento[], limite = 4): FonteResposta[] {
   return documentos
-    .map((documento) => ({
-      documento,
-      pontos: pontuarBusca(pergunta, documento.titulo, documento.conteudoTexto),
-    }))
+    .map((documento) => {
+      const corpo = corpoPesquisavel(documento)
+      return { documento, corpo, pontos: pontuarBusca(pergunta, documento.titulo, corpo) }
+    })
     .filter((item) => item.pontos > 0)
     .sort((a, b) => b.pontos - a.pontos)
     .slice(0, limite)
-    .map(({ documento }) => ({
+    .map(({ documento, corpo }) => ({
       id: documento.id,
       titulo: documento.titulo,
       categoriaId: documento.categoriaId,
-      trecho: trecho(documento.conteudoTexto, pergunta, 900),
+      trecho: trecho(corpo, pergunta, 700),
     }))
+}
+
+function modelosParaTentar(): string[] {
+  const preferido = modeloAi()
+  return [...new Set([preferido, 'gemini-3.5-flash-lite', 'gemini-2.5-flash'].filter(Boolean))]
+}
+
+async function gerarTexto(prompt: string, maxOutputTokens: number): Promise<string> {
+  if (!firebaseApp) throw new Error('Configuração do Firebase pendente')
+  const { getAI, getGenerativeModel, GoogleAIBackend } = await import('firebase/ai')
+  const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() })
+  let ultimo: unknown
+  for (const modelName of modelosParaTentar()) {
+    try {
+      const model = getGenerativeModel(ai, { model: modelName, generationConfig: { maxOutputTokens } })
+      const resultado = await model.generateContent(prompt)
+      const texto = resultado.response.text().trim()
+      if (texto) return texto
+    } catch (erro) {
+      ultimo = erro
+    }
+  }
+  throw ultimo instanceof Error ? ultimo : new Error('A IA não respondeu.')
+}
+
+function mensagemIa(erro: unknown): string {
+  const texto = erro instanceof Error ? erro.message : ''
+  if (/app check|permission|unauthenticated/i.test(texto)) {
+    return 'A IA do Firebase recusou a consulta. Confira se o AI Logic e o App Check estão liberados para este app. Enquanto isso, use os trechos encontrados na base.'
+  }
+  return 'Não consegui consultar a IA agora. Os trechos abaixo foram encontrados pela busca do portal.'
 }
 
 export async function gerarRascunho(pedido: string): Promise<string> {
   if (!aiHabilitado()) throw new Error('A IA está desligada. Defina VITE_AI_ENABLED ou deixe o padrão ligado.')
-  if (!firebaseApp) throw new Error('Configuração do Firebase pendente')
-  const { getAI, getGenerativeModel, GoogleAIBackend } = await import('firebase/ai')
-  const model = getGenerativeModel(getAI(firebaseApp, { backend: new GoogleAIBackend() }), {
-    model: modeloAi(),
-    generationConfig: { maxOutputTokens: 1400 },
-  })
-  const resultado = await model.generateContent(
+  const texto = await gerarTexto(
     [
       'Escreva um procedimento operacional da Ubox Self Storage em HTML simples.',
       'Use apenas h1, p, h2, ol/li e ul/li. A lista ol é o passo a passo numerado.',
       'Não use markdown nem cerca de código. Português do Brasil. Seja específico para self storage.',
       `Pedido: ${pedido}`,
     ].join('\n'),
+    1400,
   )
-  return resultado.response
-    .text()
-    .replace(/```html/gi, '')
-    .replace(/```/g, '')
-    .trim()
+  return texto.replace(/```html/gi, '').replace(/```/g, '').trim()
 }
 
 export async function perguntarAoPortal(pergunta: string, documentos: Documento[]): Promise<{ texto: string; fontes: FonteResposta[] }> {
@@ -65,26 +94,23 @@ export async function perguntarAoPortal(pergunta: string, documentos: Documento[
       fontes,
     }
   }
-  const { getAI, getGenerativeModel, GoogleAIBackend } = await import('firebase/ai')
-  const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() })
-  const model = getGenerativeModel(ai, {
-    model: modeloAi(),
-    generationConfig: { maxOutputTokens: 900 },
-  })
-  const contexto = fontes
-    .map((fonte, indice) => `FONTE ${indice + 1}: ${fonte.titulo}\n${limitar(fonte.trecho, 900)}`)
-    .join('\n\n')
+  const contexto = limitar(
+    fontes.map((fonte, indice) => `FONTE ${indice + 1}: ${fonte.titulo}\n${fonte.trecho}`).join('\n\n'),
+    6000,
+  )
   const prompt = [
-    'Você é o assistente "Pergunte ao Portal" da Ubox Self Storage, franqueadora de self storage em Uberaba/MG.',
-    'Responda em português do Brasil, com clareza operacional, usando somente o CONTEXTO.',
-    'Se o contexto não trouxer a resposta, diga que o portal não documenta isso e não invente procedimento.',
-    'Cite os títulos das fontes usadas.',
+    'Você é o assistente "Pergunte ao Portal" da Ubox Self Storage.',
+    'Responda em português do Brasil, só com o CONTEXTO. Se não houver a resposta, diga isso.',
+    'Cite o título da fonte.',
     '',
     'CONTEXTO:',
     contexto,
     '',
     `PERGUNTA: ${pergunta}`,
   ].join('\n')
-  const resultado = await model.generateContent(prompt)
-  return { texto: resultado.response.text(), fontes }
+  try {
+    return { texto: await gerarTexto(prompt, 800), fontes }
+  } catch (erro) {
+    return { texto: mensagemIa(erro), fontes }
+  }
 }

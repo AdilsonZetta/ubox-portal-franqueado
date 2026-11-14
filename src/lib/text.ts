@@ -15,6 +15,9 @@ export function htmlParaTexto(html: string): string {
   return html
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<img\b[^>]*>/gi, ' ')
+    .replace(/<svg[\s\S]*?<\/svg>/gi, ' ')
+    .replace(/data:image\/[a-z0-9.+-]+;base64,[a-z0-9+/=\s]+/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -23,6 +26,11 @@ export function htmlParaTexto(html: string): string {
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+/** Texto curto para busca e IA, sem as figuras embutidas dos manuais. */
+export function textoParaIndice(htmlOuTexto: string, max = 12000): string {
+  return limitar(htmlParaTexto(htmlOuTexto), max)
 }
 
 export function limitar(valor: string, max: number): string {

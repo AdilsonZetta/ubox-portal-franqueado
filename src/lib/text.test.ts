@@ -17,4 +17,11 @@ describe('busca', () => {
     expect(texto).toContain('Guarde o contrato')
     expect(trecho(`prefixo ${texto}`, 'contrato')).toContain('contrato')
   })
+
+  it('remove imagens base64 antes da busca', () => {
+    const html = `<p>Abertura da unidade</p><img src="data:image/webp;base64,${'A'.repeat(400)}" />`
+    const texto = htmlParaTexto(html)
+    expect(texto).toContain('Abertura')
+    expect(texto.includes('AAAA')).toBe(false)
+  })
 })

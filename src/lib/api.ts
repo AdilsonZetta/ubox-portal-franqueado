@@ -40,7 +40,7 @@ import type {
 import { calcularUids } from './access'
 import { requireDb } from './firebase'
 import { idAvisoLeitura, idCertificado, idLeitura } from './ids'
-import { htmlParaTexto, limitar } from './text'
+import { htmlParaTexto, limitar, textoParaIndice } from './text'
 
 function texto(valor: unknown, fallback = ''): string {
   return typeof valor === 'string' ? valor : fallback
@@ -113,20 +113,32 @@ export function mapDocumento(id: string, data: DocumentData): Documento {
   const tipo = ['pop', 'manual', 'processo', 'politica', 'checklist', 'html'].includes(texto(data.tipo))
     ? (data.tipo as TipoDocumento)
     : 'manual'
-  const formato: FormatoDocumento = data.formato === 'html' ? 'html' : 'richtext'
+  const htmlConteudo = texto(data.htmlConteudo)
+  const conteudoHtml = texto(data.conteudoHtml) || texto(data.conteudo) || texto(data.html)
+  const interativo =
+    data.formato === 'html' ||
+    id.endsWith('-interativo') ||
+    /interativ/i.test(texto(data.tipo)) ||
+    (htmlConteudo.includes('<') && htmlConteudo.length > 80 && !conteudoHtml)
+  const formato: FormatoDocumento = interativo ? 'html' : 'richtext'
   const status: StatusDocumento = data.status === 'rascunho' ? 'rascunho' : 'publicado'
+  const textoSalvo = texto(data.conteudoTexto)
+  const conteudoTexto =
+    textoSalvo && !textoSalvo.includes('data:image') && !textoSalvo.includes('base64') && textoSalvo.length < 20000
+      ? textoSalvo
+      : textoParaIndice(conteudoHtml || htmlConteudo || textoSalvo)
   return {
     id,
-    titulo: texto(data.titulo, 'Sem título'),
-    categoriaId: texto(data.categoriaId),
+    titulo: texto(data.titulo) || texto(data.nome, 'Sem título'),
+    categoriaId: texto(data.categoriaId) || texto(data.categoria),
     tipo,
     formato,
     status,
     versao: typeof data.versao === 'number' ? data.versao : 1,
     leituraObrigatoria: data.leituraObrigatoria === true,
-    conteudoHtml: texto(data.conteudoHtml),
-    conteudoTexto: texto(data.conteudoTexto),
-    htmlConteudo: texto(data.htmlConteudo),
+    conteudoHtml,
+    conteudoTexto,
+    htmlConteudo,
     htmlUrl: texto(data.htmlUrl),
     anexos: mapAnexos(data.anexos),
     ...audiencia(data, false),
