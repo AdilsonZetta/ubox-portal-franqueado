@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Aviso, Button, inputClass } from '../components/ui'
 import { fontesDaPergunta, perguntarAoPortal, type FonteResposta } from '../lib/ai'
 import { aiHabilitado } from '../firebaseConfig'
@@ -13,18 +13,17 @@ interface Mensagem {
 }
 
 export function PerguntePage() {
-  const { documentos } = usePortal()
+  const { documentos, carregando } = usePortal()
   const publicados = documentos.filter((documento) => documento.status === 'publicado')
-  const [pergunta, setPergunta] = useState('')
+  const [params] = useSearchParams()
+  const [pergunta, setPergunta] = useState(params.get('q') ?? '')
   const [mensagens, setMensagens] = useState<Mensagem[]>([])
   const [ocupado, setOcupado] = useState(false)
   const [erro, setErro] = useState('')
+  const [disparo, setDisparo] = useState(params.get('q') ?? '')
   const ligado = aiHabilitado()
 
-  async function enviar() {
-    const texto = pergunta.trim()
-    if (!texto) return
-    setPergunta('')
+  async function responder(texto: string) {
     setMensagens((atual) => [...atual, { papel: 'usuario', texto }])
     setOcupado(true)
     setErro('')
@@ -45,6 +44,23 @@ export function PerguntePage() {
     } finally {
       setOcupado(false)
     }
+  }
+
+  useEffect(() => {
+    const inicial = disparo.trim()
+    if (carregando || !inicial) return
+    setDisparo('')
+    setPergunta('')
+    void responder(inicial)
+    // Dispara a pergunta da home quando a biblioteca termina de carregar.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carregando])
+
+  async function enviar() {
+    const texto = pergunta.trim()
+    if (!texto) return
+    setPergunta('')
+    await responder(texto)
   }
 
   return (

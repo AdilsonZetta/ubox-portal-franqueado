@@ -1,113 +1,100 @@
-import { Link } from 'react-router-dom'
+import { useState, type FormEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { Aviso, Carregando, Selo } from '../components/ui'
 import { useAuth } from '../lib/auth'
-import { primeiroNome, rotuloTipo } from '../lib/format'
+import { primeiroNome, rotuloTipo, paraMillis } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
-import { paraMillis } from '../lib/format'
 
 export function HomePage() {
   const { user } = useAuth()
   const portal = usePortal()
+  const navigate = useNavigate()
+  const [pergunta, setPergunta] = useState('')
   if (!user) return null
   const raizes = filhosDe(portal.categorias, null)
-  const obrigatorios = portal.documentos.filter((documento) => documento.leituraObrigatoria && documento.status === 'publicado')
-  const pendentes = obrigatorios.filter(
-    (documento) => !portal.aceites.some((aceite) => aceite.documentoId === documento.id && aceite.versao === documento.versao && aceite.uid === user.uid),
+  const publicados = portal.documentos.filter((documento) => documento.status === 'publicado' || user.papel === 'admin')
+  const pendentes = publicados.filter(
+    (documento) =>
+      documento.leituraObrigatoria &&
+      documento.status === 'publicado' &&
+      !portal.aceites.some((aceite) => aceite.documentoId === documento.id && aceite.versao === documento.versao && aceite.uid === user.uid),
   )
-  const recentes = [...portal.documentos]
-    .filter((documento) => documento.status === 'publicado')
-    .sort((a, b) => paraMillis(b.atualizadoEm) - paraMillis(a.atualizadoEm))
-    .slice(0, 5)
+  const recentes = [...publicados].sort((a, b) => paraMillis(b.atualizadoEm) - paraMillis(a.atualizadoEm)).slice(0, 6)
+
+  function enviar(evento: FormEvent) {
+    evento.preventDefault()
+    const texto = pergunta.trim()
+    if (!texto) return
+    navigate(`/pergunte?q=${encodeURIComponent(texto)}`)
+  }
 
   return (
-    <div className="space-y-8">
-      <header className="rise">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-brand">Biblioteca da rede</p>
-        <h1 className="mt-2 text-3xl font-extrabold md:text-4xl">Olá, {primeiroNome(user.nome)}.</h1>
-        <p className="mt-2 max-w-2xl text-ink/70">
-          POPs, manuais e trilhas da Ubox para a unidade {user.unidade || 'da rede'}. O que está publicado aqui é o combinado da franquia.
-        </p>
-      </header>
+    <div className="mx-auto max-w-5xl space-y-8">
+      <section className="pt-2 text-center">
+        <p className="text-sm font-medium text-ink/50">Base de conhecimento · {user.unidade || 'Rede Ubox'}</p>
+        <h1 className="mt-2 text-3xl font-extrabold tracking-tight md:text-4xl">Olá, {primeiroNome(user.nome)}. O que você precisa fazer?</h1>
+        <form onSubmit={enviar} className="mx-auto mt-5 flex max-w-2xl gap-2 rounded-2xl border border-line bg-white p-2 shadow-sm">
+          <input
+            value={pergunta}
+            onChange={(evento) => setPergunta(evento.target.value)}
+            placeholder="Pergunte sobre um POP, uma política ou um passo da operação"
+            className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm outline-none"
+          />
+          <button className="rounded-xl bg-brand px-4 py-2 text-sm font-semibold text-white">Perguntar</button>
+        </form>
+      </section>
       {portal.erro ? <Aviso tom="erro">{portal.erro}</Aviso> : null}
       {portal.carregando ? <Carregando /> : null}
 
       {pendentes.length ? (
-        <section className="rounded-3xl border border-brand/30 bg-white p-5">
-          <h2 className="font-bold">Leitura obrigatória</h2>
-          <ul className="mt-3 divide-y divide-line">
-            {pendentes.map((documento) => (
-              <li key={documento.id} className="flex items-center justify-between gap-3 py-3">
-                <div>
-                  <p className="font-medium">{documento.titulo}</p>
-                  <p className="text-xs text-ink/55">Versão {documento.versao}</p>
-                </div>
-                <Link to={`/documento/${documento.id}`} className="text-sm font-semibold text-brand">
-                  Ler e aceitar
-                </Link>
-              </li>
+        <section>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-ink/45">Atribuído para você</h2>
+            <span className="text-xs text-brand-dark">{pendentes.length} pendente{pendentes.length === 1 ? '' : 's'}</span>
+          </div>
+          <div className="grid gap-2 md:grid-cols-2">
+            {pendentes.slice(0, 4).map((documento) => (
+              <Link key={documento.id} to={`/documento/${documento.id}`} className="flex items-center justify-between rounded-2xl border border-line bg-white px-4 py-3 hover:border-brand">
+                <span>
+                  <span className="block text-sm font-semibold">{documento.titulo}</span>
+                  <span className="text-xs text-ink/45">Aceite da versão {documento.versao}</span>
+                </span>
+                <span className="text-sm font-semibold text-brand">Ler</span>
+              </Link>
             ))}
-          </ul>
+          </div>
         </section>
       ) : null}
 
       <section>
-        <h2 className="mb-3 font-bold">Categorias</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {raizes.map((categoria, indice) => {
-            const quantidade = portal.documentos.filter((documento) => documento.categoriaId === categoria.id && documento.status === 'publicado').length
-            return (
-              <Link
-                key={categoria.id}
-                to={`/biblioteca/${categoria.id}`}
-                className="rise rounded-2xl border border-line bg-white p-4 transition hover:-translate-y-0.5 hover:border-brand"
-                style={{ animationDelay: `${indice * 40}ms` }}
-              >
-                <p className="text-xs font-bold uppercase tracking-wide text-brand">{String(categoria.ordem).padStart(2, '0')}</p>
-                <h3 className="mt-1 font-semibold">{categoria.nome}</h3>
-                <p className="mt-1 line-clamp-2 text-sm text-ink/60">{categoria.descricao}</p>
-                <p className="mt-3 text-xs text-ink/45">{quantidade} documento{quantidade === 1 ? '' : 's'}</p>
-              </Link>
-            )
-          })}
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/45">Áreas</h2>
+        <div className="flex gap-2 overflow-x-auto pb-1">
+          {raizes.map((categoria) => (
+            <Link key={categoria.id} to={`/biblioteca/${categoria.id}`} className="shrink-0 rounded-full border border-line bg-white px-3 py-1.5 text-sm hover:border-brand">
+              {categoria.nome.replace(/^\d+\s*/, '')}
+            </Link>
+          ))}
         </div>
       </section>
 
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div>
-          <h2 className="mb-3 font-bold">Atualizados recentemente</h2>
-          <ul className="divide-y divide-line rounded-2xl border border-line bg-white">
-            {recentes.map((documento) => (
-              <li key={documento.id}>
-                <Link to={`/documento/${documento.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper">
-                  <span>
-                    <span className="block font-medium">{documento.titulo}</span>
-                    <span className="text-xs text-ink/50">{rotuloTipo(documento.tipo)} · v{documento.versao}</span>
-                  </span>
-                  {leituraDaVersao(portal.leituras, user.uid, documento.id, documento.versao) ? <Selo tom="lima">Lido</Selo> : null}
-                </Link>
-              </li>
-            ))}
-            {!recentes.length && !portal.carregando ? <li className="px-4 py-6 text-sm text-ink/60">Nenhum documento publicado ainda.</li> : null}
-          </ul>
+      <section className="overflow-hidden rounded-2xl border border-line bg-white">
+        <div className="flex items-center justify-between border-b border-line px-4 py-3">
+          <h2 className="font-semibold">Documentos recentes</h2>
+          <Link to="/biblioteca" className="text-sm font-semibold text-brand">Ver todos</Link>
         </div>
-        <div>
-          <h2 className="mb-3 font-bold">Trilhas</h2>
-          <ul className="space-y-3">
-            {portal.trilhas
-              .filter((trilha) => trilha.publicado || user.papel === 'admin')
-              .slice(0, 4)
-              .map((trilha) => (
-                <li key={trilha.id}>
-                  <Link to={`/trilhas/${trilha.id}`} className="block rounded-2xl border border-line bg-white p-4 hover:border-brand">
-                    <p className="font-semibold">{trilha.titulo}</p>
-                    <p className="mt-1 text-sm text-ink/60">{trilha.itens.length} etapas · nota mínima {trilha.notaMinima}</p>
-                  </Link>
-                </li>
-              ))}
-          </ul>
-        </div>
+        {recentes.map((documento) => (
+          <Link key={documento.id} to={`/documento/${documento.id}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 hover:bg-paper">
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand/10 text-[10px] font-bold uppercase text-brand-dark">{rotuloTipo(documento.tipo).slice(0, 3)}</span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{documento.titulo}</span>
+              <span className="text-xs text-ink/45">{rotuloTipo(documento.tipo)} · versão {documento.versao}</span>
+            </span>
+            {leituraDaVersao(portal.leituras, user.uid, documento.id, documento.versao) ? <Selo tom="lima">Lido</Selo> : null}
+          </Link>
+        ))}
+        {!recentes.length && !portal.carregando ? <p className="px-4 py-8 text-sm text-ink/50">Nenhum documento publicado ainda.</p> : null}
       </section>
     </div>
   )

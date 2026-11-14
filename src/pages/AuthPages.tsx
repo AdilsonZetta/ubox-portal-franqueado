@@ -8,27 +8,14 @@ import { mensagemErro } from '../lib/errors'
 
 function Moldura({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-screen lg:grid-cols-2">
-      <section className="relative hidden overflow-hidden bg-ink text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
-        <div className="absolute inset-y-0 left-0 w-1.5 bg-brand" />
-        <Logo claro />
-        <div className="max-w-md">
-          <p className="text-sm font-semibold uppercase tracking-[0.2em] text-brand">Ubox Self Storage</p>
-          <h1 className="mt-4 text-4xl font-extrabold leading-tight">O conhecimento da rede, no mesmo lugar.</h1>
-          <p className="mt-4 text-white/75">
-            POPs, manuais, políticas e trilhas da franquia. Feito para a operação das unidades, a partir de Uberaba/MG.
-          </p>
-        </div>
-        <p className="text-sm text-white/50">Rua Felício Abrão Sobrinho, 633 · Cidade Jardim · atendimento@ubox.net.br</p>
-      </section>
-      <section className="flex items-center justify-center bg-paper px-4 py-10">
-        <div className="rise w-full max-w-md">
-          <div className="mb-6 lg:hidden">
-            <Logo />
-          </div>
-          {children}
-        </div>
-      </section>
+    <div className="flex min-h-screen flex-col bg-paper">
+      <header className="flex items-center justify-between px-6 py-5">
+        <Logo />
+        <span className="text-xs text-ink/40">Base da rede Ubox</span>
+      </header>
+      <div className="flex flex-1 items-center justify-center px-4 pb-16">
+        <div className="rise w-full max-w-md rounded-3xl border border-line bg-white p-6 shadow-sm md:p-8">{children}</div>
+      </div>
     </div>
   )
 }

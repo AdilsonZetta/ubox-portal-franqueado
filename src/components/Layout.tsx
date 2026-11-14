@@ -1,26 +1,28 @@
-import { Bell, BookOpen, GraduationCap, Home, LogOut, Menu, MessageCircle, Search, Shield, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { Bell, BookOpen, ChevronRight, Folder, GraduationCap, Home, LogOut, Menu, MessageCircle, Search, Shield, X } from 'lucide-react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { usePortal } from '../lib/portal'
+import { filhosDe } from '../lib/trilha'
 import { Logo } from './Logo'
 import { cx } from './ui'
 
 const links = [
   { to: '/', label: 'Início', icon: Home, fim: true },
-  { to: '/biblioteca', label: 'Biblioteca', icon: BookOpen },
+  { to: '/biblioteca', label: 'Documentos', icon: BookOpen },
   { to: '/trilhas', label: 'Trilhas', icon: GraduationCap },
   { to: '/pergunte', label: 'Pergunte', icon: MessageCircle },
 ]
 
 export function Layout() {
   const { user, sair } = useAuth()
-  const { avisos, avisosLidos } = usePortal()
+  const { avisos, avisosLidos, categorias, documentos } = usePortal()
   const [aberto, setAberto] = useState(false)
   const [consulta, setConsulta] = useState('')
   const navigate = useNavigate()
   const imprimir = useMatch('/documento/:id/imprimir')
   const naoLidos = avisos.filter((aviso) => !avisosLidos.includes(aviso.id)).length
+  const areas = useMemo(() => filhosDe(categorias, null), [categorias])
 
   useEffect(() => {
     const aoTeclar = (evento: KeyboardEvent) => {
@@ -35,123 +37,129 @@ export function Layout() {
 
   if (imprimir) return <Outlet />
 
-  const nav = (
-    <nav className="flex flex-1 flex-col gap-1">
-      {links.map((link) => (
-        <NavLink
-          key={link.to}
-          to={link.to}
-          end={link.fim}
-          onClick={() => setAberto(false)}
-          className={({ isActive }) =>
-            cx(
-              'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition',
-              isActive ? 'bg-white/10 text-white shadow-[inset_3px_0_0_#f37021]' : 'text-white/75 hover:bg-white/5 hover:text-white',
-            )
-          }
-        >
-          <link.icon className="h-4 w-4" />
-          {link.label}
-        </NavLink>
-      ))}
-      {user?.papel === 'admin' ? (
-        <NavLink
-          to="/admin"
-          onClick={() => setAberto(false)}
-          className={({ isActive }) =>
-            cx(
-              'mt-4 flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium',
-              isActive ? 'bg-white/10 text-white' : 'text-lime hover:bg-white/5',
-            )
-          }
-        >
-          <Shield className="h-4 w-4" />
-          Painel da franqueadora
-        </NavLink>
-      ) : null}
-    </nav>
-  )
+  function buscar(evento: FormEvent) {
+    evento.preventDefault()
+    const texto = consulta.trim()
+    if (!texto) return
+    const destino = texto.endsWith('?') ? `/pergunte?q=${encodeURIComponent(texto)}` : `/busca?q=${encodeURIComponent(texto)}`
+    navigate(destino)
+    setAberto(false)
+  }
 
-  return (
-    <div className="min-h-screen bg-paper text-ink">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-ink px-4 py-5 text-white lg:flex">
-        <Logo claro />
-        <div className="mt-8">{nav}</div>
-        <p className="mt-auto px-2 text-[11px] leading-relaxed text-white/45">Ubox Self Storage · Uberaba/MG</p>
-      </aside>
-
-      {aberto ? (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button className="absolute inset-0 bg-ink/50" aria-label="Fechar menu" onClick={() => setAberto(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-72 flex-col bg-ink px-4 py-5 text-white">
-            <div className="flex items-center justify-between">
-              <Logo claro />
-              <button onClick={() => setAberto(false)} aria-label="Fechar">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="mt-8">{nav}</div>
-          </aside>
-        </div>
-      ) : null}
-
-      <div className="lg:pl-64">
-        <header className="no-print sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-paper/90 px-4 py-3 backdrop-blur md:px-8">
-          <button className="rounded-lg p-2 lg:hidden" onClick={() => setAberto(true)} aria-label="Abrir menu">
-            <Menu className="h-5 w-5" />
-          </button>
-          <form
-            className="relative min-w-0 flex-1"
-            onSubmit={(evento) => {
-              evento.preventDefault()
-              navigate(`/busca?q=${encodeURIComponent(consulta.trim())}`)
-            }}
-          >
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/40" />
-            <input
-              id="busca-portal"
-              value={consulta}
-              onChange={(evento) => setConsulta(evento.target.value)}
-              placeholder="Buscar POPs, manuais e políticas"
-              className="w-full rounded-xl border border-line bg-white py-2.5 pl-10 pr-3 text-sm outline-none ring-brand/30 focus:border-brand focus:ring-2"
-            />
-          </form>
-          <NavLink to="/notificacoes" className="relative rounded-xl border border-line bg-white p-2.5" aria-label="Notificações">
-            <Bell className="h-4 w-4" />
-            {naoLidos > 0 ? (
-              <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
-                {naoLidos}
-              </span>
-            ) : null}
-          </NavLink>
-          <NavLink to="/perfil" className="hidden max-w-[10rem] truncate text-sm font-medium sm:block">
-            {user?.nome}
-          </NavLink>
-          <button onClick={() => void sair()} className="rounded-xl border border-line bg-white p-2.5" aria-label="Sair">
-            <LogOut className="h-4 w-4" />
-          </button>
-        </header>
-        <main className="px-4 py-6 md:px-8 md:py-8">
-          <Outlet />
-        </main>
-      </div>
-
-      <nav className="no-print fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-white lg:hidden">
+  const miolo = (
+    <>
+      <Logo />
+      <form onSubmit={buscar} className="relative mt-5">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" />
+        <input
+          id="busca-portal"
+          value={consulta}
+          onChange={(evento) => setConsulta(evento.target.value)}
+          placeholder="Pergunte ou busque um POP"
+          className="w-full rounded-xl border border-line bg-paper py-2.5 pl-9 pr-3 text-sm outline-none ring-brand/30 focus:border-brand focus:bg-white focus:ring-2"
+        />
+      </form>
+      <nav className="mt-4 flex flex-col gap-0.5">
         {links.map((link) => (
           <NavLink
             key={link.to}
             to={link.to}
             end={link.fim}
+            onClick={() => setAberto(false)}
             className={({ isActive }) =>
-              cx('flex flex-col items-center gap-1 py-2 text-[11px]', isActive ? 'text-brand' : 'text-ink/55')
+              cx(
+                'flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium',
+                isActive ? 'bg-brand/10 text-brand-dark' : 'text-ink/70 hover:bg-paper',
+              )
             }
           >
             <link.icon className="h-4 w-4" />
             {link.label}
           </NavLink>
         ))}
+        {user?.papel === 'admin' ? (
+          <NavLink
+            to="/admin"
+            onClick={() => setAberto(false)}
+            className={({ isActive }) =>
+              cx('mt-2 flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium', isActive ? 'bg-brand/10 text-brand-dark' : 'text-ink/70 hover:bg-paper')
+            }
+          >
+            <Shield className="h-4 w-4" />
+            Relatórios
+          </NavLink>
+        ) : null}
       </nav>
-      <div className="h-16 lg:hidden" />
+      <p className="mb-2 mt-6 px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/40">Áreas</p>
+      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pr-1">
+        {areas.map((area) => {
+          const quantidade = documentos.filter((documento) => documento.categoriaId === area.id && (documento.status === 'publicado' || user?.papel === 'admin')).length
+          return (
+            <NavLink
+              key={area.id}
+              to={`/biblioteca/${area.id}`}
+              onClick={() => setAberto(false)}
+              className={({ isActive }) =>
+                cx('flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm', isActive ? 'bg-paper font-semibold text-ink' : 'text-ink/70 hover:bg-paper')
+              }
+            >
+              <Folder className="h-3.5 w-3.5 shrink-0 text-brand" />
+              <span className="truncate">{area.nome.replace(/^\d+\s*/, '')}</span>
+              <span className="ml-auto text-[11px] text-ink/35">{quantidade}</span>
+            </NavLink>
+          )
+        })}
+      </div>
+      <div className="mt-3 flex items-center gap-2 border-t border-line pt-3">
+        <NavLink to="/perfil" className="min-w-0 flex-1" onClick={() => setAberto(false)}>
+          <span className="block truncate text-sm font-semibold">{user?.nome}</span>
+          <span className="block truncate text-[11px] text-ink/45">{user?.papel === 'admin' ? 'Franqueadora' : user?.unidade || 'Franqueado'}</span>
+        </NavLink>
+        <button onClick={() => void sair()} className="rounded-lg p-2 text-ink/50 hover:bg-paper" aria-label="Sair">
+          <LogOut className="h-4 w-4" />
+        </button>
+      </div>
+    </>
+  )
+
+  return (
+    <div className="min-h-screen bg-paper text-ink">
+      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col border-r border-line bg-white px-4 py-5 lg:flex">{miolo}</aside>
+      {aberto ? (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <button className="absolute inset-0 bg-ink/40" aria-label="Fechar menu" onClick={() => setAberto(false)} />
+          <aside className="absolute inset-y-0 left-0 flex w-[300px] flex-col bg-white px-4 py-5 shadow-xl">
+            <button className="absolute right-3 top-4" onClick={() => setAberto(false)} aria-label="Fechar">
+              <X className="h-5 w-5" />
+            </button>
+            {miolo}
+          </aside>
+        </div>
+      ) : null}
+      <div className="lg:pl-[272px]">
+        <header className="no-print sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
+          <button className="rounded-lg p-2" onClick={() => setAberto(true)} aria-label="Abrir menu">
+            <Menu className="h-5 w-5" />
+          </button>
+          <Logo compacto />
+          <span className="text-sm font-semibold">Portal Ubox</span>
+          <NavLink to="/notificacoes" className="relative ml-auto rounded-lg p-2" aria-label="Notificações">
+            <Bell className="h-4 w-4" />
+            {naoLidos > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand" /> : null}
+          </NavLink>
+        </header>
+        <div className="no-print hidden items-center justify-end gap-2 px-8 pt-4 lg:flex">
+          <NavLink to="/notificacoes" className="relative inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-sm text-ink/70">
+            <Bell className="h-4 w-4" />
+            Avisos
+            {naoLidos > 0 ? <span className="rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">{naoLidos}</span> : null}
+            <ChevronRight className="h-3.5 w-3.5" />
+          </NavLink>
+        </div>
+        <main className="px-4 py-5 md:px-8 md:py-6">
+          <Outlet />
+        </main>
+      </div>
     </div>
   )
 }

@@ -1,69 +1,95 @@
+import { useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Aviso, Carregando, Selo, Vazio } from '../components/ui'
-import { cadeiaCategoria, documentosDaCategoria, filhosDe } from '../lib/trilha'
+import { useAuth } from '../lib/auth'
+import { formatarData, rotuloTipo } from '../lib/format'
 import { usePortal } from '../lib/portal'
-import { rotuloTipo } from '../lib/format'
+import { cadeiaCategoria, filhosDe } from '../lib/trilha'
+import { paraMillis } from '../lib/format'
+
+const filtros = ['todos', 'pop', 'manual', 'processo', 'politica', 'checklist', 'html'] as const
 
 export function BibliotecaPage() {
   const { categoriaId } = useParams()
+  const { user } = useAuth()
   const { categorias, documentos, carregando, erro } = usePortal()
+  const [filtro, setFiltro] = useState<(typeof filtros)[number]>('todos')
   const atual = categorias.find((categoria) => categoria.id === categoriaId)
   const filhos = filhosDe(categorias, atual ? atual.id : null)
-  const lista = atual ? documentosDaCategoria(documentos.filter((documento) => documento.status === 'publicado' || true), atual.id) : []
-  const publicados = atual ? lista.filter((documento) => documento.status === 'publicado' || documento.status === 'rascunho') : []
   const trilha = atual ? cadeiaCategoria(categorias, atual.id) : []
+  const lista = useMemo(() => {
+    return documentos
+      .filter((documento) => (user?.papel === 'admin' ? true : documento.status === 'publicado'))
+      .filter((documento) => (atual ? documento.categoriaId === atual.id : true))
+      .filter((documento) => (filtro === 'todos' ? true : documento.tipo === filtro))
+      .sort((a, b) => paraMillis(b.atualizadoEm) - paraMillis(a.atualizadoEm))
+  }, [documentos, atual, filtro, user?.papel])
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto max-w-5xl space-y-4">
       <header>
-        <p className="text-sm text-ink/50">
-          <Link to="/biblioteca">Biblioteca</Link>
+        <p className="text-sm text-ink/45">
+          <Link to="/biblioteca">Documentos</Link>
           {trilha.map((categoria) => (
             <span key={categoria.id}>
-              {' / '}
-              <Link to={`/biblioteca/${categoria.id}`}>{categoria.nome}</Link>
+              {'  /  '}
+              <Link to={`/biblioteca/${categoria.id}`}>{categoria.nome.replace(/^\d+\s*/, '')}</Link>
             </span>
           ))}
         </p>
-        <h1 className="mt-2 text-3xl font-extrabold">{atual?.nome ?? 'Biblioteca'}</h1>
-        <p className="mt-2 max-w-2xl text-ink/65">{atual?.descricao ?? 'Nove áreas da operação Ubox. Escolha uma categoria para abrir os documentos.'}</p>
+        <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-extrabold">{atual ? atual.nome.replace(/^\d+\s*/, '') : 'Todos os documentos'}</h1>
+            <p className="text-sm text-ink/55">{atual?.descricao || 'POPs, manuais, políticas e processos da rede.'}</p>
+          </div>
+          {user?.papel === 'admin' ? (
+            <Link to="/admin/documento/novo" className="rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white">
+              Novo documento
+            </Link>
+          ) : null}
+        </div>
       </header>
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {carregando ? <Carregando /> : null}
       {filhos.length ? (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="flex gap-2 overflow-x-auto">
           {filhos.map((categoria) => (
-            <Link key={categoria.id} to={`/biblioteca/${categoria.id}`} className="rounded-2xl border border-line bg-white p-4 hover:border-brand">
-              <p className="text-xs font-bold text-brand">{String(categoria.ordem).padStart(2, '0')}</p>
-              <h2 className="font-semibold">{categoria.nome}</h2>
-              <p className="mt-1 text-sm text-ink/60">{categoria.descricao}</p>
+            <Link key={categoria.id} to={`/biblioteca/${categoria.id}`} className="shrink-0 rounded-xl border border-line bg-white px-3 py-2 text-sm hover:border-brand">
+              {categoria.nome.replace(/^\d+\s*/, '')}
             </Link>
           ))}
         </div>
       ) : null}
-      {atual ? (
-        publicados.length ? (
-          <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
-            {publicados.map((documento) => (
-              <li key={documento.id}>
-                <Link to={`/documento/${documento.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-paper">
-                  <span>
-                    <span className="font-medium">{documento.titulo}</span>
-                    <span className="mt-0.5 block text-xs text-ink/50">Versão {documento.versao}</span>
-                  </span>
-                  <span className="flex gap-2">
-                    {documento.status === 'rascunho' ? <Selo tom="alerta">Rascunho</Selo> : null}
-                    {documento.leituraObrigatoria ? <Selo tom="marca">Obrigatório</Selo> : null}
-                    <Selo>{rotuloTipo(documento.tipo)}</Selo>
-                  </span>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Vazio titulo="Nenhum documento nesta categoria" texto="A franqueadora publica os materiais oficiais aqui." />
-        )
-      ) : null}
+      <div className="flex gap-2 overflow-x-auto">
+        {filtros.map((item) => (
+          <button
+            key={item}
+            type="button"
+            onClick={() => setFiltro(item)}
+            className={item === filtro ? 'rounded-full bg-ink px-3 py-1 text-xs font-semibold text-white' : 'rounded-full bg-white px-3 py-1 text-xs font-semibold text-ink/60'}
+          >
+            {item === 'todos' ? 'Todos' : rotuloTipo(item)}
+          </button>
+        ))}
+      </div>
+      {lista.length ? (
+        <div className="overflow-hidden rounded-2xl border border-line bg-white">
+          {lista.map((documento) => (
+            <Link key={documento.id} to={`/documento/${documento.id}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 hover:bg-paper">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-[10px] font-bold uppercase text-ink/70">{rotuloTipo(documento.tipo).slice(0, 3)}</span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate font-medium">{documento.titulo}</span>
+                <span className="text-xs text-ink/40">Atualizado {formatarData(documento.atualizadoEm)}</span>
+              </span>
+              <span className="hidden text-xs text-ink/40 sm:block">v{documento.versao}</span>
+              {documento.status === 'rascunho' ? <Selo tom="alerta">Rascunho</Selo> : null}
+              {documento.leituraObrigatoria ? <Selo tom="marca">Aceite</Selo> : null}
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <Vazio titulo="Nenhum documento neste filtro" texto="A franqueadora publica os materiais oficiais nesta área." />
+      )}
     </div>
   )
 }
