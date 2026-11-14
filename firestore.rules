@@ -1,0 +1,602 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// Portal do Franqueado Ubox — protótipo de regras para revisão.
+// ===============================================================
+//
+// Collection: usuarios
+// Document ID: Firebase Auth uid
+// Fields:
+//   - uid: string (required, immutable, == document id)
+//   - email: string (required, immutable, == auth token on create)
+//   - nome: string (required, 2..120)
+//   - papel: "admin" | "franqueado" (required)
+//   - ativo: bool (required)
+//   - recusado: bool (required)
+//   - unidade: string (required, 0..120)
+//   - cidade: string (required, 0..120)
+//   - criadoEm: timestamp (required, immutable)
+//   - atualizadoEm: timestamp (required)
+// PII: email. Read: owner or admin only.
+// Create: self only as franqueado inactive. Self cannot change papel/ativo/recusado.
+// Bootstrap: while config/adminCriado is absent, the owner may promote
+// themselves to admin once (scripts/make-admin). After the lock exists, impossible.
+//
+// Collection: config
+// Document ID: adminCriado
+// Fields: uid, email, criadoEm
+// Create-only by the admin who just bootstrapped. No update/delete.
+//
+// Collection: categorias
+// Fields: nome, descricao, ordem, parentId (string|null),
+//   publico, unidades, papeis, uidsExtra, uids, criadoEm, atualizadoEm
+// Read: admin, or active user if publico, or active user if uid in uids.
+// Write: admin only.
+//
+// Collection: documentos
+// Fields: titulo, categoriaId, tipo, formato, status, versao, leituraObrigatoria,
+//   conteudoHtml, conteudoTexto, htmlConteudo, htmlUrl, anexos,
+//   publico, unidades, papeis, uidsExtra, uids,
+//   criadoEm, atualizadoEm, atualizadoPor, atualizadoPorNome, publicadoEm
+// Read published: admin, or active user if publico, or active user if uid in uids.
+// Drafts: admin only. Write: admin only.
+//
+// Subcollection: documentos/{id}/versoes/{versao}
+// Admin read/write. Snapshot of a published version.
+//
+// Collection: trilhas / quizzes
+// Same audience fields plus publicado, titulo, and type-specific payload.
+// Read: admin, or active user when publicado and (publico or uid in uids).
+// Write: admin only.
+//
+// Collection: avisos
+// Admin write. Active users read publico or uid in uids.
+//
+// Collection: leituras / aceites / tentativas / certificados / avisosLeituras
+// Create-only by the owner. Readable by the owner and by admins.
+// No update and no delete. Timestamps must equal request.time.
+// Leitura and aceite must match the current published document version.
+// Aceite text is exactly "Li e concordo" and email must match the auth token.
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath() {
+      return /databases/$(database)/documents/usuarios/$(request.auth.uid);
+    }
+
+    function userExists() {
+      return signedIn() && exists(userPath());
+    }
+
+    function userData() {
+      return get(userPath()).data;
+    }
+
+    function isActive() {
+      return userExists()
+        && userData().ativo == true
+        && userData().recusado == false
+        && userData().papel in ['admin', 'franqueado'];
+    }
+
+    function isAdmin() {
+      return isActive() && userData().papel == 'admin';
+    }
+
+    function isSelf(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function adminLockPath() {
+      return /databases/$(database)/documents/config/adminCriado;
+    }
+
+    function validEmail(email) {
+      return email is string && email.size() > 3 && email.size() < 200;
+    }
+
+    function validShort(value, maxLen) {
+      return value is string && value.size() <= maxLen;
+    }
+
+    function validName(value) {
+      return value is string && value.size() >= 2 && value.size() <= 120;
+    }
+
+    function audienciaValida(data) {
+      return data.publico is bool
+        && data.unidades is list && data.unidades.size() <= 80
+        && data.papeis is list && data.papeis.size() <= 4
+        && data.uidsExtra is list && data.uidsExtra.size() <= 500
+        && data.uids is list && data.uids.size() <= 500;
+    }
+
+    function isValidUsuario(data, uid) {
+      return data.keys().hasOnly([
+          'uid', 'email', 'nome', 'papel', 'ativo', 'recusado',
+          'unidade', 'cidade', 'criadoEm', 'atualizadoEm'
+        ])
+        && data.uid == uid
+        && validEmail(data.email)
+        && validName(data.nome)
+        && data.papel in ['admin', 'franqueado']
+        && data.ativo is bool
+        && data.recusado is bool
+        && validShort(data.unidade, 120)
+        && validShort(data.cidade, 120)
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
+    function isValidCategoria(data) {
+      return data.keys().hasOnly([
+          'nome', 'descricao', 'ordem', 'parentId',
+          'publico', 'unidades', 'papeis', 'uidsExtra', 'uids',
+          'criadoEm', 'atualizadoEm'
+        ])
+        && validName(data.nome)
+        && validShort(data.descricao, 600)
+        && data.ordem is number
+        && (data.parentId == null || validShort(data.parentId, 80))
+        && audienciaValida(data)
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
+    function urlOuVazio(url) {
+      return url is string
+        && url.size() <= 2000
+        && (url.size() == 0 || url.matches('^https://.*') || url.matches('^http://.*'));
+    }
+
+    function isValidDocumento(data) {
+      return data.keys().hasOnly([
+          'titulo', 'categoriaId', 'tipo', 'formato', 'status', 'versao',
+          'leituraObrigatoria', 'conteudoHtml', 'conteudoTexto', 'htmlConteudo',
+          'htmlUrl', 'anexos', 'publico', 'unidades', 'papeis', 'uidsExtra', 'uids',
+          'criadoEm', 'atualizadoEm', 'atualizadoPor', 'atualizadoPorNome', 'publicadoEm'
+        ])
+        && validName(data.titulo)
+        && data.categoriaId is string
+        && data.categoriaId.size() > 0
+        && data.categoriaId.size() <= 80
+        && data.tipo in ['pop', 'manual', 'processo', 'politica', 'checklist', 'html']
+        && data.formato in ['richtext', 'html']
+        && data.status in ['rascunho', 'publicado']
+        && data.versao is int
+        && data.versao >= 1
+        && data.versao < 10000
+        && data.leituraObrigatoria is bool
+        && data.conteudoHtml is string
+        && data.conteudoHtml.size() < 900000
+        && data.conteudoTexto is string
+        && data.conteudoTexto.size() < 900000
+        && data.htmlConteudo is string
+        && data.htmlConteudo.size() < 900000
+        && urlOuVazio(data.htmlUrl)
+        && data.anexos is list
+        && data.anexos.size() <= 30
+        && audienciaValida(data)
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp
+        && data.atualizadoPor == request.auth.uid
+        && validShort(data.atualizadoPorNome, 120)
+        && (data.publicadoEm == null || data.publicadoEm is timestamp);
+    }
+
+    function isValidVersao(data) {
+      return data.keys().hasOnly([
+          'versao', 'titulo', 'formato', 'conteudoHtml', 'conteudoTexto',
+          'htmlConteudo', 'htmlUrl', 'criadoEm', 'autorId', 'autorNome'
+        ])
+        && data.versao is int
+        && data.versao >= 1
+        && validName(data.titulo)
+        && data.formato in ['richtext', 'html']
+        && data.conteudoHtml is string
+        && data.conteudoHtml.size() < 900000
+        && data.conteudoTexto is string
+        && data.conteudoTexto.size() < 900000
+        && data.htmlConteudo is string
+        && data.htmlConteudo.size() < 900000
+        && urlOuVazio(data.htmlUrl)
+        && data.criadoEm == request.time
+        && data.autorId == request.auth.uid
+        && validShort(data.autorNome, 120);
+    }
+
+    function isValidTrilha(data) {
+      return data.keys().hasOnly([
+          'titulo', 'descricao', 'notaMinima', 'publicado', 'itens',
+          'publico', 'unidades', 'papeis', 'uidsExtra', 'uids',
+          'criadoEm', 'atualizadoEm'
+        ])
+        && validName(data.titulo)
+        && validShort(data.descricao, 2000)
+        && data.notaMinima is int
+        && data.notaMinima >= 0
+        && data.notaMinima <= 100
+        && data.publicado is bool
+        && data.itens is list
+        && data.itens.size() <= 40
+        && audienciaValida(data)
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
+    function isValidQuiz(data) {
+      return data.keys().hasOnly([
+          'trilhaId', 'titulo', 'notaMinima', 'perguntas', 'publicado',
+          'publico', 'unidades', 'papeis', 'uidsExtra', 'uids',
+          'criadoEm', 'atualizadoEm'
+        ])
+        && validShort(data.trilhaId, 80)
+        && validName(data.titulo)
+        && data.notaMinima is int
+        && data.notaMinima >= 0
+        && data.notaMinima <= 100
+        && data.perguntas is list
+        && data.perguntas.size() <= 40
+        && data.publicado is bool
+        && audienciaValida(data)
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
+    function isValidAviso(data) {
+      return data.keys().hasOnly([
+          'titulo', 'mensagem', 'documentoId', 'tipo',
+          'publico', 'unidades', 'papeis', 'uidsExtra', 'uids', 'criadoEm'
+        ])
+        && validName(data.titulo)
+        && validShort(data.mensagem, 600)
+        && validShort(data.documentoId, 80)
+        && data.tipo in ['novo', 'atualizado', 'geral']
+        && audienciaValida(data)
+        && data.criadoEm == request.time;
+    }
+
+    function docPath(docId) {
+      return /databases/$(database)/documents/documentos/$(docId);
+    }
+
+    function docAtual(docId) {
+      return get(docPath(docId)).data;
+    }
+
+    function publicadoNaVersao(docId) {
+      return exists(docPath(docId))
+        && docAtual(docId).status == 'publicado'
+        && docAtual(docId).versao == request.resource.data.versao;
+    }
+
+    function audienciaDoDocumento(docId) {
+      return docAtual(docId).publico == true
+        || (docAtual(docId).uids is list && request.auth.uid in docAtual(docId).uids);
+    }
+
+    function leituraIdOk(id) {
+      return id == request.auth.uid
+        + '_' + request.resource.data.documentoId
+        + '_v' + string(request.resource.data.versao);
+    }
+
+    function isValidLeitura(id) {
+      let data = request.resource.data;
+      return data.keys().hasOnly(['uid', 'documentoId', 'versao', 'lidoEm', 'titulo'])
+        && data.uid == request.auth.uid
+        && validShort(data.documentoId, 80)
+        && data.documentoId.size() > 0
+        && data.versao is int
+        && data.versao >= 1
+        && data.lidoEm == request.time
+        && validShort(data.titulo, 180)
+        && leituraIdOk(id);
+    }
+
+    function isValidAceite(id) {
+      let data = request.resource.data;
+      return data.keys().hasOnly([
+          'uid', 'documentoId', 'versao', 'aceitoEm', 'nome', 'email', 'texto', 'titulo'
+        ])
+        && data.uid == request.auth.uid
+        && validShort(data.documentoId, 80)
+        && data.documentoId.size() > 0
+        && data.versao is int
+        && data.aceitoEm == request.time
+        && data.nome == userData().nome
+        && data.email == request.auth.token.email
+        && data.texto == 'Li e concordo'
+        && validShort(data.titulo, 180)
+        && leituraIdOk(id)
+        && exists(docPath(data.documentoId))
+        && docAtual(data.documentoId).leituraObrigatoria == true;
+    }
+
+    function isValidTentativa(data) {
+      return data.keys().hasOnly([
+          'uid', 'quizId', 'trilhaId', 'nota', 'aprovado', 'respostas', 'respondidoEm'
+        ])
+        && data.uid == request.auth.uid
+        && validShort(data.quizId, 80)
+        && data.quizId.size() > 0
+        && validShort(data.trilhaId, 80)
+        && data.trilhaId.size() > 0
+        && data.nota is int
+        && data.nota >= 0
+        && data.nota <= 100
+        && data.aprovado is bool
+        && data.respostas is list
+        && data.respostas.size() <= 40
+        && data.respondidoEm == request.time;
+    }
+
+    function tentativaPath(id) {
+      return /databases/$(database)/documents/tentativas/$(id);
+    }
+
+    function trilhaPath(id) {
+      return /databases/$(database)/documents/trilhas/$(id);
+    }
+
+    function temQuiz(trilha, i) {
+      return trilha.itens.size() > i && trilha.itens[i].tipo == 'quiz';
+    }
+
+    function trilhaSemQuiz(trilha) {
+      return trilha.itens is list
+        && trilha.itens.size() <= 12
+        && !temQuiz(trilha, 0) && !temQuiz(trilha, 1) && !temQuiz(trilha, 2)
+        && !temQuiz(trilha, 3) && !temQuiz(trilha, 4) && !temQuiz(trilha, 5)
+        && !temQuiz(trilha, 6) && !temQuiz(trilha, 7) && !temQuiz(trilha, 8)
+        && !temQuiz(trilha, 9) && !temQuiz(trilha, 10) && !temQuiz(trilha, 11);
+    }
+
+    function tentativaAprovada(data) {
+      return data.tentativaId is string
+        && data.tentativaId.size() > 0
+        && data.tentativaId != 'sem-quiz'
+        && exists(tentativaPath(data.tentativaId))
+        && get(tentativaPath(data.tentativaId)).data.uid == request.auth.uid
+        && get(tentativaPath(data.tentativaId)).data.trilhaId == data.trilhaId
+        && get(tentativaPath(data.tentativaId)).data.aprovado == true;
+    }
+
+    function certificadoLiberado(data) {
+      return exists(trilhaPath(data.trilhaId))
+        && get(trilhaPath(data.trilhaId)).data.publicado == true
+        && (
+          tentativaAprovada(data)
+          || (
+            data.tentativaId == 'sem-quiz'
+            && trilhaSemQuiz(get(trilhaPath(data.trilhaId)).data)
+          )
+        );
+    }
+
+    function isValidCertificado(data) {
+      return data.keys().hasOnly([
+          'uid', 'trilhaId', 'nome', 'trilhaTitulo', 'emitidoEm', 'codigo', 'tentativaId'
+        ])
+        && data.uid == request.auth.uid
+        && validShort(data.trilhaId, 80)
+        && data.trilhaId.size() > 0
+        && data.nome == userData().nome
+        && validName(data.trilhaTitulo)
+        && data.emitidoEm == request.time
+        && data.codigo is string
+        && data.codigo.size() >= 6
+        && data.codigo.size() <= 40
+        && validShort(data.tentativaId, 120)
+        && certificadoLiberado(data);
+    }
+
+    function atualizacaoValida() {
+      return request.resource.data.atualizadoEm == request.time
+        && (
+          (resource.data.criadoEm is timestamp && request.resource.data.criadoEm == resource.data.criadoEm)
+          || (!(resource.data.criadoEm is timestamp) && request.resource.data.criadoEm == request.time)
+        );
+    }
+
+    function uidsContemUsuario() {
+      return resource.data.uids is list && request.auth.uid in resource.data.uids;
+    }
+
+    function isValidAvisoLeitura(data) {
+      return data.keys().hasOnly(['uid', 'avisoId', 'lidaEm'])
+        && data.uid == request.auth.uid
+        && validShort(data.avisoId, 80)
+        && data.avisoId.size() > 0
+        && data.lidaEm == request.time;
+    }
+
+    function dono(data) {
+      return signedIn() && data.uid == request.auth.uid;
+    }
+
+    match /usuarios/{uid} {
+      allow read: if isSelf(uid) || isAdmin();
+
+      allow create: if isSelf(uid)
+        && isValidUsuario(request.resource.data, uid)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.papel == 'franqueado'
+        && request.resource.data.ativo == false
+        && request.resource.data.recusado == false
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+
+      allow update: if isValidUsuario(request.resource.data, uid)
+        && request.resource.data.uid == resource.data.uid
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && request.resource.data.atualizadoEm == request.time
+        && (
+          (
+            isAdmin()
+          ) || (
+            isSelf(uid)
+            && request.resource.data.papel == resource.data.papel
+            && request.resource.data.ativo == resource.data.ativo
+            && request.resource.data.recusado == resource.data.recusado
+            && request.resource.data.unidade == resource.data.unidade
+            && request.resource.data.cidade == resource.data.cidade
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'atualizadoEm'])
+          ) || (
+            isSelf(uid)
+            && !exists(adminLockPath())
+            && resource.data.papel == 'franqueado'
+            && resource.data.ativo == false
+            && request.resource.data.papel == 'admin'
+            && request.resource.data.ativo == true
+            && request.resource.data.recusado == false
+            && request.resource.data.nome == resource.data.nome
+            && request.resource.data.unidade == resource.data.unidade
+            && request.resource.data.cidade == resource.data.cidade
+          )
+        );
+
+      allow delete: if isAdmin();
+    }
+
+    match /config/{id} {
+      allow read: if isAdmin();
+      allow create: if id == 'adminCriado'
+        && isAdmin()
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'criadoEm'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.criadoEm == request.time;
+      allow update, delete: if false;
+    }
+
+    match /categorias/{id} {
+      allow read: if isAdmin();
+      allow read: if isActive() && resource.data.publico == true;
+      allow read: if isActive() && uidsContemUsuario();
+      allow read: if isActive() && !('publico' in resource.data);
+
+      allow create: if isAdmin()
+        && isValidCategoria(request.resource.data)
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && isValidCategoria(request.resource.data)
+        && atualizacaoValida();
+      allow delete: if isAdmin();
+    }
+
+    match /documentos/{id} {
+      allow read: if isAdmin();
+      allow read: if isActive()
+        && resource.data.status == 'publicado'
+        && resource.data.publico == true;
+      allow read: if isActive()
+        && resource.data.status == 'publicado'
+        && uidsContemUsuario();
+
+      allow create: if isAdmin()
+        && isValidDocumento(request.resource.data)
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && isValidDocumento(request.resource.data)
+        && atualizacaoValida();
+      allow delete: if isAdmin();
+
+      match /versoes/{versaoId} {
+        allow read: if isAdmin();
+        allow create: if isAdmin() && isValidVersao(request.resource.data);
+        allow update, delete: if false;
+      }
+    }
+
+    match /trilhas/{id} {
+      allow read: if isAdmin();
+      allow read: if isActive() && resource.data.publicado == true && resource.data.publico == true;
+      allow read: if isActive() && resource.data.publicado == true && uidsContemUsuario();
+
+      allow create: if isAdmin()
+        && isValidTrilha(request.resource.data)
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && isValidTrilha(request.resource.data)
+        && atualizacaoValida();
+      allow delete: if isAdmin();
+    }
+
+    match /quizzes/{id} {
+      allow read: if isAdmin();
+      allow read: if isActive() && resource.data.publicado == true && resource.data.publico == true;
+      allow read: if isActive() && resource.data.publicado == true && uidsContemUsuario();
+
+      allow create: if isAdmin()
+        && isValidQuiz(request.resource.data)
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && isValidQuiz(request.resource.data)
+        && atualizacaoValida();
+      allow delete: if isAdmin();
+    }
+
+    match /avisos/{id} {
+      allow read: if isAdmin();
+      allow read: if isActive() && resource.data.publico == true;
+      allow read: if isActive() && uidsContemUsuario();
+      allow create: if isAdmin() && isValidAviso(request.resource.data);
+      allow update: if false;
+      allow delete: if isAdmin();
+    }
+
+    match /leituras/{id} {
+      allow read: if isAdmin() || (isActive() && dono(resource.data));
+      allow create: if isValidLeitura(id)
+        && isActive()
+        && publicadoNaVersao(request.resource.data.documentoId)
+        && (isAdmin() || audienciaDoDocumento(request.resource.data.documentoId));
+      allow update, delete: if false;
+    }
+
+    match /aceites/{id} {
+      allow read: if isAdmin() || (isActive() && dono(resource.data));
+      allow create: if isValidAceite(id)
+        && isActive()
+        && publicadoNaVersao(request.resource.data.documentoId)
+        && (isAdmin() || audienciaDoDocumento(request.resource.data.documentoId));
+      allow update, delete: if false;
+    }
+
+    match /tentativas/{id} {
+      allow read: if isAdmin() || (isActive() && dono(resource.data));
+      allow create: if isActive() && isValidTentativa(request.resource.data);
+      allow update, delete: if false;
+    }
+
+    match /certificados/{id} {
+      allow read: if isAdmin() || (isActive() && dono(resource.data));
+      allow create: if isActive()
+        && isValidCertificado(request.resource.data)
+        && id == request.auth.uid + '_' + request.resource.data.trilhaId;
+      allow update, delete: if false;
+    }
+
+    match /avisosLeituras/{id} {
+      allow read: if isAdmin() || (isActive() && dono(resource.data));
+      allow create: if isActive()
+        && isValidAvisoLeitura(request.resource.data)
+        && id == request.auth.uid + '_' + request.resource.data.avisoId;
+      allow update, delete: if false;
+    }
+  }
+}
