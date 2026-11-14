@@ -15,7 +15,7 @@ export function RichEditor({ value, onChange }: { value: string; onChange: (html
     shouldRerenderOnTransaction: true,
     extensions: [
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
-      Image.configure({ allowBase64: false }),
+      Image.configure({ allowBase64: true }),
       Table.configure({ resizable: false }),
       TableRow,
       TableHeader,
