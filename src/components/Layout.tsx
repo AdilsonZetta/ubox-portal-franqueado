@@ -1,6 +1,6 @@
 import { Bell, BookOpen, ChevronRight, ClipboardCheck, Folder, GraduationCap, Home, LayoutTemplate, LogOut, Menu, MessageCircle, Search, Shield, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom'
+import { Link, NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { usePortal } from '../lib/portal'
 import { useVisao } from '../lib/visao'
@@ -9,7 +9,7 @@ import { Logo } from './Logo'
 import { cx } from './ui'
 
 const links: { to: string; label: string; icon: typeof Home; fim?: boolean; admin?: boolean }[] = [
-  { to: '/', label: 'Início', icon: Home, fim: true },
+  { to: '/manuais', label: 'Início', icon: Home, fim: true },
   { to: '/biblioteca', label: 'Documentos', icon: BookOpen },
   { to: '/trilhas', label: 'Trilhas', icon: GraduationCap },
   { to: '/atribuicoes', label: 'Atribuições', icon: ClipboardCheck, admin: true },
@@ -52,7 +52,10 @@ export function Layout() {
 
   const miolo = (
     <>
-      <Logo />
+      <Link to="/" className="block w-fit rounded-xl outline-none ring-brand/30 focus-visible:ring-2" aria-label="Módulos">
+        <Logo />
+      </Link>
+      <Link to="/" className="mt-2 inline-flex text-xs font-semibold text-brand">Voltar aos módulos</Link>
       <form onSubmit={buscar} className="relative mt-5">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" />
         <input
@@ -150,8 +153,10 @@ export function Layout() {
           <button className="rounded-lg p-2" onClick={() => setAberto(true)} aria-label="Abrir menu">
             <Menu className="h-5 w-5" />
           </button>
-          <Logo compacto />
-          <span className="text-sm font-semibold">Portal Ubox</span>
+          <Link to="/" className="flex items-center gap-2" aria-label="Módulos">
+            <Logo compacto />
+            <span className="text-sm font-semibold">Portal Ubox</span>
+          </Link>
           <NavLink to="/notificacoes" className="relative ml-auto rounded-lg p-2" aria-label="Notificações">
             <Bell className="h-4 w-4" />
             {naoLidos > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand" /> : null}
