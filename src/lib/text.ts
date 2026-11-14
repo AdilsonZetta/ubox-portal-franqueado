@@ -33,6 +33,27 @@ export function textoParaIndice(htmlOuTexto: string, max = 12000): string {
   return limitar(htmlParaTexto(htmlOuTexto), max)
 }
 
+export interface ItemSumario {
+  id: string
+  texto: string
+  nivel: number
+}
+
+export function aplicarSumario(html: string): { html: string; itens: ItemSumario[] } {
+  const itens: ItemSumario[] = []
+  let ordem = 0
+  const marcado = html.replace(/<h([1-3])(\s[^>]*)?>([\s\S]*?)<\/h\1>/gi, (_tudo, nivel: string, attrs = '', inner: string) => {
+    const texto = htmlParaTexto(inner).slice(0, 160)
+    if (!texto) return `<h${nivel}${attrs}>${inner}</h${nivel}>`
+    ordem += 1
+    const id = `sec-${ordem}`
+    itens.push({ id, texto, nivel: Number(nivel) })
+    const limpo = String(attrs).replace(/\sid=(['"]).*?\1/i, '')
+    return `<h${nivel}${limpo} id="${id}">${inner}</h${nivel}>`
+  })
+  return { html: marcado, itens }
+}
+
 export function limitar(valor: string, max: number): string {
   return valor.length > max ? valor.slice(0, max) : valor
 }

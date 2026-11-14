@@ -8,6 +8,7 @@ import { mensagemErro } from '../lib/errors'
 import { formatarData, rotuloTipo } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
+import { aplicarSumario } from '../lib/text'
 import { cadeiaCategoria } from '../lib/trilha'
 import type { VersaoDocumento } from '../types'
 
@@ -65,8 +66,12 @@ export function DocumentoPage() {
     }
   }
 
+  const sumario = documento.formato === 'html' ? { html: documento.conteudoHtml, itens: [] } : aplicarSumario(documento.conteudoHtml)
+  const documentoLeitura = { ...documento, conteudoHtml: sumario.html }
+  const interativo = documento.formato === 'html'
+
   return (
-    <article className={imprimir ? 'folha mx-auto max-w-3xl' : 'mx-auto max-w-3xl'}>
+    <article className={imprimir ? 'folha mx-auto w-full max-w-[1200px]' : 'mx-auto w-full max-w-[1200px]'}>
       <p className="no-print text-sm text-ink/50">
         <Link to="/biblioteca">Biblioteca</Link>
         {trilha.map((categoria) => (
@@ -101,10 +106,26 @@ export function DocumentoPage() {
         ) : null}
       </div>
       {erro ? <div className="mt-4"><Aviso tom="erro">{erro}</Aviso></div> : null}
-      <div className="folha mt-6 rounded-3xl border border-line bg-white p-5 shadow-sm md:p-10">
-        <DocumentoView documento={documento} />
-        <Anexos anexos={documento.anexos} />
-        <p className="mt-10 border-t border-line pt-4 text-xs text-ink/45">Documento controlado · Ubox Self Storage · versão {documento.versao}</p>
+      <div className={interativo ? 'mt-6' : 'mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_220px]'}>
+        <div className={interativo ? '' : 'folha rounded-3xl border border-line bg-white p-5 shadow-sm md:p-8'}>
+          <DocumentoView documento={documentoLeitura} />
+          <Anexos anexos={documento.anexos} />
+          <p className="mt-10 border-t border-line pt-4 text-xs text-ink/45">Documento controlado · Ubox Self Storage · versão {documento.versao}</p>
+        </div>
+        {sumario.itens.length ? (
+          <aside className="no-print sticky top-6 hidden rounded-2xl border border-line bg-white p-4 xl:block">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">Sumário</p>
+            <ol className="mt-3 space-y-2">
+              {sumario.itens.map((item) => (
+                <li key={item.id} style={{ paddingLeft: `${(item.nivel - 1) * 10}px` }}>
+                  <a href={`#${item.id}`} className="text-sm text-ink/70 hover:text-brand">
+                    {item.texto}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </aside>
+        ) : null}
       </div>
       {documento.leituraObrigatoria && documento.status === 'publicado' ? (
         <div className="no-print sticky bottom-20 mt-4 rounded-2xl border border-line bg-white p-4 shadow-lg lg:bottom-4">
