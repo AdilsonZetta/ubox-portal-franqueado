@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ChevronRight, Folder, GraduationCap, Home, LogOut, Menu, MessageCircle, Search, Shield, X } from 'lucide-react'
+import { Bell, BookOpen, ChevronRight, ClipboardCheck, Folder, GraduationCap, Home, LayoutTemplate, LogOut, Menu, MessageCircle, Search, Shield, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { NavLink, Outlet, useMatch, useNavigate } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
@@ -11,6 +11,8 @@ const links = [
   { to: '/', label: 'Início', icon: Home, fim: true },
   { to: '/biblioteca', label: 'Documentos', icon: BookOpen },
   { to: '/trilhas', label: 'Trilhas', icon: GraduationCap },
+  { to: '/atribuicoes', label: 'Atribuições', icon: ClipboardCheck },
+  { to: '/modelos', label: 'Modelos', icon: LayoutTemplate },
   { to: '/pergunte', label: 'Pergunte', icon: MessageCircle },
 ]
 

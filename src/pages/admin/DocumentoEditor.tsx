@@ -1,11 +1,12 @@
 import mammoth from 'mammoth'
 import { marked } from 'marked'
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AudienciaFields, type AudienciaForm } from '../../components/AudienciaFields'
 import { RichEditor } from '../../components/Editor'
 import { Aviso, Button, Campo, inputClass } from '../../components/ui'
 import { MODELOS } from '../../data/modelos'
+import { gerarRascunho } from '../../lib/ai'
 import { excluirDocumento, enviarArquivo, listarUsuarios, salvarDocumento, type RascunhoDocumento } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
 import { storageHabilitado } from '../../firebaseConfig'
@@ -41,8 +42,10 @@ export default function DocumentoEditor() {
   const [form, setForm] = useState<RascunhoDocumento | null>(null)
   const [erro, setErro] = useState('')
   const [ocupado, setOcupado] = useState(false)
+  const [params] = useSearchParams()
   const [anexoNome, setAnexoNome] = useState('')
   const [anexoUrl, setAnexoUrl] = useState('')
+  const [pedidoIa, setPedidoIa] = useState('')
 
   useEffect(() => {
     void listarUsuarios().then(setUsuarios).catch(() => undefined)
@@ -51,7 +54,12 @@ export default function DocumentoEditor() {
   useEffect(() => {
     if (!portal.categorias.length && portal.carregando) return
     if (novo) {
-      setForm(vazio(portal.categorias[0]?.id ?? 'operacao'))
+      setForm((atual) => {
+        if (atual) return atual
+        const base = vazio(portal.categorias[0]?.id ?? 'operacao')
+        const modelo = MODELOS.find((item) => item.id === params.get('modelo'))
+        return modelo ? { ...base, tipo: modelo.tipo, titulo: modelo.nome, conteudoHtml: modelo.html } : base
+      })
       return
     }
     const documento = portal.documentos.find((item) => item.id === id)
@@ -187,6 +195,21 @@ export default function DocumentoEditor() {
           />
         </label>
       </div>
+      <form
+        className="flex flex-col gap-2 rounded-2xl border border-line bg-white p-3 sm:flex-row"
+        onSubmit={(evento) => {
+          evento.preventDefault()
+          if (!pedidoIa.trim()) return
+          setOcupado(true)
+          void gerarRascunho(pedidoIa.trim())
+            .then((html) => setForm((atual) => (atual ? { ...atual, formato: 'richtext', conteudoHtml: html, tipo: 'pop' } : atual)))
+            .catch((falha: unknown) => setErro(mensagemErro(falha)))
+            .finally(() => setOcupado(false))
+        }}
+      >
+        <input className={inputClass} value={pedidoIa} onChange={(e) => setPedidoIa(e.target.value)} placeholder="Gerar um POP com IA. Ex.: abertura de domingo na unidade" />
+        <Button type="submit" variant="secondary" disabled={ocupado}>Gerar</Button>
+      </form>
       {form.formato === 'richtext' ? (
         <RichEditor value={form.conteudoHtml} onChange={(html) => setForm({ ...form, conteudoHtml: html })} />
       ) : (

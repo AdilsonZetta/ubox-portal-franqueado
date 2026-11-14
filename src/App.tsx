@@ -10,7 +10,9 @@ import { BibliotecaPage } from './pages/Biblioteca'
 import { BuscaPage } from './pages/Busca'
 import { CertificadoPage } from './pages/Certificado'
 import { DocumentoPage } from './pages/Documento'
+import { AtribuicoesPage } from './pages/Atribuicoes'
 import { HomePage } from './pages/Home'
+import { ModelosPage } from './pages/Modelos'
 import { NotificacoesPage } from './pages/Notificacoes'
 import { PerfilPage } from './pages/Perfil'
 import { PerguntePage } from './pages/Pergunte'
@@ -61,6 +63,8 @@ function Area() {
           }
         >
           <Route path="/" element={<HomePage />} />
+          <Route path="/atribuicoes" element={<AtribuicoesPage />} />
+          <Route path="/modelos" element={<ModelosPage />} />
           <Route path="/biblioteca" element={<BibliotecaPage />} />
           <Route path="/biblioteca/:categoriaId" element={<BibliotecaPage />} />
           <Route path="/documento/:id" element={<DocumentoPage />} />

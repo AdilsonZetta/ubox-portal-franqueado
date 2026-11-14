@@ -27,6 +27,29 @@ export function fontesDaPergunta(pergunta: string, documentos: Documento[], limi
     }))
 }
 
+export async function gerarRascunho(pedido: string): Promise<string> {
+  if (!aiHabilitado()) throw new Error('A IA está desligada. Defina VITE_AI_ENABLED ou deixe o padrão ligado.')
+  if (!firebaseApp) throw new Error('Configuração do Firebase pendente')
+  const { getAI, getGenerativeModel, GoogleAIBackend } = await import('firebase/ai')
+  const model = getGenerativeModel(getAI(firebaseApp, { backend: new GoogleAIBackend() }), {
+    model: modeloAi(),
+    generationConfig: { maxOutputTokens: 1400 },
+  })
+  const resultado = await model.generateContent(
+    [
+      'Escreva um procedimento operacional da Ubox Self Storage em HTML simples.',
+      'Use apenas h1, p, h2, ol/li e ul/li. A lista ol é o passo a passo numerado.',
+      'Não use markdown nem cerca de código. Português do Brasil. Seja específico para self storage.',
+      `Pedido: ${pedido}`,
+    ].join('\n'),
+  )
+  return resultado.response
+    .text()
+    .replace(/```html/gi, '')
+    .replace(/```/g, '')
+    .trim()
+}
+
 export async function perguntarAoPortal(pergunta: string, documentos: Documento[]): Promise<{ texto: string; fontes: FonteResposta[] }> {
   const fontes = fontesDaPergunta(pergunta, documentos)
   if (!aiHabilitado()) {
