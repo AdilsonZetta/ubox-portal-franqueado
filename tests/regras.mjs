@@ -257,6 +257,97 @@ await caso('cadastro não nasce admin', assertFails(setDoc(doc(visitante, 'usuar
   atualizadoEm: serverTimestamp(),
 })))
 
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  await setDoc(doc(banco, 'usuarios', 'fr-ch'), usuario('fr-ch', { unidadeId: 'un-1', modulos: ['chamados'], nome: 'Dono Chamado' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-ch'), usuario('eq-ch', { papel: 'equipe_franqueado', unidadeId: 'un-1', modulos: ['chamados'], criadoPor: 'fr-ch', nome: 'Equipe Chamado' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-ch2'), usuario('fr-ch2', { unidadeId: 'un-2', modulos: ['chamados'], nome: 'Outra Unidade' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-fila'), usuario('eq-fila', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['chamados'], nome: 'Fila Rede' }))
+})
+
+const frCh = ambiente.authenticatedContext('fr-ch', { email: 'fr-ch@ubox.test' }).firestore()
+const eqCh = ambiente.authenticatedContext('eq-ch', { email: 'eq-ch@ubox.test' }).firestore()
+const frCh2 = ambiente.authenticatedContext('fr-ch2', { email: 'fr-ch2@ubox.test' }).firestore()
+const eqFila = ambiente.authenticatedContext('eq-fila', { email: 'eq-fila@ubox.test' }).firestore()
+
+function chamado(uid, extra = {}) {
+  return {
+    titulo: 'Porta emperrada',
+    categoria: 'operacao',
+    prioridade: 'urgente',
+    descricao: 'A porta da recepção não fecha.',
+    anexos: [{ nome: 'Foto', url: 'https://exemplo.ubox.net.br/porta' }],
+    status: 'aberto',
+    unidadeId: 'un-1',
+    unidadeNome: 'Uberaba Centro',
+    abertoPor: uid,
+    abertoPorNome: 'Dono Chamado',
+    responsavelId: null,
+    responsavelNome: null,
+    avaliacao: null,
+    slaHoras: 4,
+    resolvidoEm: null,
+    fechadoEm: null,
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    ...extra,
+  }
+}
+
+await caso('franqueado com o módulo abre chamado da própria unidade', assertSucceeds(setDoc(doc(frCh, 'chamados', 'ch-1'), chamado('fr-ch'))))
+await caso('equipe da unidade com o módulo lê o chamado', assertSucceeds(getDoc(doc(eqCh, 'chamados', 'ch-1'))))
+await caso('admin lê o chamado', assertSucceeds(getDoc(doc(admin, 'chamados', 'ch-1'))))
+await caso('equipe da franqueadora com o módulo lê o chamado', assertSucceeds(getDoc(doc(eqFila, 'chamados', 'ch-1'))))
+await caso('franqueado sem o módulo não lê o chamado', assertFails(getDoc(doc(dono, 'chamados', 'ch-1'))))
+await caso('equipe da franqueadora sem o módulo não lê o chamado', assertFails(getDoc(doc(equipeRede, 'chamados', 'ch-1'))))
+await caso('outra unidade não lê o chamado', assertFails(getDoc(doc(frCh2, 'chamados', 'ch-1'))))
+await caso('franqueado não lista a fila inteira', assertFails(getDocs(collection(frCh, 'chamados'))))
+await caso('franqueado lista só a própria unidade', assertSucceeds(getDocs(query(collection(frCh, 'chamados'), where('unidadeId', '==', 'un-1')))))
+await caso('franqueado não lista outra unidade', assertFails(getDocs(query(collection(frCh, 'chamados'), where('unidadeId', '==', 'un-2')))))
+await caso('franqueado não altera o responsável', assertFails(updateDoc(doc(frCh, 'chamados', 'ch-1'), { responsavelId: 'fr-ch', responsavelNome: 'Dono Chamado', atualizadoEm: serverTimestamp() })))
+await caso('franqueado não altera o SLA', assertFails(updateDoc(doc(frCh, 'chamados', 'ch-1'), { slaHoras: 72, atualizadoEm: serverTimestamp() })))
+await caso('chamado não nasce com SLA fora da prioridade', assertFails(setDoc(doc(frCh, 'chamados', 'ch-sla'), chamado('fr-ch', { slaHoras: 1 }))))
+await caso('franqueado comenta o próprio chamado', assertSucceeds(setDoc(doc(frCh, 'chamados', 'ch-1', 'eventos', 'ev-1'), {
+  tipo: 'comentario',
+  texto: 'Segue o detalhe.',
+  de: '',
+  para: '',
+  autorId: 'fr-ch',
+  autorNome: 'Dono Chamado',
+  criadoEm: serverTimestamp(),
+})))
+await caso('outra unidade não comenta', assertFails(setDoc(doc(frCh2, 'chamados', 'ch-1', 'eventos', 'ev-2'), {
+  tipo: 'comentario',
+  texto: 'Não deveria.',
+  de: '',
+  para: '',
+  autorId: 'fr-ch2',
+  autorNome: 'Outra Unidade',
+  criadoEm: serverTimestamp(),
+})))
+await caso('franqueadora assume o chamado', assertSucceeds(updateDoc(doc(eqFila, 'chamados', 'ch-1'), {
+  responsavelId: 'eq-fila',
+  responsavelNome: 'Fila Rede',
+  status: 'em_andamento',
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('franqueadora marca como resolvido', assertSucceeds(updateDoc(doc(eqFila, 'chamados', 'ch-1'), {
+  status: 'resolvido',
+  resolvidoEm: serverTimestamp(),
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('franqueado fecha e avalia', assertSucceeds(updateDoc(doc(frCh, 'chamados', 'ch-1'), {
+  status: 'fechado',
+  avaliacao: 5,
+  fechadoEm: serverTimestamp(),
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('franqueado reabre', assertSucceeds(updateDoc(doc(frCh, 'chamados', 'ch-1'), {
+  status: 'aberto',
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('equipe sem o módulo não abre chamado', assertFails(setDoc(doc(equipeSem, 'chamados', 'ch-sem'), chamado('eq-sem', { abertoPor: 'eq-sem', abertoPorNome: 'Pessoa Teste' }))))
+
 void manual
 await ambiente.cleanup()
 

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { GRUPOS, MODULOS } from '../data/modulos'
 import { useAuth } from '../lib/auth'
+import { observarPendentes } from '../lib/chamados'
 import { podeModulo } from '../lib/modulosAcesso'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
@@ -24,6 +25,7 @@ const itensManuais = [
 function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/modulos/')) return pathname.split('/')[2] || null
   if (pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
+  if (pathname.startsWith('/chamados')) return 'chamados'
   if (pathname.startsWith('/franqueadora')) return 'gestao-franqueadora'
   if (pathname.startsWith('/gestao-usuarios')) return 'gestao-usuarios'
   if (pathname === '/' || pathname.startsWith('/minha-equipe')) return null
@@ -42,7 +44,19 @@ export function Layout() {
   const { pathname } = useLocation()
   const imprimir = useMatch('/documento/:id/imprimir')
   const naoLidos = avisos.filter((aviso) => !avisosLidos.includes(aviso.id)).length
+  const redeChamados = Boolean(user && (user.papel === 'admin' || user.papel === 'equipe_franqueadora') && !comoFranqueado)
+  const unidadeChamados = comoFranqueado ? simulado?.unidadeId : user?.unidadeId
+  const podeChamados = Boolean(user && (ehAdmin || podeModulo(pessoa, 'chamados', comoFranqueado)))
+  const [pendentes, setPendentes] = useState(0)
   const areas = useMemo(() => filhosDe(categorias, null), [categorias])
+
+  useEffect(() => {
+    if (!podeChamados || (!redeChamados && !unidadeChamados)) {
+      setPendentes(0)
+      return
+    }
+    return observarPendentes({ rede: redeChamados, unidadeId: unidadeChamados }, setPendentes)
+  }, [podeChamados, redeChamados, unidadeChamados])
 
   useEffect(() => {
     const dono = moduloDaRota(pathname)
@@ -122,6 +136,9 @@ export function Layout() {
                     >
                       <Icone className="h-4 w-4 shrink-0 text-brand" />
                       <span className="min-w-0 flex-1 truncate">{modulo.nome}</span>
+                      {modulo.slug === 'chamados' && pendentes > 0 ? (
+                        <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{pendentes}</span>
+                      ) : null}
                       <ChevronDown className={cx('h-3.5 w-3.5 shrink-0 text-ink/35 transition', aberto && 'rotate-180')} />
                     </button>
                     {aberto ? (

@@ -736,5 +736,173 @@ service cloud.firestore {
         && id == request.auth.uid + '_' + request.resource.data.avisoId;
       allow update, delete: if false;
     }
+
+    function temModulo(slug) {
+      return 'modulosLiberados' in userData()
+        && userData().modulosLiberados is list
+        && slug in userData().modulosLiberados;
+    }
+
+    function chamadoDaRede() {
+      return userData().papel == 'equipe_franqueadora';
+    }
+
+    function chamadoDaUnidade(data) {
+      return userData().papel in ['franqueado', 'equipe_franqueado']
+        && userData().unidadeId is string
+        && userData().unidadeId.size() > 0
+        && data.unidadeId == userData().unidadeId;
+    }
+
+    function acessaChamado(data) {
+      return isAdmin()
+        || (isActive() && temModulo('chamados') && (chamadoDaRede() || chamadoDaUnidade(data)));
+    }
+
+    function urlHttps(url) {
+      return url is string && url.size() > 8 && url.size() <= 500 && url.matches('^https://.+');
+    }
+
+    function anexoChamadoOk(item) {
+      return item.keys().hasOnly(['nome', 'url'])
+        && item.nome is string && item.nome.size() > 0 && item.nome.size() <= 80
+        && urlHttps(item.url);
+    }
+
+    function anexosChamadoOk(lista) {
+      return lista is list && lista.size() <= 8
+        && (lista.size() < 1 || anexoChamadoOk(lista[0]))
+        && (lista.size() < 2 || anexoChamadoOk(lista[1]))
+        && (lista.size() < 3 || anexoChamadoOk(lista[2]))
+        && (lista.size() < 4 || anexoChamadoOk(lista[3]))
+        && (lista.size() < 5 || anexoChamadoOk(lista[4]))
+        && (lista.size() < 6 || anexoChamadoOk(lista[5]))
+        && (lista.size() < 7 || anexoChamadoOk(lista[6]))
+        && (lista.size() < 8 || anexoChamadoOk(lista[7]));
+    }
+
+    function slaChamadoCerto(data) {
+      return (data.prioridade == 'urgente' && data.slaHoras == 4)
+        || (data.prioridade == 'alta' && data.slaHoras == 24)
+        || (data.prioridade == 'media' && data.slaHoras == 48)
+        || (data.prioridade == 'baixa' && data.slaHoras == 72);
+    }
+
+    function isValidChamado(data) {
+      return data.keys().hasOnly([
+          'titulo', 'categoria', 'prioridade', 'descricao', 'anexos', 'status',
+          'unidadeId', 'unidadeNome', 'abertoPor', 'abertoPorNome',
+          'responsavelId', 'responsavelNome', 'avaliacao', 'slaHoras',
+          'criadoEm', 'atualizadoEm', 'resolvidoEm', 'fechadoEm'
+        ])
+        && validName(data.titulo)
+        && data.categoria in ['operacao', 'marketing', 'financeiro', 'juridico', 'sistemas', 'implantacao', 'outros']
+        && data.prioridade in ['baixa', 'media', 'alta', 'urgente']
+        && data.descricao is string && data.descricao.size() > 0 && data.descricao.size() <= 4000
+        && anexosChamadoOk(data.anexos)
+        && data.status == 'aberto'
+        && validShort(data.unidadeId, 80) && data.unidadeId.size() > 0
+        && validShort(data.unidadeNome, 120) && data.unidadeNome.size() > 0
+        && data.abertoPor == request.auth.uid
+        && validName(data.abertoPorNome)
+        && data.responsavelId == null
+        && data.responsavelNome == null
+        && data.avaliacao == null
+        && slaChamadoCerto(data)
+        && data.criadoEm == request.time
+        && data.atualizadoEm == request.time
+        && data.resolvidoEm == null
+        && data.fechadoEm == null;
+    }
+
+    function nucleoChamadoIgual() {
+      return request.resource.data.titulo == resource.data.titulo
+        && request.resource.data.categoria == resource.data.categoria
+        && request.resource.data.prioridade == resource.data.prioridade
+        && request.resource.data.descricao == resource.data.descricao
+        && request.resource.data.anexos == resource.data.anexos
+        && request.resource.data.unidadeId == resource.data.unidadeId
+        && request.resource.data.unidadeNome == resource.data.unidadeNome
+        && request.resource.data.abertoPor == resource.data.abertoPor
+        && request.resource.data.abertoPorNome == resource.data.abertoPorNome
+        && request.resource.data.slaHoras == resource.data.slaHoras
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && request.resource.data.atualizadoEm == request.time;
+    }
+
+    function isValidEventoChamado(data) {
+      return data.keys().hasOnly(['tipo', 'texto', 'de', 'para', 'autorId', 'autorNome', 'criadoEm'])
+        && data.tipo in ['abertura', 'comentario', 'status', 'responsavel']
+        && data.texto is string && data.texto.size() > 0 && data.texto.size() <= 2000
+        && data.de is string && data.de.size() <= 40
+        && data.para is string && data.para.size() <= 40
+        && data.autorId == request.auth.uid
+        && validName(data.autorNome)
+        && data.criadoEm == request.time;
+    }
+
+    function chamadoPath(id) {
+      return /databases/$(database)/documents/chamados/$(id);
+    }
+
+    match /chamados/{chamadoId} {
+      allow read: if acessaChamado(resource.data);
+      allow create: if isActive() && temModulo('chamados') && chamadoDaUnidade(request.resource.data) && isValidChamado(request.resource.data);
+      allow update: if isActive() && temModulo('chamados') && chamadoDaUnidade(resource.data)
+        && nucleoChamadoIgual()
+        && request.resource.data.responsavelId == resource.data.responsavelId
+        && request.resource.data.responsavelNome == resource.data.responsavelNome
+        && request.resource.data.resolvidoEm == resource.data.resolvidoEm
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'avaliacao', 'fechadoEm', 'atualizadoEm'])
+        && (
+          (
+            request.resource.data.status == 'fechado'
+            && resource.data.status != 'fechado'
+            && request.resource.data.avaliacao is int
+            && request.resource.data.avaliacao >= 1
+            && request.resource.data.avaliacao <= 5
+            && request.resource.data.fechadoEm == request.time
+          ) || (
+            request.resource.data.status == 'aberto'
+            && resource.data.status in ['fechado', 'resolvido']
+            && request.resource.data.avaliacao == resource.data.avaliacao
+            && request.resource.data.fechadoEm == resource.data.fechadoEm
+          )
+        );
+      allow update: if isActive() && temModulo('chamados') && chamadoDaRede()
+        && nucleoChamadoIgual()
+        && request.resource.data.avaliacao == resource.data.avaliacao
+        && request.resource.data.fechadoEm == resource.data.fechadoEm
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'responsavelId', 'responsavelNome', 'resolvidoEm', 'atualizadoEm'])
+        && (
+          (request.resource.data.responsavelId == null && request.resource.data.responsavelNome == null)
+          || (
+            request.resource.data.responsavelId is string
+            && request.resource.data.responsavelId.size() > 0
+            && request.resource.data.responsavelId.size() <= 128
+            && validName(request.resource.data.responsavelNome)
+          )
+        )
+        && (
+          request.resource.data.status == resource.data.status
+          || request.resource.data.status in ['aberto', 'em_andamento', 'aguardando_franqueado', 'resolvido']
+        )
+        && (
+          (
+            request.resource.data.status == 'resolvido'
+            && resource.data.status != 'resolvido'
+            && request.resource.data.resolvidoEm == request.time
+          )
+          || request.resource.data.resolvidoEm == resource.data.resolvidoEm
+        );
+      allow delete: if false;
+
+      match /eventos/{eventoId} {
+        allow read: if acessaChamado(get(chamadoPath(chamadoId)).data);
+        allow create: if isValidEventoChamado(request.resource.data)
+          && acessaChamado(get(chamadoPath(chamadoId)).data);
+        allow update, delete: if false;
+      }
+    }
   }
 }

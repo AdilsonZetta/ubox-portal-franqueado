@@ -22,6 +22,11 @@ exigir(rules.includes('match /trilhas/{id}'), 'coleção trilhas ausente')
 exigir(rules.includes('match /quizzes/{id}'), 'coleção quizzes ausente')
 exigir(rules.includes('match /tentativas/{id}'), 'coleção tentativas ausente')
 exigir(rules.includes('match /certificados/{id}'), 'coleção certificados ausente')
+exigir(rules.includes('match /chamados/{chamadoId}'), 'coleção chamados ausente')
+exigir(rules.includes("data.prioridade == 'urgente' && data.slaHoras == 4"), 'SLA urgente ausente')
+exigir(rules.includes("data.prioridade == 'alta' && data.slaHoras == 24"), 'SLA alta ausente')
+exigir(rules.includes("data.prioridade == 'media' && data.slaHoras == 48"), 'SLA média ausente')
+exigir(rules.includes("data.prioridade == 'baixa' && data.slaHoras == 72"), 'SLA baixa ausente')
 exigir(rules.includes('allow update, delete: if false'), 'registros de leitura não são só de criação')
 
 if (erros.length) {

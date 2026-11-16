@@ -8,6 +8,7 @@ import { useVisao, VisaoProvider } from './lib/visao'
 import { PortalProvider } from './lib/portal'
 import { AguardandoPage, CadastroPage, CompletarPage, ConfigPendentePage, EntrarPage, RecuperarPage } from './pages/AuthPages'
 import { FranqueadoraPage, GestaoUsuariosPage, MinhaEquipePage } from './pages/GestaoAcessos'
+import { ChamadosPage } from './pages/Chamados'
 import { BibliotecaPage } from './pages/Biblioteca'
 import { BuscaPage } from './pages/Busca'
 import { CertificadoPage } from './pages/Certificado'
@@ -88,6 +89,7 @@ function Area() {
           <Route path="/franqueadora" element={<Admin><FranqueadoraPage /></Admin>} />
           <Route path="/gestao-usuarios" element={<Admin><GestaoUsuariosPage /></Admin>} />
           <Route path="/minha-equipe" element={<MinhaEquipePage />} />
+          <Route path="/chamados" element={<ChamadosPage />} />
           <Route path="/admin" element={<Admin><PainelPage /></Admin>} />
           <Route path="/admin/usuarios" element={<Admin><UsuariosPage /></Admin>} />
           <Route path="/admin/conformidade" element={<Admin><ConformidadePage /></Admin>} />

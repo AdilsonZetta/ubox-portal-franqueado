@@ -54,6 +54,7 @@ Resumo da proteção:
 - Rascunho fica só com o admin da franqueadora.
 - O cadastro público cria `usuarios/{uid}` como `franqueado` inativo, sem módulos. A própria pessoa não altera `papel`, `ativo` nem `modulosLiberados`.
 - O admin cria unidades e a equipe da franqueadora. O franqueado só cria `equipe_franqueado` da própria unidade, com módulos que já foram liberados para ela. Usuário inativo não lê conteúdo.
+- Chamados: a unidade só lê e escreve os próprios. A equipe da franqueadora só entra na fila se tiver o módulo `chamados`. Ninguém da unidade altera responsável ou SLA.
 - O primeiro admin sai pelo script abaixo, e só enquanto `config/adminCriado` não existe.
 - Leitura, aceite, tentativa de quiz, certificado e leitura de aviso são criados pelo dono e não podem ser editados nem apagados. O aceite grava o texto `Li e concordo`, o e-mail do login e o horário do servidor, na versão publicada do documento.
 - A correção do quiz é feita no navegador (plano Spark, sem Cloud Functions). A franqueadora vê as respostas e o painel recalcula a nota. Um usuário técnico pode gravar uma nota diferente; o painel marca **rever** quando isso acontece.

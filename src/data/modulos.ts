@@ -59,8 +59,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: LifeBuoy,
-    descricao: 'Pedidos da unidade para a franqueadora.',
-    recursos: ['Abrir chamado', 'Prazos', 'Histórico', 'Escalonamento'],
+    descricao: 'Pedidos da unidade para a franqueadora, com prazo e histórico.',
+    ativo: true,
+    para: '/chamados',
+    recursos: [],
   },
   {
     slug: 'marketing',
