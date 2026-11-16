@@ -44,22 +44,26 @@ export function PortalProvider({ children }: { children: ReactNode }) {
     if (!user) return
     let ativo = true
     setCarregando(true)
-    void Promise.all([carregarPortal(user), carregarMeuProgresso(user.uid), carregarAvisos(user)])
+    void Promise.allSettled([carregarPortal(user), carregarMeuProgresso(user), carregarAvisos(user)])
       .then(([portal, progresso, listaAvisos]) => {
         if (!ativo) return
-        setCategorias(portal.categorias)
-        setDocumentos(portal.documentos)
-        setTrilhas(portal.trilhas)
-        setLeituras(progresso.leituras)
-        setAceites(progresso.aceites)
-        setTentativas(progresso.tentativas)
-        setCertificados(progresso.certificados)
-        setAvisosLidos(progresso.avisosLidos.map((item) => item.avisoId))
-        setAvisos(listaAvisos.sort((a, b) => paraMillis(b.criadoEm) - paraMillis(a.criadoEm)))
-        setErro('')
-      })
-      .catch((falha: unknown) => {
-        if (ativo) setErro(mensagemErro(falha))
+        if (portal.status === 'fulfilled') {
+          setCategorias(portal.value.categorias)
+          setDocumentos(portal.value.documentos)
+          setTrilhas(portal.value.trilhas)
+        }
+        if (progresso.status === 'fulfilled') {
+          setLeituras(progresso.value.leituras)
+          setAceites(progresso.value.aceites)
+          setTentativas(progresso.value.tentativas)
+          setCertificados(progresso.value.certificados)
+          setAvisosLidos(progresso.value.avisosLidos.map((item) => item.avisoId))
+        }
+        if (listaAvisos.status === 'fulfilled') {
+          setAvisos(listaAvisos.value.sort((a, b) => paraMillis(b.criadoEm) - paraMillis(a.criadoEm)))
+        }
+        const falha = [portal, progresso, listaAvisos].find((item) => item.status === 'rejected')
+        setErro(falha && falha.status === 'rejected' ? mensagemErro(falha.reason) : '')
       })
       .finally(() => {
         if (ativo) setCarregando(false)

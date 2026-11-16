@@ -53,18 +53,22 @@ export function slaHoras(prioridade: PrioridadeChamado): number {
   return SLA_HORAS[prioridade]
 }
 
-export function prazoMillis(criadoEm: number, horas: number): number {
-  if (!criadoEm || !horas) return 0
-  return criadoEm + horas * 60 * 60 * 1000
+export function prazoMillis(inicio: number, horas: number): number {
+  if (!inicio || !horas) return 0
+  return inicio + horas * 60 * 60 * 1000
+}
+
+export function inicioDoPrazo(criadoEm: number, reabertoEm: number): number {
+  return reabertoEm > 0 ? reabertoEm : criadoEm
 }
 
 export function chamadoPendente(status: string): boolean {
   return (STATUS_PENDENTES as string[]).includes(status)
 }
 
-export function chamadoAtrasado(status: string, criadoEm: number, horas: number, agora = Date.now()): boolean {
+export function chamadoAtrasado(status: string, criadoEm: number, horas: number, agora = Date.now(), reabertoEm = 0): boolean {
   if (!chamadoPendente(status)) return false
-  const prazo = prazoMillis(criadoEm, horas)
+  const prazo = prazoMillis(inicioDoPrazo(criadoEm, reabertoEm), horas)
   return prazo > 0 && agora > prazo
 }
 

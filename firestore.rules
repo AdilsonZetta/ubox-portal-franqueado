@@ -80,41 +80,80 @@ service cloud.firestore {
       return get(userPath()).data;
     }
 
-    function isActive() {
-      return userExists()
-        && userData().ativo == true
-        && userData().recusado == false
-        && userData().papel in ['admin', 'franqueado', 'equipe_franqueadora', 'equipe_franqueado']
-        && unidadeDoUsuarioAtiva();
-    }
-
     function unidadePath(id) {
       return /databases/$(database)/documents/unidades/$(id);
     }
 
-    function unidadeDoUsuarioAtiva() {
-      return userData().papel == 'admin'
-        || userData().papel == 'equipe_franqueadora'
-        || !('unidadeId' in userData())
-        || userData().unidadeId == null
-        || userData().unidadeId == ''
+    function contaAtiva(dados) {
+      return dados.ativo == true
+        && dados.recusado == false
+        && dados.papel in ['admin', 'franqueado', 'equipe_franqueadora', 'equipe_franqueado'];
+    }
+
+    function unidadeAtiva(dados) {
+      return dados.papel == 'admin'
+        || dados.papel == 'equipe_franqueadora'
         || (
-          exists(unidadePath(userData().unidadeId))
-          && get(unidadePath(userData().unidadeId)).data.ativo == true
+          (dados.papel == 'franqueado' || dados.papel == 'equipe_franqueado')
+          && 'unidadeId' in dados
+          && dados.unidadeId is string
+          && dados.unidadeId.size() > 0
+          && exists(unidadePath(dados.unidadeId))
+          && get(unidadePath(dados.unidadeId)).data.ativo == true
         );
+    }
+
+    function temLista(dados, slug) {
+      return 'modulosLiberados' in dados
+        && dados.modulosLiberados is list
+        && slug in dados.modulosLiberados;
+    }
+
+    function isActive() {
+      return signedIn() && exists(userPath()) && perfilAtivo();
+    }
+
+    function perfilAtivo() {
+      let dados = userData();
+      return contaAtiva(dados) && unidadeAtiva(dados);
+    }
+
+    function temModulo(slug) {
+      let dados = userData();
+      return temLista(dados, slug);
     }
 
     function podeModulo(slug) {
-      return isAdmin()
-        || (
-          'modulosLiberados' in userData()
-          && userData().modulosLiberados is list
-          && slug in userData().modulosLiberados
-        );
+      return isAdmin() || temModulo(slug);
     }
 
     function isAdmin() {
-      return isActive() && userData().papel == 'admin';
+      return signedIn() && exists(userPath()) && adminAtivo();
+    }
+
+    function adminAtivo() {
+      let dados = userData();
+      return dados.papel == 'admin' && dados.ativo == true && dados.recusado == false;
+    }
+
+    function emailConfere(data) {
+      return !('email' in request.auth.token)
+        || request.auth.token.email == null
+        || data.email == request.auth.token.email;
+    }
+
+    function unidadeIdPreenchido(data) {
+      return 'unidadeId' in data && data.unidadeId is string && data.unidadeId.size() > 0;
+    }
+
+    function modulosCabemNaUnidade(data) {
+      return !unidadeIdPreenchido(data)
+        || !('modulosLiberados' in data)
+        || (
+          existsAfter(unidadePath(data.unidadeId))
+          && data.modulosLiberados is list
+          && data.modulosLiberados.hasOnly(getAfter(unidadePath(data.unidadeId)).data.modulosLiberados)
+        );
     }
 
     function isSelf(uid) {
@@ -477,10 +516,16 @@ service cloud.firestore {
     }
 
     function equipeDaMinhaUnidade() {
-      return isActive()
-        && userData().papel == 'franqueado'
+      let dados = userData();
+      return signedIn()
+        && exists(userPath())
+        && contaAtiva(dados)
+        && unidadeAtiva(dados)
+        && dados.papel == 'franqueado'
+        && unidadeIdPreenchido(dados)
         && resource.data.papel == 'equipe_franqueado'
-        && resource.data.unidadeId == userData().unidadeId;
+        && unidadeIdPreenchido(resource.data)
+        && resource.data.unidadeId == dados.unidadeId;
     }
 
     match /usuarios/{uid} {
@@ -488,13 +533,14 @@ service cloud.firestore {
       allow list: if isAdmin() || equipeDaMinhaUnidade();
 
       allow create: if isSelf(uid)
-        && isValidUsuario(request.resource.data, uid)
-        && request.resource.data.email == request.auth.token.email
         && request.resource.data.papel == 'franqueado'
         && request.resource.data.ativo == false
-        && request.resource.data.recusado == false
         && request.resource.data.modulosLiberados is list
         && request.resource.data.modulosLiberados.size() == 0
+        && isValidUsuario(request.resource.data, uid)
+        && emailConfere(request.resource.data)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.recusado == false
         && (!('unidadeId' in request.resource.data) || request.resource.data.unidadeId == null || request.resource.data.unidadeId == '')
         && request.resource.data.criadoEm == request.time
         && request.resource.data.atualizadoEm == request.time;
@@ -505,74 +551,115 @@ service cloud.firestore {
         && request.resource.data.recusado == false
         && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+        && request.resource.data.atualizadoEm == request.time
+        && modulosCabemNaUnidade(request.resource.data);
 
-      allow create: if isActive()
-        && userData().papel == 'franqueado'
-        && isValidUsuario(request.resource.data, uid)
-        && request.resource.data.papel == 'equipe_franqueado'
+      allow create: if request.resource.data.papel == 'equipe_franqueado'
+        && franqueadoCriaEquipe()
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'nome', 'papel', 'ativo', 'recusado', 'unidade', 'cidade', 'unidadeId', 'modulosLiberados', 'criadoPor', 'criadoEm', 'atualizadoEm'])
+        && validEmail(request.resource.data.email)
+        && validName(request.resource.data.nome)
         && request.resource.data.ativo == true
         && request.resource.data.recusado == false
-        && request.resource.data.unidadeId == userData().unidadeId
-        && userData().unidadeId is string
-        && userData().unidadeId.size() > 0
-        && request.resource.data.modulosLiberados is list
-        && request.resource.data.modulosLiberados.hasOnly(userData().modulosLiberados)
         && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
-
-      allow update: if isValidUsuario(request.resource.data, uid)
-        && request.resource.data.uid == resource.data.uid
-        && request.resource.data.email == resource.data.email
-        && request.resource.data.criadoEm == resource.data.criadoEm
         && request.resource.data.atualizadoEm == request.time
-        && (!('criadoPor' in resource.data) || request.resource.data.criadoPor == resource.data.criadoPor)
-        && (
-          (
-            isAdmin()
-            && request.resource.data.papel == resource.data.papel
-          ) || (
-            isSelf(uid)
-            && request.resource.data.papel == resource.data.papel
-            && request.resource.data.ativo == resource.data.ativo
-            && request.resource.data.recusado == resource.data.recusado
-            && request.resource.data.unidade == resource.data.unidade
-            && request.resource.data.cidade == resource.data.cidade
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'atualizadoEm'])
-          ) || (
-            isActive()
-            && userData().papel == 'franqueado'
-            && resource.data.papel == 'equipe_franqueado'
-            && resource.data.unidadeId == userData().unidadeId
-            && request.resource.data.papel == 'equipe_franqueado'
-            && request.resource.data.unidadeId == resource.data.unidadeId
-            && request.resource.data.modulosLiberados is list
-            && request.resource.data.modulosLiberados.hasOnly(userData().modulosLiberados)
-            && request.resource.data.recusado == resource.data.recusado
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'ativo', 'modulosLiberados', 'atualizadoEm'])
-          ) || (
-            isSelf(uid)
-            && !exists(adminLockPath())
-            && resource.data.papel == 'franqueado'
-            && resource.data.ativo == false
-            && request.resource.data.papel == 'admin'
-            && request.resource.data.ativo == true
-            && request.resource.data.recusado == false
-            && request.resource.data.nome == resource.data.nome
-            && request.resource.data.unidade == resource.data.unidade
-            && request.resource.data.cidade == resource.data.cidade
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['papel', 'ativo', 'atualizadoEm'])
-          )
-        );
+        && modulosCabemNaUnidade(request.resource.data);
+
+      allow update: if resource != null && atualizaUsuario(uid);
 
       allow delete: if isAdmin();
     }
 
+    function atualizaUsuario(uid) {
+      let chaves = request.resource.data.diff(resource.data).affectedKeys();
+      return (
+          isSelf(uid)
+          && chaves.hasOnly(['nome', 'atualizadoEm'])
+          && validName(request.resource.data.nome)
+          && emailConfere(request.resource.data)
+          && request.resource.data.atualizadoEm == request.time
+          && request.resource.data.papel == resource.data.papel
+          && request.resource.data.email == resource.data.email
+        )
+        || (
+          isSelf(uid)
+          && !exists(adminLockPath())
+          && resource.data.papel == 'franqueado'
+          && resource.data.ativo == false
+          && request.resource.data.papel == 'admin'
+          && request.resource.data.ativo == true
+          && chaves.hasOnly(['papel', 'ativo', 'atualizadoEm'])
+          && request.resource.data.atualizadoEm == request.time
+        )
+        || (signedIn() && exists(userPath()) && atualizaComPerfil(uid));
+    }
+
+    function atualizaComPerfil(uid) {
+      let dados = userData();
+      return (
+          dados.papel == 'admin'
+          && dados.ativo == true
+          && dados.recusado == false
+          && isValidUsuario(request.resource.data, uid)
+          && request.resource.data.papel == resource.data.papel
+          && request.resource.data.email == resource.data.email
+          && request.resource.data.uid == resource.data.uid
+          && request.resource.data.criadoEm == resource.data.criadoEm
+          && request.resource.data.atualizadoEm == request.time
+          && (!('criadoPor' in resource.data) || request.resource.data.criadoPor == resource.data.criadoPor)
+          && modulosCabemNaUnidade(request.resource.data)
+        )
+        || (
+          dados.papel == 'franqueado'
+          && resource.data.papel == 'equipe_franqueado'
+          && unidadeIdPreenchido(dados)
+          && unidadeIdPreenchido(resource.data)
+          && resource.data.unidadeId == dados.unidadeId
+          && contaAtiva(dados)
+          && unidadeAtiva(dados)
+          && request.resource.data.modulosLiberados is list
+          && request.resource.data.modulosLiberados.hasOnly(dados.modulosLiberados)
+          && request.resource.data.papel == 'equipe_franqueado'
+          && request.resource.data.atualizadoEm == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'ativo', 'modulosLiberados', 'atualizadoEm'])
+          && modulosCabemNaUnidade(request.resource.data)
+        );
+    }
+
+    function franqueadoCriaEquipe() {
+      let dados = userData();
+      return signedIn()
+        && exists(userPath())
+        && contaAtiva(dados)
+        && unidadeAtiva(dados)
+        && dados.papel == 'franqueado'
+        && unidadeIdPreenchido(dados)
+        && unidadeIdPreenchido(request.resource.data)
+        && request.resource.data.unidadeId == dados.unidadeId
+        && request.resource.data.modulosLiberados is list
+        && request.resource.data.modulosLiberados.hasOnly(dados.modulosLiberados);
+    }
+
+    function franqueadoEditaEquipe() {
+      let dados = userData();
+      return signedIn()
+        && exists(userPath())
+        && contaAtiva(dados)
+        && unidadeAtiva(dados)
+        && dados.papel == 'franqueado'
+        && unidadeIdPreenchido(dados)
+        && resource.data.papel == 'equipe_franqueado'
+        && unidadeIdPreenchido(resource.data)
+        && resource.data.unidadeId == dados.unidadeId
+        && request.resource.data.modulosLiberados is list
+        && request.resource.data.modulosLiberados.hasOnly(dados.modulosLiberados);
+    }
+
     match /unidades/{id} {
       allow read: if isAdmin()
-        || (isActive() && resource.data.uid == request.auth.uid)
-        || (isActive() && userData().unidadeId == id);
+        || (signedIn() && resource.data.uid == request.auth.uid)
+        || (signedIn() && exists(userPath()) && userData().unidadeId == id);
       allow create: if isAdmin()
         && isValidUnidade(request.resource.data)
         && request.resource.data.criadoPor == request.auth.uid
@@ -678,13 +765,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
 
       match /gabarito/{gabaritoId} {
-        allow read: if isAdmin() || isActive();
+        allow read: if isAdmin() || (isActive() && temModulo('universidade'));
         allow write: if isAdmin();
       }
     }
 
     match /gabarito/{id} {
-      allow read: if isAdmin() || isActive();
+      allow read: if isAdmin() || (isActive() && temModulo('universidade'));
       allow write: if isAdmin();
     }
 
@@ -716,14 +803,15 @@ service cloud.firestore {
     }
 
     match /tentativas/{id} {
-      allow read: if isAdmin() || (isActive() && dono(resource.data));
-      allow create: if isActive() && isValidTentativa(request.resource.data);
+      allow read: if isAdmin() || (isActive() && temModulo('universidade') && dono(resource.data));
+      allow create: if isActive() && temModulo('universidade') && isValidTentativa(request.resource.data);
       allow update, delete: if false;
     }
 
     match /certificados/{id} {
-      allow read: if isAdmin() || (isActive() && dono(resource.data));
+      allow read: if isAdmin() || (isActive() && temModulo('universidade') && dono(resource.data));
       allow create: if isActive()
+        && temModulo('universidade')
         && isValidCertificado(request.resource.data)
         && id == request.auth.uid + '_' + request.resource.data.trilhaId;
       allow update, delete: if false;
@@ -737,26 +825,50 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    function temModulo(slug) {
-      return 'modulosLiberados' in userData()
-        && userData().modulosLiberados is list
-        && slug in userData().modulosLiberados;
+    function perfilAcessaChamado(dados, chamado) {
+      return (dados.papel == 'admin' && dados.ativo == true && dados.recusado == false)
+        || (
+          contaAtiva(dados)
+          && unidadeAtiva(dados)
+          && temLista(dados, 'chamados')
+          && (
+            dados.papel == 'equipe_franqueadora'
+            || (
+              (dados.papel == 'franqueado' || dados.papel == 'equipe_franqueado')
+              && unidadeIdPreenchido(dados)
+              && 'unidadeId' in chamado
+              && chamado.unidadeId == dados.unidadeId
+            )
+          )
+        );
     }
 
-    function chamadoDaRede() {
-      return userData().papel == 'equipe_franqueadora';
+    function perfilOperaRede(dados) {
+      return (dados.papel == 'admin' && dados.ativo == true && dados.recusado == false)
+        || (dados.papel == 'equipe_franqueadora' && contaAtiva(dados) && unidadeAtiva(dados) && temLista(dados, 'chamados'));
     }
 
-    function chamadoDaUnidade(data) {
-      return userData().papel in ['franqueado', 'equipe_franqueado']
-        && userData().unidadeId is string
-        && userData().unidadeId.size() > 0
-        && data.unidadeId == userData().unidadeId;
+    function perfilPodeEncerrar(dados, chamado) {
+      return contaAtiva(dados)
+        && unidadeAtiva(dados)
+        && temLista(dados, 'chamados')
+        && (dados.papel == 'franqueado' || dados.papel == 'equipe_franqueado')
+        && unidadeIdPreenchido(dados)
+        && 'unidadeId' in chamado
+        && chamado.unidadeId == dados.unidadeId
+        && (dados.papel == 'franqueado' || request.auth.uid == chamado.abertoPor);
     }
 
-    function acessaChamado(data) {
-      return isAdmin()
-        || (isActive() && temModulo('chamados') && (chamadoDaRede() || chamadoDaUnidade(data)));
+    function acessaChamado(chamado) {
+      return signedIn() && exists(userPath()) && perfilAcessaChamado(userData(), chamado);
+    }
+
+    function podeEncerrarChamado(chamado) {
+      return signedIn() && exists(userPath()) && perfilPodeEncerrar(userData(), chamado);
+    }
+
+    function operaRede() {
+      return signedIn() && exists(userPath()) && perfilOperaRede(userData());
     }
 
     function urlHttps(url) {
@@ -793,7 +905,7 @@ service cloud.firestore {
           'titulo', 'categoria', 'prioridade', 'descricao', 'anexos', 'status',
           'unidadeId', 'unidadeNome', 'abertoPor', 'abertoPorNome',
           'responsavelId', 'responsavelNome', 'avaliacao', 'slaHoras',
-          'criadoEm', 'atualizadoEm', 'resolvidoEm', 'fechadoEm'
+          'criadoEm', 'atualizadoEm', 'resolvidoEm', 'fechadoEm', 'reabertoEm'
         ])
         && validName(data.titulo)
         && data.categoria in ['operacao', 'marketing', 'financeiro', 'juridico', 'sistemas', 'implantacao', 'outros']
@@ -802,7 +914,8 @@ service cloud.firestore {
         && anexosChamadoOk(data.anexos)
         && data.status == 'aberto'
         && validShort(data.unidadeId, 80) && data.unidadeId.size() > 0
-        && validShort(data.unidadeNome, 120) && data.unidadeNome.size() > 0
+        && exists(unidadePath(data.unidadeId))
+        && data.unidadeNome == get(unidadePath(data.unidadeId)).data.nome
         && data.abertoPor == request.auth.uid
         && validName(data.abertoPorNome)
         && data.responsavelId == null
@@ -812,7 +925,8 @@ service cloud.firestore {
         && data.criadoEm == request.time
         && data.atualizadoEm == request.time
         && data.resolvidoEm == null
-        && data.fechadoEm == null;
+        && data.fechadoEm == null
+        && data.reabertoEm == null;
     }
 
     function nucleoChamadoIgual() {
@@ -832,10 +946,10 @@ service cloud.firestore {
 
     function isValidEventoChamado(data) {
       return data.keys().hasOnly(['tipo', 'texto', 'de', 'para', 'autorId', 'autorNome', 'criadoEm'])
-        && data.tipo in ['abertura', 'comentario', 'status', 'responsavel']
+        && data.tipo in ['comentario', 'status', 'responsavel']
         && data.texto is string && data.texto.size() > 0 && data.texto.size() <= 2000
-        && data.de is string && data.de.size() <= 40
-        && data.para is string && data.para.size() <= 40
+        && data.de is string && data.de.size() <= 120
+        && data.para is string && data.para.size() <= 120
         && data.autorId == request.auth.uid
         && validName(data.autorNome)
         && data.criadoEm == request.time;
@@ -845,44 +959,64 @@ service cloud.firestore {
       return /databases/$(database)/documents/chamados/$(id);
     }
 
-    match /chamados/{chamadoId} {
-      allow read: if acessaChamado(resource.data);
-      allow create: if isActive() && temModulo('chamados') && chamadoDaUnidade(request.resource.data) && isValidChamado(request.resource.data);
-      allow update: if isActive() && temModulo('chamados') && chamadoDaUnidade(resource.data)
-        && nucleoChamadoIgual()
+    function responsavelChamadoValido() {
+      return (request.resource.data.responsavelId == null && request.resource.data.responsavelNome == null)
+        || (
+          request.resource.data.responsavelId is string
+          && request.resource.data.responsavelId.size() > 0
+          && request.resource.data.responsavelId.size() <= 128
+          && validName(request.resource.data.responsavelNome)
+        );
+    }
+
+    function reabertoPreservado() {
+      return (
+          !('reabertoEm' in resource.data)
+          && (!('reabertoEm' in request.resource.data) || request.resource.data.reabertoEm == null)
+        )
+        || (
+          'reabertoEm' in resource.data
+          && 'reabertoEm' in request.resource.data
+          && request.resource.data.reabertoEm == resource.data.reabertoEm
+        );
+    }
+
+    function fechaChamado() {
+      return nucleoChamadoIgual()
+        && request.resource.data.status == 'fechado'
+        && resource.data.status == 'resolvido'
+        && request.resource.data.avaliacao is int
+        && request.resource.data.avaliacao >= 1
+        && request.resource.data.avaliacao <= 5
+        && request.resource.data.fechadoEm == request.time
+        && request.resource.data.resolvidoEm == resource.data.resolvidoEm
+        && reabertoPreservado()
         && request.resource.data.responsavelId == resource.data.responsavelId
         && request.resource.data.responsavelNome == resource.data.responsavelNome
-        && request.resource.data.resolvidoEm == resource.data.resolvidoEm
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'avaliacao', 'fechadoEm', 'atualizadoEm'])
-        && (
-          (
-            request.resource.data.status == 'fechado'
-            && resource.data.status != 'fechado'
-            && request.resource.data.avaliacao is int
-            && request.resource.data.avaliacao >= 1
-            && request.resource.data.avaliacao <= 5
-            && request.resource.data.fechadoEm == request.time
-          ) || (
-            request.resource.data.status == 'aberto'
-            && resource.data.status in ['fechado', 'resolvido']
-            && request.resource.data.avaliacao == resource.data.avaliacao
-            && request.resource.data.fechadoEm == resource.data.fechadoEm
-          )
-        );
-      allow update: if isActive() && temModulo('chamados') && chamadoDaRede()
-        && nucleoChamadoIgual()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'avaliacao', 'fechadoEm', 'atualizadoEm']);
+    }
+
+    function reabreChamado() {
+      return nucleoChamadoIgual()
+        && request.resource.data.status == 'aberto'
+        && resource.data.status in ['fechado', 'resolvido']
+        && request.resource.data.avaliacao == null
+        && request.resource.data.fechadoEm == null
+        && request.resource.data.resolvidoEm == null
+        && request.resource.data.reabertoEm == request.time
+        && request.resource.data.responsavelId == resource.data.responsavelId
+        && request.resource.data.responsavelNome == resource.data.responsavelNome
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'avaliacao', 'fechadoEm', 'resolvidoEm', 'reabertoEm', 'atualizadoEm']);
+    }
+
+    function conduzChamado() {
+      return nucleoChamadoIgual()
+        && resource.data.status != 'fechado'
         && request.resource.data.avaliacao == resource.data.avaliacao
         && request.resource.data.fechadoEm == resource.data.fechadoEm
+        && reabertoPreservado()
+        && responsavelChamadoValido()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'responsavelId', 'responsavelNome', 'resolvidoEm', 'atualizadoEm'])
-        && (
-          (request.resource.data.responsavelId == null && request.resource.data.responsavelNome == null)
-          || (
-            request.resource.data.responsavelId is string
-            && request.resource.data.responsavelId.size() > 0
-            && request.resource.data.responsavelId.size() <= 128
-            && validName(request.resource.data.responsavelNome)
-          )
-        )
         && (
           request.resource.data.status == resource.data.status
           || request.resource.data.status in ['aberto', 'em_andamento', 'aguardando_franqueado', 'resolvido']
@@ -895,12 +1029,76 @@ service cloud.firestore {
           )
           || request.resource.data.resolvidoEm == resource.data.resolvidoEm
         );
+    }
+
+    function tiraDeFechado() {
+      return nucleoChamadoIgual()
+        && resource.data.status == 'fechado'
+        && request.resource.data.status in ['aberto', 'em_andamento', 'aguardando_franqueado', 'resolvido']
+        && request.resource.data.avaliacao == null
+        && request.resource.data.fechadoEm == null
+        && request.resource.data.resolvidoEm == null
+        && request.resource.data.reabertoEm == request.time
+        && responsavelChamadoValido()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'responsavelId', 'responsavelNome', 'avaliacao', 'fechadoEm', 'resolvidoEm', 'reabertoEm', 'atualizadoEm']);
+    }
+
+    function comentarioConfere(id) {
+      let dados = userData();
+      let chamado = get(chamadoPath(id)).data;
+      return isValidEventoChamado(request.resource.data)
+        && request.resource.data.autorNome == dados.nome
+        && perfilAcessaChamado(dados, chamado);
+    }
+
+    function statusConfere(id) {
+      let dados = userData();
+      let antes = get(chamadoPath(id)).data;
+      let depois = getAfter(chamadoPath(id)).data;
+      return isValidEventoChamado(request.resource.data)
+        && request.resource.data.autorNome == dados.nome
+        && request.resource.data.para == depois.status
+        && antes.status != depois.status
+        && (perfilOperaRede(dados) || perfilPodeEncerrar(dados, antes));
+    }
+
+    function responsavelConfere(id) {
+      let dados = userData();
+      let antes = get(chamadoPath(id)).data;
+      let depois = getAfter(chamadoPath(id)).data;
+      return isValidEventoChamado(request.resource.data)
+        && request.resource.data.autorNome == dados.nome
+        && request.resource.data.para == depois.responsavelNome
+        && antes.responsavelId != depois.responsavelId
+        && perfilOperaRede(dados);
+    }
+
+    match /chamados/{chamadoId} {
+      allow read: if acessaChamado(resource.data);
+      allow create: if request.resource.data.status == 'aberto'
+        && request.resource.data.abertoPor == request.auth.uid
+        && slaChamadoCerto(request.resource.data)
+        && isValidChamado(request.resource.data)
+        && podeEncerrarChamado(request.resource.data);
+      allow update: if resource != null && resource.data.abertoPor == request.auth.uid && (
+        (request.resource.data.status == 'fechado' && fechaChamado())
+        || (request.resource.data.status == 'aberto' && reabreChamado())
+      );
+      allow update: if resource != null && podeEncerrarChamado(resource.data) && request.auth.uid != resource.data.abertoPor && (
+        (request.resource.data.status == 'fechado' && fechaChamado())
+        || (request.resource.data.status == 'aberto' && reabreChamado())
+      );
+      allow update: if resource != null && (isAdmin() || operaRede()) && (
+        (resource.data.status != 'fechado' && conduzChamado())
+        || (resource.data.status == 'fechado' && tiraDeFechado())
+      );
       allow delete: if false;
 
       match /eventos/{eventoId} {
         allow read: if acessaChamado(get(chamadoPath(chamadoId)).data);
-        allow create: if isValidEventoChamado(request.resource.data)
-          && acessaChamado(get(chamadoPath(chamadoId)).data);
+        allow create: if request.resource.data.tipo == 'comentario' && comentarioConfere(chamadoId)
+          || request.resource.data.tipo == 'status' && statusConfere(chamadoId)
+          || request.resource.data.tipo == 'responsavel' && responsavelConfere(chamadoId);
         allow update, delete: if false;
       }
     }

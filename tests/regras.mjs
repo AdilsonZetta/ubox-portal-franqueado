@@ -10,7 +10,18 @@ import {
   setDoc,
   updateDoc,
   where,
+  writeBatch,
 } from 'firebase/firestore'
+
+const estouros = []
+for (const metodo of ['error', 'warn', 'log']) {
+  const original = console[metodo].bind(console)
+  console[metodo] = (...args) => {
+    const texto = args.map((item) => (typeof item === 'string' ? item : item instanceof Error ? item.message : '')).join(' ')
+    if (/unable to evaluate/i.test(texto)) estouros.push(texto)
+    original(...args)
+  }
+}
 
 const criado = new Date('2026-01-01T00:00:00.000Z')
 const falhas = []
@@ -36,6 +47,7 @@ function usuario(uid, extra = {}) {
 }
 
 async function caso(nome, promessa) {
+  const antes = estouros.length
   try {
     await promessa
     console.log(`ok  ${nome}`)
@@ -43,6 +55,9 @@ async function caso(nome, promessa) {
     falhas.push(nome)
     console.error(`falhou  ${nome}`)
     console.error(erro instanceof Error ? erro.message : erro)
+  }
+  if (estouros.length > antes && !falhas.includes(nome)) {
+    console.error(`limite de expressões em recusa: ${nome}`)
   }
 }
 
@@ -243,7 +258,14 @@ await caso('admin grava os módulos do franqueado legado', assertSucceeds(setDoc
   modulosLiberados: ['manuais'],
   atualizadoEm: serverTimestamp(),
 })))
-await caso('franqueado legado passa a ler o manual depois da migração', assertSucceeds(getDoc(doc(legado, 'documentos', 'pub'))))
+await caso('franqueado sem unidade não lê mesmo com módulos', assertFails(getDoc(doc(legado, 'documentos', 'pub'))))
+await caso('admin liga o legado a uma unidade ativa', assertSucceeds(setDoc(doc(admin, 'usuarios', 'fr-legado'), {
+  ...baseLegado,
+  unidadeId: 'un-1',
+  modulosLiberados: ['manuais'],
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('franqueado legado lê depois de ligado à unidade', assertSucceeds(getDoc(doc(legado, 'documentos', 'pub'))))
 await caso('cadastro não nasce admin', assertFails(setDoc(doc(visitante, 'usuarios', 'visitante'), {
   uid: 'visitante',
   email: 'visitante@ubox.test',
@@ -263,6 +285,12 @@ await ambiente.withSecurityRulesDisabled(async (contexto) => {
   await setDoc(doc(banco, 'usuarios', 'eq-ch'), usuario('eq-ch', { papel: 'equipe_franqueado', unidadeId: 'un-1', modulos: ['chamados'], criadoPor: 'fr-ch', nome: 'Equipe Chamado' }))
   await setDoc(doc(banco, 'usuarios', 'fr-ch2'), usuario('fr-ch2', { unidadeId: 'un-2', modulos: ['chamados'], nome: 'Outra Unidade' }))
   await setDoc(doc(banco, 'usuarios', 'eq-fila'), usuario('eq-fila', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['chamados'], nome: 'Fila Rede' }))
+  await setDoc(doc(banco, 'gabarito', 'g1'), { respostas: [0] })
+  await setDoc(doc(banco, 'quizzes', 'q1', 'gabarito', 'item'), { respostas: [0] })
+  await setDoc(doc(banco, 'tentativas', 't-fr1'), { uid: 'fr-1', quizId: 'q1', nota: 80 })
+  await setDoc(doc(banco, 'tentativas', 't-ch'), { uid: 'fr-ch', quizId: 'q1', nota: 80 })
+  await setDoc(doc(banco, 'certificados', 'c-fr1'), { uid: 'fr-1', trilhaId: 'trilha' })
+  await setDoc(doc(banco, 'certificados', 'c-ch'), { uid: 'fr-ch', trilhaId: 'trilha' })
 })
 
 const frCh = ambiente.authenticatedContext('fr-ch', { email: 'fr-ch@ubox.test' }).firestore()
@@ -288,6 +316,7 @@ function chamado(uid, extra = {}) {
     slaHoras: 4,
     resolvidoEm: null,
     fechadoEm: null,
+    reabertoEm: null,
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
     ...extra,
@@ -306,6 +335,13 @@ await caso('franqueado lista só a própria unidade', assertSucceeds(getDocs(que
 await caso('franqueado não lista outra unidade', assertFails(getDocs(query(collection(frCh, 'chamados'), where('unidadeId', '==', 'un-2')))))
 await caso('franqueado não altera o responsável', assertFails(updateDoc(doc(frCh, 'chamados', 'ch-1'), { responsavelId: 'fr-ch', responsavelNome: 'Dono Chamado', atualizadoEm: serverTimestamp() })))
 await caso('franqueado não altera o SLA', assertFails(updateDoc(doc(frCh, 'chamados', 'ch-1'), { slaHoras: 72, atualizadoEm: serverTimestamp() })))
+await caso('franqueado não fecha direto de aberto', assertFails(updateDoc(doc(frCh, 'chamados', 'ch-1'), {
+  status: 'fechado',
+  avaliacao: 5,
+  fechadoEm: serverTimestamp(),
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('chamado não aceita nome de unidade diferente', assertFails(setDoc(doc(frCh, 'chamados', 'ch-nome'), chamado('fr-ch', { unidadeNome: 'Outra' }))))
 await caso('chamado não nasce com SLA fora da prioridade', assertFails(setDoc(doc(frCh, 'chamados', 'ch-sla'), chamado('fr-ch', { slaHoras: 1 }))))
 await caso('franqueado comenta o próprio chamado', assertSucceeds(setDoc(doc(frCh, 'chamados', 'ch-1', 'eventos', 'ev-1'), {
   tipo: 'comentario',
@@ -331,9 +367,28 @@ await caso('franqueadora assume o chamado', assertSucceeds(updateDoc(doc(eqFila,
   status: 'em_andamento',
   atualizadoEm: serverTimestamp(),
 })))
-await caso('franqueadora marca como resolvido', assertSucceeds(updateDoc(doc(eqFila, 'chamados', 'ch-1'), {
-  status: 'resolvido',
-  resolvidoEm: serverTimestamp(),
+await caso('franqueadora marca como resolvido', (async () => {
+  const lote = writeBatch(eqFila)
+  lote.update(doc(eqFila, 'chamados', 'ch-1'), {
+    status: 'resolvido',
+    resolvidoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  })
+  lote.set(doc(eqFila, 'chamados', 'ch-1', 'eventos', 'ev-resolvido'), {
+    tipo: 'status',
+    texto: 'Status: resolvido',
+    de: 'em_andamento',
+    para: 'resolvido',
+    autorId: 'eq-fila',
+    autorNome: 'Fila Rede',
+    criadoEm: serverTimestamp(),
+  })
+  await lote.commit()
+})())
+await caso('colega não fecha o chamado de outro', assertFails(updateDoc(doc(eqCh, 'chamados', 'ch-1'), {
+  status: 'fechado',
+  avaliacao: 4,
+  fechadoEm: serverTimestamp(),
   atualizadoEm: serverTimestamp(),
 })))
 await caso('franqueado fecha e avalia', assertSucceeds(updateDoc(doc(frCh, 'chamados', 'ch-1'), {
@@ -342,14 +397,96 @@ await caso('franqueado fecha e avalia', assertSucceeds(updateDoc(doc(frCh, 'cham
   fechadoEm: serverTimestamp(),
   atualizadoEm: serverTimestamp(),
 })))
-await caso('franqueado reabre', assertSucceeds(updateDoc(doc(frCh, 'chamados', 'ch-1'), {
-  status: 'aberto',
+await caso('franqueado reabre e zera a avaliação', (async () => {
+  await updateDoc(doc(frCh, 'chamados', 'ch-1'), {
+    status: 'aberto',
+    avaliacao: null,
+    fechadoEm: null,
+    resolvidoEm: null,
+    reabertoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  })
+  const dados = (await getDoc(doc(frCh, 'chamados', 'ch-1'))).data()
+  if (!dados || dados.avaliacao !== null || dados.fechadoEm !== null || dados.resolvidoEm !== null || !dados.reabertoEm) {
+    throw new Error('reabertura não limpou o encerramento')
+  }
+})())
+await caso('admin conduz a fila', assertSucceeds(updateDoc(doc(admin, 'chamados', 'ch-1'), {
+  status: 'em_andamento',
   atualizadoEm: serverTimestamp(),
 })))
+await caso('comentário não aceita nome forjado', assertFails(setDoc(doc(frCh, 'chamados', 'ch-1', 'eventos', 'ev-falso-nome'), {
+  tipo: 'comentario',
+  texto: 'Nome trocado.',
+  de: '',
+  para: '',
+  autorId: 'fr-ch',
+  autorNome: 'Outra Pessoa',
+  criadoEm: serverTimestamp(),
+})))
+await caso('unidade não grava evento de status', assertFails(setDoc(doc(frCh, 'chamados', 'ch-1', 'eventos', 'ev-status'), {
+  tipo: 'status',
+  texto: 'Status: fechado',
+  de: 'aberto',
+  para: 'fechado',
+  autorId: 'fr-ch',
+  autorNome: 'Dono Chamado',
+  criadoEm: serverTimestamp(),
+})))
+await caso('evento de status sem mudança é recusado', assertFails(setDoc(doc(eqFila, 'chamados', 'ch-1', 'eventos', 'ev-sem-mudanca'), {
+  tipo: 'status',
+  texto: 'Status: resolvido',
+  de: 'em_andamento',
+  para: 'resolvido',
+  autorId: 'eq-fila',
+  autorNome: 'Fila Rede',
+  criadoEm: serverTimestamp(),
+})))
+await caso('admin não libera módulo fora da unidade', assertFails(updateDoc(doc(admin, 'usuarios', 'fr-1'), {
+  modulosLiberados: ['manuais', 'universidade', 'crm'],
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('quem tem universidade lê o gabarito', assertSucceeds(getDoc(doc(dono, 'gabarito', 'g1'))))
+await caso('quem não tem universidade não lê o gabarito', assertFails(getDoc(doc(frCh, 'gabarito', 'g1'))))
+await caso('equipe só de manuais não lê o gabarito do quiz', assertFails(getDoc(doc(equipeRede, 'quizzes', 'q1', 'gabarito', 'item'))))
+await caso('franqueado com universidade lê a própria tentativa', assertSucceeds(getDoc(doc(dono, 'tentativas', 't-fr1'))))
+await caso('sem universidade não lê a própria tentativa', assertFails(getDoc(doc(frCh, 'tentativas', 't-ch'))))
+await caso('sem universidade não lê o próprio certificado', assertFails(getDoc(doc(frCh, 'certificados', 'c-ch'))))
 await caso('equipe sem o módulo não abre chamado', assertFails(setDoc(doc(equipeSem, 'chamados', 'ch-sem'), chamado('eq-sem', { abertoPor: 'eq-sem', abertoPorNome: 'Pessoa Teste' }))))
+
+await caso('franqueadora tira de fechado e zera a nota', (async () => {
+  await updateDoc(doc(eqFila, 'chamados', 'ch-1'), {
+    status: 'resolvido',
+    resolvidoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  })
+  await updateDoc(doc(frCh, 'chamados', 'ch-1'), {
+    status: 'fechado',
+    avaliacao: 2,
+    fechadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  })
+  await updateDoc(doc(eqFila, 'chamados', 'ch-1'), {
+    status: 'em_andamento',
+    avaliacao: null,
+    fechadoEm: null,
+    resolvidoEm: null,
+    reabertoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+  })
+  const dados = (await getDoc(doc(eqFila, 'chamados', 'ch-1'))).data()
+  if (!dados || dados.status !== 'em_andamento' || dados.avaliacao !== null || dados.fechadoEm !== null || dados.resolvidoEm !== null) {
+    throw new Error('sair de fechado não limpou a nota')
+  }
+})())
 
 void manual
 await ambiente.cleanup()
+
+const recusasNoLimite = estouros.length
+if (recusasNoLimite) {
+  console.error(`\nrecusas que ainda citam o limite de 1000 expressões: ${recusasNoLimite}`)
+}
 
 if (falhas.length) {
   console.error(`\n${falhas.length} caso(s) falharam: ${falhas.join(', ')}`)

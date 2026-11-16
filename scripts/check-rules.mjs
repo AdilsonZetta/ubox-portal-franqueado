@@ -27,6 +27,11 @@ exigir(rules.includes("data.prioridade == 'urgente' && data.slaHoras == 4"), 'SL
 exigir(rules.includes("data.prioridade == 'alta' && data.slaHoras == 24"), 'SLA alta ausente')
 exigir(rules.includes("data.prioridade == 'media' && data.slaHoras == 48"), 'SLA média ausente')
 exigir(rules.includes("data.prioridade == 'baixa' && data.slaHoras == 72"), 'SLA baixa ausente')
+exigir(rules.includes("temModulo('universidade')"), 'gabarito/tentativa sem módulo universidade')
+exigir(rules.includes('reabertoEm'), 'reabertura sem reabertoEm')
+exigir(rules.includes('autorNome == dados.nome'), 'evento sem conferir o nome do autor')
+exigir(rules.includes('modulosCabemNaUnidade'), 'teto da unidade ausente')
+exigir(rules.includes('isAdmin() || operaRede()') || rules.includes('(isAdmin() || operaRede())'), 'admin fora da fila de chamados')
 exigir(rules.includes('allow update, delete: if false'), 'registros de leitura não são só de criação')
 
 if (erros.length) {

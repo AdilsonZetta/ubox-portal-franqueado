@@ -53,9 +53,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             return
           }
           setUser(perfil)
-          if (perfil.recusado) setStatus('rejected')
-          else if (!perfil.ativo) setStatus('pending')
-          else setStatus('ready')
+          if (perfil.recusado) {
+            setStatus('rejected')
+            return
+          }
+          if (!perfil.ativo) {
+            setStatus('pending')
+            return
+          }
+          if (perfil.papel === 'franqueado' || perfil.papel === 'equipe_franqueado') {
+            if (!perfil.unidadeId) {
+              setStatus('pending')
+              return
+            }
+            void getDoc(doc(requireDb(), 'unidades', perfil.unidadeId))
+              .then((unidade) => {
+                if (!unidade.exists() || unidade.data().ativo !== true) setStatus('pending')
+                else setStatus('ready')
+              })
+              .catch(() => setStatus('pending'))
+            return
+          }
+          setStatus('ready')
         })
         .catch((falha: unknown) => {
           setErro(falha instanceof Error ? falha.message : 'Falha ao carregar o perfil.')

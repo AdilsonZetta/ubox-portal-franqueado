@@ -90,38 +90,42 @@ export async function atualizarUnidade(
 ): Promise<void> {
   const banco = requireDb()
   const modulos = patch.modulosLiberados.filter((slug) => SLUGS_FRANQUEADO.includes(slug))
-  await updateDoc(doc(banco, 'unidades', unidade.id), {
-    nome: patch.nome.trim(),
-    cidade: patch.cidade.trim(),
-    responsavel: patch.responsavel.trim(),
-    modulosLiberados: modulos,
-    ativo: patch.ativo,
-    atualizadoEm: serverTimestamp(),
-  })
-  if (unidade.uid) {
-    await updateDoc(doc(banco, 'usuarios', unidade.uid), {
-      nome: patch.responsavel.trim(),
-      unidade: patch.nome.trim(),
-      cidade: patch.cidade.trim(),
+  const equipe = await getDocs(
+    query(collection(banco, 'usuarios'), where('unidadeId', '==', unidade.id), where('papel', '==', 'equipe_franqueado')),
+  )
+  const nome = patch.nome.trim()
+  const cidade = patch.cidade.trim()
+  await runTransaction(banco, async (tx) => {
+    tx.update(doc(banco, 'unidades', unidade.id), {
+      nome,
+      cidade,
+      responsavel: patch.responsavel.trim(),
       modulosLiberados: modulos,
       ativo: patch.ativo,
       atualizadoEm: serverTimestamp(),
     })
-  }
-  const equipe = await getDocs(
-    query(collection(banco, 'usuarios'), where('unidadeId', '==', unidade.id), where('papel', '==', 'equipe_franqueado')),
-  )
-  await Promise.all(
-    equipe.docs.map((item) => {
-      const atuais = Array.isArray(item.data().modulosLiberados) ? (item.data().modulosLiberados as string[]) : []
-      return updateDoc(item.ref, {
-        modulosLiberados: atuais.filter((slug) => modulos.includes(slug)),
-        unidade: patch.nome.trim(),
-        cidade: patch.cidade.trim(),
+    if (unidade.uid) {
+      tx.update(doc(banco, 'usuarios', unidade.uid), {
+        nome: patch.responsavel.trim(),
+        unidade: nome,
+        cidade,
+        modulosLiberados: modulos,
+        ativo: patch.ativo,
         atualizadoEm: serverTimestamp(),
       })
-    }),
-  )
+    }
+    for (const item of equipe.docs) {
+      if (item.id === unidade.uid) continue
+      const atuais = Array.isArray(item.data().modulosLiberados) ? (item.data().modulosLiberados as string[]) : []
+      tx.update(item.ref, {
+        modulosLiberados: atuais.filter((slug) => modulos.includes(slug)),
+        unidade: nome,
+        cidade,
+        ativo: patch.ativo,
+        atualizadoEm: serverTimestamp(),
+      })
+    }
+  })
 }
 
 export async function listarUnidades(): Promise<Unidade[]> {

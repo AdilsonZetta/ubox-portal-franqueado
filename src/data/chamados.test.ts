@@ -17,6 +17,7 @@ describe('SLA de chamados', () => {
     expect(chamadoAtrasado('aberto', criado, 4)).toBe(true)
     expect(chamadoAtrasado('fechado', criado, 4)).toBe(false)
     expect(chamadoAtrasado('aberto', Date.now(), 4)).toBe(false)
+    expect(chamadoAtrasado('aberto', criado, 4, Date.now(), Date.now())).toBe(false)
     expect(chamadoPendente('aguardando_franqueado')).toBe(true)
     expect(chamadoPendente('resolvido')).toBe(false)
   })

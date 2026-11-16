@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -50,6 +51,7 @@ export interface Chamado {
   atualizadoEm?: Timestamp
   resolvidoEm?: Timestamp | null
   fechadoEm?: Timestamp | null
+  reabertoEm?: Timestamp | null
 }
 
 export interface EventoChamado {
@@ -101,6 +103,7 @@ export function mapChamado(id: string, data: Record<string, unknown>): Chamado |
     atualizadoEm: data.atualizadoEm as Timestamp | undefined,
     resolvidoEm: (data.resolvidoEm ?? null) as Timestamp | null,
     fechadoEm: (data.fechadoEm ?? null) as Timestamp | null,
+    reabertoEm: (data.reabertoEm ?? null) as Timestamp | null,
   }
 }
 
@@ -180,6 +183,8 @@ export async function abrirChamado(
 ): Promise<string> {
   if (!autor.unidadeId) throw new Error('Sua conta ainda não está ligada a uma unidade.')
   const banco = requireDb()
+  const unidade = await getDoc(doc(banco, 'unidades', autor.unidadeId))
+  if (!unidade.exists()) throw new Error('Unidade não encontrada.')
   const ref = doc(collection(banco, 'chamados'))
   const horas = slaHoras(dados.prioridade)
   await setDoc(ref, {
@@ -190,7 +195,7 @@ export async function abrirChamado(
       anexos: dados.anexos.map((anexo) => ({ nome: (anexo.nome || anexo.url).trim().slice(0, 80), url: anexo.url.trim() })),
       status: 'aberto',
       unidadeId: autor.unidadeId,
-      unidadeNome: autor.unidade || 'Unidade',
+      unidadeNome: String(unidade.data().nome || ''),
       abertoPor: autor.uid,
       abertoPorNome: autor.nome,
       responsavelId: null,
@@ -199,10 +204,11 @@ export async function abrirChamado(
       slaHoras: horas,
       resolvidoEm: null,
       fechadoEm: null,
+      reabertoEm: null,
       criadoEm: serverTimestamp(),
       atualizadoEm: serverTimestamp(),
     })
-  await setDoc(doc(collection(ref, 'eventos')), evento(autor, 'abertura', 'Chamado aberto.', '', 'aberto'))
+  await setDoc(doc(collection(ref, 'eventos')), evento(autor, 'comentario', 'Chamado aberto.', '', 'aberto'))
   return ref.id
 }
 
@@ -214,7 +220,16 @@ export async function mudarStatus(autor: Usuario, chamado: Chamado, status: Stat
   const banco = requireDb()
   const batch = writeBatch(banco)
   const patch: Record<string, unknown> = { status, atualizadoEm: serverTimestamp() }
-  if (status === 'resolvido' && chamado.status !== 'resolvido') patch.resolvidoEm = serverTimestamp()
+  const reabre = status === 'aberto' && (chamado.status === 'fechado' || chamado.status === 'resolvido')
+  const saiDeFechado = chamado.status === 'fechado' && status !== 'fechado'
+  if (reabre || saiDeFechado) {
+    patch.avaliacao = null
+    patch.fechadoEm = null
+    patch.resolvidoEm = null
+    patch.reabertoEm = serverTimestamp()
+  } else if (status === 'resolvido' && chamado.status !== 'resolvido') {
+    patch.resolvidoEm = serverTimestamp()
+  }
   if (status === 'fechado') {
     patch.avaliacao = extra.avaliacao
     patch.fechadoEm = serverTimestamp()

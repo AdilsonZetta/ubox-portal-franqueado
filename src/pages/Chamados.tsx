@@ -10,6 +10,7 @@ import {
   nomeCategoria,
   nomePrioridade,
   nomeStatus,
+  inicioDoPrazo,
   prazoMillis,
   tempoMedioResolucaoHoras,
   type CategoriaChamado,
@@ -71,7 +72,7 @@ export function ChamadosPage() {
   const painel = useMemo(() => {
     const agora = Date.now()
     const abertos = chamados.filter((chamado) => chamadoPendente(chamado.status)).length
-    const atrasados = chamados.filter((chamado) => chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, agora)).length
+    const atrasados = chamados.filter((chamado) => chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, agora, paraMillis(chamado.reabertoEm))).length
     const media = tempoMedioResolucaoHoras(
       chamados.map((chamado) => ({
         status: chamado.status,
@@ -179,7 +180,7 @@ export function ChamadosPage() {
         <div className="space-y-2">
           {visiveis.length === 0 ? <Vazio titulo="Nenhum chamado" texto="Quando um pedido for aberto, ele aparece aqui." /> : null}
           {visiveis.map((chamado) => {
-            const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras)
+            const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, Date.now(), paraMillis(chamado.reabertoEm))
             return (
               <button key={chamado.id} type="button" onClick={() => setSelecionado(chamado.id)} className={`w-full rounded-2xl border bg-white px-4 py-3 text-left ${atual?.id === chamado.id ? 'border-brand' : 'border-line'}`}>
                 <span className="flex flex-wrap items-center gap-2">
@@ -188,7 +189,7 @@ export function ChamadosPage() {
                   <Selo tom="marca">{nomePrioridade(chamado.prioridade)}</Selo>
                 </span>
                 <span className="mt-1 block text-xs text-ink/50">
-                  {rede ? `${chamado.unidadeNome} · ` : ''}{nomeCategoria(chamado.categoria)} · prazo {formatarData(prazoMillis(paraMillis(chamado.criadoEm), chamado.slaHoras))}
+                  {rede ? `${chamado.unidadeNome} · ` : ''}{nomeCategoria(chamado.categoria)} · prazo {formatarData(prazoMillis(inicioDoPrazo(paraMillis(chamado.criadoEm), paraMillis(chamado.reabertoEm)), chamado.slaHoras))}
                 </span>
               </button>
             )
@@ -217,7 +218,8 @@ function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; 
   }, [admin])
 
   if (!user) return null
-  const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras)
+  const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, Date.now(), paraMillis(chamado.reabertoEm))
+  const podeEncerrar = Boolean(user && (user.papel === 'franqueado' || user.uid === chamado.abertoPor))
 
   async function agir(promessa: Promise<unknown>) {
     try {
@@ -301,9 +303,9 @@ function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; 
           </select>
         </div>
       ) : null}
-      {!leitura && !rede ? (
+      {!leitura && !rede && podeEncerrar ? (
         <div className="flex flex-wrap items-center gap-2">
-          {chamado.status !== 'fechado' ? (
+          {chamado.status === 'resolvido' ? (
             <>
               <label className="text-sm">Nota
                 <select className={`${inputClass} ml-2`} value={nota} onChange={(evento) => setNota(Number(evento.target.value))}>

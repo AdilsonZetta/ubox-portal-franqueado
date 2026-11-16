@@ -11,6 +11,8 @@ import {
   updateDoc,
   where,
   type DocumentData,
+  type Query,
+  type QueryDocumentSnapshot,
   type Timestamp,
 } from 'firebase/firestore'
 import { IDS_CATEGORIAS } from '../data/categorias'
@@ -38,6 +40,7 @@ import type {
   VersaoDocumento,
 } from '../types'
 import { calcularUids } from './access'
+import { deveCarregar } from './portalCarga'
 import { requireDb } from './firebase'
 import { idAvisoLeitura, idCertificado, idLeitura } from './ids'
 import { aplicarGabarito, extrairItensTrilha, extrairPerguntas, publicadoNoDado } from './quizSchema'
@@ -198,63 +201,86 @@ async function lerColecao<T>(caminho: string, mapear: (id: string, data: Documen
   return snap.docs.map((item) => mapear(item.id, item.data()))
 }
 
+async function documentosDe(consulta: Query<DocumentData>): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+  try {
+    return (await getDocs(consulta)).docs
+  } catch {
+    return []
+  }
+}
+
+async function seguro<T>(promessa: Promise<T>, vazio: T): Promise<T> {
+  try {
+    return await promessa
+  } catch {
+    return vazio
+  }
+}
+
 export async function carregarPortal(usuario: Usuario): Promise<{
   categorias: Categoria[]
   documentos: Documento[]
   trilhas: Trilha[]
 }> {
   const banco = requireDb()
+  const manuais = deveCarregar(usuario, 'manuais')
+  const universidade = deveCarregar(usuario, 'universidade')
   if (usuario.papel === 'admin') {
     const [categorias, documentos, trilhas] = await Promise.all([
-      lerColecao('categorias', mapCategoria),
-      lerColecao('documentos', mapDocumento),
-      lerColecao('trilhas', mapTrilha),
+      seguro(lerColecao('categorias', mapCategoria), [] as Categoria[]),
+      seguro(lerColecao('documentos', mapDocumento), [] as Documento[]),
+      seguro(lerColecao('trilhas', mapTrilha), [] as Trilha[]),
     ])
     return { categorias, documentos, trilhas }
   }
 
-  const conhecidas = await Promise.all(
-    IDS_CATEGORIAS.map(async (id) => {
-      try {
-        const snap = await getDoc(doc(banco, 'categorias', id))
-        return snap.exists() ? mapCategoria(snap.id, snap.data()) : null
-      } catch {
-        return null
-      }
-    }),
-  )
+  const conhecidas = manuais
+    ? await Promise.all(
+        IDS_CATEGORIAS.map(async (id) => {
+          try {
+            const snap = await getDoc(doc(banco, 'categorias', id))
+            return snap.exists() ? mapCategoria(snap.id, snap.data()) : null
+          } catch {
+            return null
+          }
+        }),
+      )
+    : []
 
   let trilhaFormacao: Trilha | null = null
-  try {
-    const snap = await getDoc(doc(banco, 'trilhas', 'trilha-formacao-inicial'))
-    if (snap.exists()) trilhaFormacao = mapTrilha(snap.id, snap.data())
-  } catch {
-    trilhaFormacao = null
+  if (universidade) {
+    try {
+      const snap = await getDoc(doc(banco, 'trilhas', 'trilha-formacao-inicial'))
+      if (snap.exists()) trilhaFormacao = mapTrilha(snap.id, snap.data())
+    } catch {
+      trilhaFormacao = null
+    }
   }
 
+  const nada = Promise.resolve([] as QueryDocumentSnapshot<DocumentData>[])
   const [catPublicas, catMinhas, docsPublicos, docsMeus, trilhasPublicas, trilhasMinhas] = await Promise.all([
-    getDocs(query(collection(banco, 'categorias'), where('publico', '==', true))),
-    getDocs(query(collection(banco, 'categorias'), where('uids', 'array-contains', usuario.uid))),
-    getDocs(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('publico', '==', true))),
-    getDocs(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('uids', 'array-contains', usuario.uid))),
-    getDocs(query(collection(banco, 'trilhas'), where('publicado', '==', true), where('publico', '==', true))),
-    getDocs(query(collection(banco, 'trilhas'), where('publicado', '==', true), where('uids', 'array-contains', usuario.uid))),
+    manuais ? documentosDe(query(collection(banco, 'categorias'), where('publico', '==', true))) : nada,
+    manuais ? documentosDe(query(collection(banco, 'categorias'), where('uids', 'array-contains', usuario.uid))) : nada,
+    manuais ? documentosDe(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('publico', '==', true))) : nada,
+    manuais ? documentosDe(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('uids', 'array-contains', usuario.uid))) : nada,
+    universidade ? documentosDe(query(collection(banco, 'trilhas'), where('publicado', '==', true), where('publico', '==', true))) : nada,
+    universidade ? documentosDe(query(collection(banco, 'trilhas'), where('publicado', '==', true), where('uids', 'array-contains', usuario.uid))) : nada,
   ])
 
   return {
     categorias: mesclar([
       conhecidas.filter((item): item is Categoria => item !== null),
-      catPublicas.docs.map((item) => mapCategoria(item.id, item.data())),
-      catMinhas.docs.map((item) => mapCategoria(item.id, item.data())),
+      catPublicas.map((item) => mapCategoria(item.id, item.data())),
+      catMinhas.map((item) => mapCategoria(item.id, item.data())),
     ]),
     documentos: mesclar([
-      docsPublicos.docs.map((item) => mapDocumento(item.id, item.data())),
-      docsMeus.docs.map((item) => mapDocumento(item.id, item.data())),
+      docsPublicos.map((item) => mapDocumento(item.id, item.data())),
+      docsMeus.map((item) => mapDocumento(item.id, item.data())),
     ]),
     trilhas: mesclar([
       trilhaFormacao ? [trilhaFormacao] : [],
-      trilhasPublicas.docs.map((item) => mapTrilha(item.id, item.data())),
-      trilhasMinhas.docs.map((item) => mapTrilha(item.id, item.data())),
+      trilhasPublicas.map((item) => mapTrilha(item.id, item.data())),
+      trilhasMinhas.map((item) => mapTrilha(item.id, item.data())),
     ]),
   }
 }
@@ -681,24 +707,33 @@ async function porUsuario<T>(nome: string, uid: string, mapear: (id: string, dat
   return snap.docs.map((item) => mapear(item.id, item.data()))
 }
 
-export async function carregarMeuProgresso(uid: string): Promise<{
+export async function carregarMeuProgresso(usuario: Usuario): Promise<{
   leituras: Leitura[]
   aceites: Aceite[]
   tentativas: Tentativa[]
   certificados: Certificado[]
   avisosLidos: AvisoLeitura[]
 }> {
+  const uid = usuario.uid
+  const manuais = deveCarregar(usuario, 'manuais')
+  const universidade = deveCarregar(usuario, 'universidade')
+  const leituraVazia = Promise.resolve([] as Leitura[])
   const [leituras, aceites, tentativas, certificados, avisosLidos] = await Promise.all([
-    porUsuario('leituras', uid, mapLeitura),
-    porUsuario('aceites', uid, mapAceite),
-    porUsuario('tentativas', uid, mapTentativa),
-    porUsuario('certificados', uid, mapCertificado),
-    porUsuario('avisosLeituras', uid, (id, data) => ({
-      id,
-      uid: texto(data.uid),
-      avisoId: texto(data.avisoId),
-      lidaEm: data.lidaEm,
-    })),
+    manuais ? seguro(porUsuario('leituras', uid, mapLeitura), []) : leituraVazia,
+    manuais ? seguro(porUsuario('aceites', uid, mapAceite), []) : Promise.resolve([] as Aceite[]),
+    universidade ? seguro(porUsuario('tentativas', uid, mapTentativa), []) : Promise.resolve([] as Tentativa[]),
+    universidade ? seguro(porUsuario('certificados', uid, mapCertificado), []) : Promise.resolve([] as Certificado[]),
+    manuais
+      ? seguro(
+          porUsuario('avisosLeituras', uid, (id, data) => ({
+            id,
+            uid: texto(data.uid),
+            avisoId: texto(data.avisoId),
+            lidaEm: data.lidaEm,
+          })),
+          [],
+        )
+      : Promise.resolve([] as AvisoLeitura[]),
   ])
   return { leituras, aceites, tentativas, certificados, avisosLidos }
 }
@@ -720,14 +755,15 @@ export async function carregarRegistrosAdmin(): Promise<{
 
 export async function carregarAvisos(usuario: Usuario): Promise<Aviso[]> {
   const banco = requireDb()
-  if (usuario.papel === 'admin') return lerColecao('avisos', mapAviso)
+  if (!deveCarregar(usuario, 'manuais')) return []
+  if (usuario.papel === 'admin') return seguro(lerColecao('avisos', mapAviso), [])
   const [publicos, meus] = await Promise.all([
-    getDocs(query(collection(banco, 'avisos'), where('publico', '==', true))),
-    getDocs(query(collection(banco, 'avisos'), where('uids', 'array-contains', usuario.uid))),
+    documentosDe(query(collection(banco, 'avisos'), where('publico', '==', true))),
+    documentosDe(query(collection(banco, 'avisos'), where('uids', 'array-contains', usuario.uid))),
   ])
   return mesclar([
-    publicos.docs.map((item) => mapAviso(item.id, item.data())),
-    meus.docs.map((item) => mapAviso(item.id, item.data())),
+    publicos.map((item) => mapAviso(item.id, item.data())),
+    meus.map((item) => mapAviso(item.id, item.data())),
   ])
 }
 
