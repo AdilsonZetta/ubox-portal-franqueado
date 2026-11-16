@@ -1,0 +1,7 @@
+Upstream: https://github.com/firebase/agent-skills/tree/main/skills/firebase-ai-logic-basics
+Repo HEAD: 99954a30898b (2026-11-09)
+License: Apache-2.0 (Google LLC). See LICENSE.
+Only the web usage reference was copied. Stay on the Gemini Developer API
+(free tier / Spark). Do not switch to Vertex/Agent Platform (Blaze).
+Do not run `firebase init ailogic` unless the user explicitly asks.
+Prepared by Grok Bot.

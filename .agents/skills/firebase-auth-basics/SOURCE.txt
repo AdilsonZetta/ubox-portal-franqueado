@@ -1,0 +1,6 @@
+Upstream: https://github.com/firebase/agent-skills/tree/main/skills/firebase-auth-basics
+Repo HEAD: 99954a30898b (2026-11-09)
+License: Apache-2.0 (Google LLC). See LICENSE.
+Only the web client and security-rules references were copied.
+Ubox already uses email/password auth; do not deploy auth config or add Google
+Sign-In as a default. Prepared by Grok Bot.
