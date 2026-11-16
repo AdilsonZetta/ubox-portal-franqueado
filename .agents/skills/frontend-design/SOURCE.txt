@@ -1,0 +1,5 @@
+Upstream: https://github.com/anthropics/skills/tree/main/skills/frontend-design
+File revision: 41bbe19d1a1a (2026-09-03)
+License: Apache License 2.0 (see LICENSE.txt)
+Installed as markdown instructions only.
+This copy, and this SOURCE.txt, were prepared by Grok Bot for the Ubox portal.

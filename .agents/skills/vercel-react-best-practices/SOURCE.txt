@@ -1,0 +1,6 @@
+Upstream: https://github.com/vercel-labs/agent-skills/tree/main/skills/react-best-practices
+SKILL.md revision: 805687f34e8c
+Repo HEAD used at install: 1a2c79d4e6c4 (2026-10-27)
+License: MIT (parent repo README). The compiled guide is AGENTS.md; individual rules/ files were not copied because AGENTS.md already expands them.
+This is a Vite SPA, not Next.js: skip RSC/SSR/next/dynamic rules that do not apply.
+This copy, and this SOURCE.txt, were prepared by Grok Bot for the Ubox portal.
