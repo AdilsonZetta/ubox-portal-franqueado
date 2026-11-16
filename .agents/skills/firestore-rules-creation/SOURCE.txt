@@ -1,0 +1,5 @@
+Upstream: https://github.com/firebase/agent-skills/tree/main/skills/firestore-rules-creation
+Repo HEAD: 99954a30898b (2026-11-09)
+License: Apache-2.0 (Google LLC). See LICENSE.
+Ubox override: change firestore.rules in the repo and run tests; do not deploy.
+Prepared by Grok Bot.

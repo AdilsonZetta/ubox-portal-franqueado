@@ -1,0 +1,5 @@
+Upstream: https://github.com/obra/superpowers/tree/main/skills/systematic-debugging
+Repo HEAD: 22f0b463e7a5 (2026-11-03, v7.0.2)
+License: MIT (Copyright (c) 2025 Jesse Vincent). See LICENSE.
+Depuração sistemática em 4 fases. O script find-polluter.sh e o exemplo .ts não foram copiados.
+This copy, and this SOURCE.txt, were prepared by Grok Bot for the Ubox portal.

@@ -1,0 +1,6 @@
+Upstream: https://github.com/firebase/agent-skills/tree/main/skills/firebase-firestore
+Repo HEAD: 99954a30898b (2026-11-09)
+License: Apache-2.0 (Google LLC). See LICENSE.
+Guides for Android, iOS, Flutter and Python were omitted (this app is a web SPA).
+A Ubox caution block and UBOX-CONSTRAINTS.md were added so agents do not create
+an Enterprise database or change billing. Prepared by Grok Bot.

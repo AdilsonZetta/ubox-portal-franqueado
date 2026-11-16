@@ -1,6 +1,6 @@
 # Instruções para agentes — Portal do Franqueado Ubox
 
-Este arquivo é a política do repositório para Cursor, Codex e Gemini CLI. Foi preparado por Grok Bot. Não havia `AGENTS.md` neste repositório; este é o arquivo inicial.
+Este arquivo é a política do repositório para Cursor, Codex e Gemini CLI. Foi preparado por Grok Bot e atualizado quando novas skills de construção de sistema foram adicionadas.
 
 Interface e textos do produto ficam em **português do Brasil**.
 
@@ -22,9 +22,24 @@ As skills deste repositório estão em `.agents/skills/<nome>/SKILL.md`. Leia a 
 | Criar ou revisar qualquer tela, componente, dashboard ou estado de UI | `ubox-design`, `frontend-design`, `web-design-guidelines` |
 | Escrever ou refatorar componentes React, dados no cliente, bundle, re-render | `vercel-react-best-practices` (veja a ressalva abaixo) |
 | APIs de componentes, props booleanas, composição, React 19 | `vercel-composition-patterns` |
-| O usuário pediu revisão de segurança ou código seguro por padrão | `security-best-practices` |
+| Planejar um módulo ou mudança maior antes de codar | `writing-plans` |
+| Implementar comportamento novo | `test-driven-development` |
+| Bug, teste falhando ou comportamento inesperado | `systematic-debugging` |
+| Antes de declarar pronto, commit ou PR | `verification-before-completion` |
+| Revisar um diff ou PR | `code-review-and-quality` |
+| Simplificar código que já funciona | `code-simplification` |
+| Investigar lentidão com medição (não chute) | `performance-optimization` |
+| Documentar decisão de arquitetura ou o “porquê” | `documentation-and-adrs` |
+| Modelar dados, consultas ou índices do Firestore | `firebase-firestore` |
+| Escrever ou alterar `firestore.rules` | `firestore-rules-creation` |
+| Auditar regras de segurança | `firebase-security-rules-auditor` |
+| Auth (o projeto já usa e-mail e senha) | `firebase-auth-basics` |
+| IA do portal (Gemini Developer API / AI Logic) | `firebase-ai-logic-basics` |
+| Revisão de segurança de frontend pedida pelo usuário | `security-best-practices` |
 
-Ressalva: `vercel-react-best-practices` mistura React e Next.js. Este projeto **não é Next.js** e não tem RSC/SSR. Aplique regras gerais de React (bundle, re-render, fetch no cliente, JS). Ignore `next/dynamic`, Server Actions, `after()`, caches de RSC e afins.
+Ressalva React: `vercel-react-best-practices` mistura React e Next.js. Este projeto **não é Next.js** e não tem RSC/SSR. Aplique regras gerais de React (bundle, re-render, fetch no cliente, JS). Ignore `next/dynamic`, Server Actions, `after()`, caches de RSC e afins. A mesma ressalva vale para trechos só de Next.js em `performance-optimization`.
+
+Ressalva Firebase: as skills oficiais às vezes ensinam a criar banco Enterprise, publicar regras, `init ailogic` ou subir para Blaze. Neste repositório isso está **proibido** sem pedido explícito do Adilson. O projeto `ubox-portal-franqueado` já existe, no plano Spark. Leia `UBOX-CONSTRAINTS.md` dentro da skill. Altere regras no repo e rode os testes; quem publica é o operador. Não crie `docs/superpowers/` só porque a skill `writing-plans` sugere essa pasta: descreva o plano no PR ou onde o Adilson pedir.
 
 ## Qualidade visual (obrigatório)
 
@@ -66,4 +81,5 @@ npm run dev
 - TypeScript estrito, componentes em `src/`.
 - Reaproveite componentes e padrões já existentes antes de criar bibliotecas novas.
 - Textos da UI em pt-BR.
-- Depois de mudar UI ou regras, rode os testes cabíveis e descreva o que ficou de fora.
+- Depois de mudar UI ou regras, rode os testes cabíveis (`verification-before-completion`) e descreva o que ficou de fora.
+- Preferência: teste que falha, depois o código mínimo, no estilo do Vitest e de `tests/regras.mjs` já existentes.

@@ -1,0 +1,4 @@
+Upstream: https://github.com/firebase/agent-skills/tree/main/skills/firebase-security-rules-auditor
+Repo HEAD: 99954a30898b (2026-11-09)
+License: Apache-2.0 (Google LLC). See LICENSE.
+Audit-only skill (no deploy). Prepared by Grok Bot.

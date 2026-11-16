@@ -1,0 +1,6 @@
+Upstream: https://github.com/addyosmani/agent-skills/tree/main/skills/code-review-and-quality
+Repo HEAD: 39b723ceebf8 (2026-11-13, 0.6.16)
+License: MIT (Copyright (c) 2025 Addy Osmani). See LICENSE.
+Revisão em eixos de qualidade e gravidade antes de mesclar.
+This project is a React + Vite SPA, not Next.js: skip Next-only advice.
+This copy, and this SOURCE.txt, were prepared by Grok Bot for the Ubox portal.
