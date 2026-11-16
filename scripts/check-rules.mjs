@@ -33,6 +33,11 @@ exigir(rules.includes('autorNome == dados.nome'), 'evento sem conferir o nome do
 exigir(rules.includes('modulosCabemNaUnidade'), 'teto da unidade ausente')
 exigir(rules.includes('isAdmin() || operaRede()') || rules.includes('(isAdmin() || operaRede())'), 'admin fora da fila de chamados')
 exigir(rules.includes('allow update, delete: if false'), 'registros de leitura não são só de criação')
+exigir(rules.includes('match /acessos/{acessoId}'), 'coleção acessos ausente')
+exigir(rules.includes('match /segredo/{segredoId}'), 'subcoleção segredo ausente')
+exigir(rules.includes('match /solicitacoesAcesso/{solicitacaoId}'), 'coleção solicitacoesAcesso ausente')
+exigir(rules.includes('allow delete: if false'), 'recusa de delete ausente')
+
 
 if (erros.length) {
   console.error(erros.join('\n'))

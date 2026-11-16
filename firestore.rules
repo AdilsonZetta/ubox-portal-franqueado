@@ -1102,5 +1102,294 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
+
+    // ===============================================================
+    // Central de Acessos e Senhas (Módulo 3)
+    // ===============================================================
+
+    function urlOpcionalHttps(url) {
+      return url is string && (url == '' || (url.size() >= 8 && url.size() <= 500 && url.matches('^https://.+')));
+    }
+
+    function acessoPath(id) {
+      return /databases/$(database)/documents/acessos/$(id);
+    }
+
+    function acessoDoc(id) {
+      return exists(acessoPath(id)) ? get(acessoPath(id)).data : getAfter(acessoPath(id)).data;
+    }
+
+    function isValidAcesso(data) {
+      return data.keys().hasOnly([
+          'nome', 'categoria', 'url', 'escopo', 'unidadeId', 'unidadeNome',
+          'responsavelId', 'responsavelNome', 'visivelPara', 'visivelParaEquipe',
+          'ultimaTrocaEm', 'pendenteTroca', 'criadoPor', 'criadoPorNome',
+          'criadoEm', 'atualizadoEm'
+        ])
+        && validName(data.nome)
+        && data.categoria in ['gestao', 'email', 'redes_sociais', 'portaria', 'cameras', 'outros']
+        && urlOpcionalHttps(data.url)
+        && data.escopo in ['unidade', 'rede']
+        && data.unidadeId is string && data.unidadeId.size() <= 80
+        && data.unidadeNome is string && data.unidadeNome.size() <= 120
+        && (data.responsavelId == null || (data.responsavelId is string && data.responsavelId.size() <= 128))
+        && data.responsavelNome is string && data.responsavelNome.size() > 0 && data.responsavelNome.size() <= 120
+        && data.visivelPara is list && data.visivelPara.size() <= 100
+        && data.visivelParaEquipe is bool
+        && data.pendenteTroca is bool
+        && data.criadoPor is string && data.criadoPor.size() <= 128
+        && validName(data.criadoPorNome)
+        && data.ultimaTrocaEm is timestamp
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
+    function perfilAcessaMetadadosAcesso(dados, acesso) {
+      return contaAtiva(dados) && (
+        isAdmin()
+        || (
+          temLista(dados, 'senhas') && (
+            acesso.escopo == 'rede'
+            || (dados.papel == 'equipe_franqueadora' && unidadeAtiva(dados))
+            || (
+              unidadeAtiva(dados)
+              && unidadeIdPreenchido(dados)
+              && dados.unidadeId == acesso.unidadeId
+            )
+          )
+        )
+      );
+    }
+
+    function acessaMetadadosAcesso(acesso) {
+      return signedIn() && exists(userPath()) && perfilAcessaMetadadosAcesso(userData(), acesso);
+    }
+
+    function podeCriarAcesso(data) {
+      let dados = userData();
+      return contaAtiva(dados) && (
+        (
+          data.escopo == 'unidade'
+          && dados.papel == 'franqueado'
+          && unidadeAtiva(dados)
+          && unidadeIdPreenchido(dados)
+          && dados.unidadeId == data.unidadeId
+          && temLista(dados, 'senhas')
+          && exists(unidadePath(data.unidadeId))
+          && data.unidadeNome == get(unidadePath(data.unidadeId)).data.nome
+          && data.criadoPor == request.auth.uid
+          && data.criadoPorNome == dados.nome
+          && data.criadoEm == request.time
+          && data.atualizadoEm == request.time
+          && data.ultimaTrocaEm == request.time
+        )
+        || (
+          data.escopo == 'rede'
+          && (isAdmin() || (dados.papel == 'equipe_franqueadora' && contaAtiva(dados) && temLista(dados, 'senhas')))
+          && data.unidadeId == ''
+          && data.unidadeNome == ''
+          && data.criadoPor == request.auth.uid
+          && data.criadoPorNome == dados.nome
+          && data.criadoEm == request.time
+          && data.atualizadoEm == request.time
+          && data.ultimaTrocaEm == request.time
+        )
+      );
+    }
+
+    function podeAtualizarAcesso(antes, depois) {
+      let dados = userData();
+      return contaAtiva(dados)
+        && depois.escopo == antes.escopo
+        && depois.unidadeId == antes.unidadeId
+        && depois.unidadeNome == antes.unidadeNome
+        && depois.criadoPor == antes.criadoPor
+        && depois.criadoPorNome == antes.criadoPorNome
+        && depois.criadoEm == antes.criadoEm
+        && depois.atualizadoEm == request.time
+        && (
+          (
+            antes.escopo == 'unidade'
+            && unidadeAtiva(dados)
+            && unidadeIdPreenchido(dados)
+            && dados.unidadeId == antes.unidadeId
+            && temLista(dados, 'senhas')
+            && (dados.papel == 'franqueado' || isAdmin())
+          )
+          || (
+            antes.escopo == 'rede'
+            && (isAdmin() || (dados.papel == 'equipe_franqueadora' && contaAtiva(dados) && temLista(dados, 'senhas')))
+          )
+        );
+    }
+
+    function perfilPodeLerSegredo(dados, acesso) {
+      return contaAtiva(dados) && (
+        (
+          acesso.escopo == 'rede' && (
+            isAdmin()
+            || (temLista(dados, 'senhas') && (dados.papel == 'equipe_franqueadora' || (unidadeAtiva(dados) && unidadeIdPreenchido(dados))))
+          )
+        )
+        || (
+          acesso.escopo == 'unidade'
+          && temLista(dados, 'senhas')
+          && unidadeAtiva(dados)
+          && unidadeIdPreenchido(dados)
+          && dados.unidadeId == acesso.unidadeId
+          && (
+            dados.papel == 'franqueado'
+            || (dados.papel == 'equipe_franqueado' && (acesso.visivelParaEquipe == true || request.auth.uid in acesso.visivelPara))
+          )
+        )
+      );
+    }
+
+    function perfilPodeEscreverSegredo(dados, acesso) {
+      return contaAtiva(dados) && (
+        (
+          acesso.escopo == 'rede' && (
+            isAdmin()
+            || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'senhas'))
+          )
+        )
+        || (
+          acesso.escopo == 'unidade'
+          && dados.papel == 'franqueado'
+          && temLista(dados, 'senhas')
+          && unidadeAtiva(dados)
+          && unidadeIdPreenchido(dados)
+          && dados.unidadeId == acesso.unidadeId
+        )
+      );
+    }
+
+    function isValidSegredo(data) {
+      return data.keys().hasOnly(['login', 'senha', 'notas', 'atualizadoEm', 'atualizadoPor'])
+        && data.login is string && data.login.size() <= 200
+        && data.senha is string && data.senha.size() > 0 && data.senha.size() <= 500
+        && data.notas is string && data.notas.size() <= 2000
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    function isValidEventoAcesso(data) {
+      return data.keys().hasOnly(['tipo', 'texto', 'autorId', 'autorNome', 'criadoEm'])
+        && data.tipo in ['criacao', 'atualizacao', 'revelou', 'copiou', 'permissao', 'troca_senha']
+        && data.texto is string && data.texto.size() > 0 && data.texto.size() <= 2000
+        && data.autorId == request.auth.uid
+        && validName(data.autorNome)
+        && data.criadoEm == request.time;
+    }
+
+    function isValidSolicitacaoAcesso(data) {
+      return data.keys().hasOnly([
+          'tipo', 'status', 'acessoId', 'acessoNome', 'unidadeId', 'unidadeNome',
+          'solicitadoPor', 'solicitadoPorNome', 'motivo', 'alvoUid', 'alvoNome',
+          'decididoPor', 'decididoPorNome', 'criadoEm', 'atualizadoEm'
+        ])
+        && data.tipo in ['pedir_acesso', 'novo_sistema', 'revogar', 'trocar_senha']
+        && data.status in ['aberta', 'aprovada', 'recusada', 'concluida']
+        && data.acessoId is string && data.acessoId.size() <= 80
+        && data.acessoNome is string && data.acessoNome.size() <= 120
+        && data.unidadeId is string && data.unidadeId.size() > 0 && data.unidadeId.size() <= 80
+        && data.unidadeNome is string && data.unidadeNome.size() <= 120
+        && data.solicitadoPor is string && data.solicitadoPor.size() > 0 && data.solicitadoPor.size() <= 128
+        && validName(data.solicitadoPorNome)
+        && data.motivo is string && data.motivo.size() <= 2000
+        && data.alvoUid is string && data.alvoUid.size() <= 128
+        && data.alvoNome is string && data.alvoNome.size() <= 120
+        && (data.decididoPor == null || (data.decididoPor is string && data.decididoPor.size() <= 128))
+        && (data.decididoPorNome == null || validName(data.decididoPorNome))
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
+    function podeLerSolicitacao(data) {
+      let dados = userData();
+      return contaAtiva(dados) && (
+        isAdmin()
+        || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'senhas'))
+        || (
+          temLista(dados, 'senhas')
+          && unidadeAtiva(dados)
+          && unidadeIdPreenchido(dados)
+          && dados.unidadeId == data.unidadeId
+        )
+      );
+    }
+
+    function podeCriarSolicitacao(data) {
+      let dados = userData();
+      return contaAtiva(dados)
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados)
+        && temLista(dados, 'senhas')
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && dados.unidadeId == data.unidadeId
+        && data.solicitadoPor == request.auth.uid
+        && data.solicitadoPorNome == dados.nome
+        && data.status == 'aberta'
+        && data.decididoPor == null
+        && data.decididoPorNome == null
+        && data.criadoEm == request.time
+        && data.atualizadoEm == request.time;
+    }
+
+    function podeDecidirSolicitacao() {
+      let dados = userData();
+      return contaAtiva(dados)
+        && (
+          isAdmin()
+          || (
+            dados.papel == 'franqueado'
+            && unidadeAtiva(dados)
+            && unidadeIdPreenchido(dados)
+            && dados.unidadeId == resource.data.unidadeId
+            && temLista(dados, 'senhas')
+          )
+        )
+        && resource.data.status == 'aberta'
+        && request.resource.data.status in ['aprovada', 'recusada', 'concluida']
+        && request.resource.data.decididoPor == request.auth.uid
+        && request.resource.data.decididoPorNome == dados.nome
+        && request.resource.data.atualizadoEm == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decididoPor', 'decididoPorNome', 'atualizadoEm']);
+    }
+
+    match /acessos/{acessoId} {
+      allow read: if acessaMetadadosAcesso(resource.data);
+      allow create: if signedIn() && exists(userPath()) && isValidAcesso(request.resource.data) && podeCriarAcesso(request.resource.data);
+      allow update: if signedIn() && exists(userPath()) && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(resource.data, request.resource.data);
+      allow delete: if false;
+
+      match /segredo/{segredoId} {
+        allow read: if segredoId == 'atual' && signedIn() && exists(userPath()) && perfilPodeLerSegredo(userData(), acessoDoc(acessoId));
+        allow create, update: if segredoId == 'atual'
+          && signedIn() && exists(userPath())
+          && perfilPodeEscreverSegredo(userData(), acessoDoc(acessoId))
+          && isValidSegredo(request.resource.data);
+        allow delete: if false;
+      }
+
+      match /eventos/{eventoId} {
+        allow read: if signedIn() && exists(userPath()) && acessaMetadadosAcesso(acessoDoc(acessoId));
+        allow create: if signedIn() && exists(userPath())
+          && isValidEventoAcesso(request.resource.data)
+          && request.resource.data.autorNome == userData().nome
+          && (
+            (request.resource.data.tipo in ['revelou', 'copiou'] && perfilPodeLerSegredo(userData(), acessoDoc(acessoId)))
+            || (request.resource.data.tipo in ['criacao', 'atualizacao', 'permissao', 'troca_senha'] && (perfilPodeEscreverSegredo(userData(), acessoDoc(acessoId)) || isAdmin()))
+          );
+        allow update, delete: if false;
+      }
+    }
+
+    match /solicitacoesAcesso/{solicitacaoId} {
+      allow read: if signedIn() && exists(userPath()) && podeLerSolicitacao(resource.data);
+      allow create: if signedIn() && exists(userPath()) && isValidSolicitacaoAcesso(request.resource.data) && podeCriarSolicitacao(request.resource.data);
+      allow update: if signedIn() && exists(userPath()) && resource != null && isValidSolicitacaoAcesso(request.resource.data) && podeDecidirSolicitacao();
+      allow delete: if false;
+    }
   }
 }

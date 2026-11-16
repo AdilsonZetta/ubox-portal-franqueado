@@ -5,6 +5,7 @@ import { GRUPOS, MODULOS } from '../data/modulos'
 import { useAuth } from '../lib/auth'
 import { observarPendentes } from '../lib/chamados'
 import { podeModulo } from '../lib/modulosAcesso'
+import { observarSolicitacoesAbertas } from '../lib/senhas'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
 import { useVisao } from '../lib/visao'
@@ -26,6 +27,7 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/modulos/')) return pathname.split('/')[2] || null
   if (pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
   if (pathname.startsWith('/chamados')) return 'chamados'
+  if (pathname.startsWith('/senhas')) return 'senhas'
   if (pathname.startsWith('/franqueadora')) return 'gestao-franqueadora'
   if (pathname.startsWith('/gestao-usuarios')) return 'gestao-usuarios'
   if (pathname === '/' || pathname.startsWith('/minha-equipe')) return null
@@ -48,6 +50,11 @@ export function Layout() {
   const unidadeChamados = comoFranqueado ? simulado?.unidadeId : user?.unidadeId
   const podeChamados = Boolean(user && (ehAdmin || podeModulo(pessoa, 'chamados', comoFranqueado)))
   const [pendentes, setPendentes] = useState(0)
+
+  const redeSenhas = Boolean(user && (user.papel === 'admin' || user.papel === 'equipe_franqueadora') && !comoFranqueado)
+  const unidadeSenhas = comoFranqueado ? simulado?.unidadeId : user?.unidadeId
+  const podeSenhas = Boolean(user && (ehAdmin || podeModulo(pessoa, 'senhas', comoFranqueado)))
+  const [solicitacoesAbertas, setSolicitacoesAbertas] = useState(0)
   const areas = useMemo(() => filhosDe(categorias, null), [categorias])
 
   useEffect(() => {
@@ -57,6 +64,14 @@ export function Layout() {
     }
     return observarPendentes({ rede: redeChamados, unidadeId: unidadeChamados }, setPendentes)
   }, [podeChamados, redeChamados, unidadeChamados])
+
+  useEffect(() => {
+    if (!podeSenhas || (!redeSenhas && !unidadeSenhas)) {
+      setSolicitacoesAbertas(0)
+      return
+    }
+    return observarSolicitacoesAbertas({ rede: redeSenhas, unidadeId: unidadeSenhas }, setSolicitacoesAbertas)
+  }, [podeSenhas, redeSenhas, unidadeSenhas])
 
   useEffect(() => {
     const dono = moduloDaRota(pathname)
@@ -139,6 +154,9 @@ export function Layout() {
                       {modulo.slug === 'chamados' && pendentes > 0 ? (
                         <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{pendentes}</span>
                       ) : null}
+                      {modulo.slug === 'senhas' && solicitacoesAbertas > 0 ? (
+                        <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{solicitacoesAbertas}</span>
+                      ) : null}
                       <ChevronDown className={cx('h-3.5 w-3.5 shrink-0 text-ink/35 transition', aberto && 'rotate-180')} />
                     </button>
                     {aberto ? (
@@ -185,7 +203,36 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
-                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' ? (
+                        {modulo.slug === 'senhas' ? (
+                          <>
+                            <NavLink
+                              to="/senhas"
+                              end
+                              onClick={() => setMenuAberto(false)}
+                              className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                            >
+                              Cofre da unidade
+                            </NavLink>
+                            <NavLink
+                              to="/senhas/solicitacoes"
+                              onClick={() => setMenuAberto(false)}
+                              className={({ isActive }) => cx('flex items-center justify-between rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                            >
+                              <span>Solicitações</span>
+                              {solicitacoesAbertas > 0 ? (
+                                <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{solicitacoesAbertas}</span>
+                              ) : null}
+                            </NavLink>
+                            <NavLink
+                              to="/senhas/permissoes"
+                              onClick={() => setMenuAberto(false)}
+                              className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                            >
+                              Permissões
+                            </NavLink>
+                          </>
+                        ) : null}
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' ? (
                           <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                             Abrir
                           </NavLink>

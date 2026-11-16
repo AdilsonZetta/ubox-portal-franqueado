@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing'
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -479,6 +480,173 @@ await caso('franqueadora tira de fechado e zera a nota', (async () => {
     throw new Error('sair de fechado não limpou a nota')
   }
 })())
+
+// ===============================================================
+// Módulo 3 — Central de Acessos e Senhas
+// ===============================================================
+
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  await setDoc(doc(banco, 'unidades', 'un-s'), {
+    nome: 'Unidade Senhas',
+    cidade: 'Uberaba',
+    responsavel: 'Dono Senhas',
+    email: 'fr-s@ubox.test',
+    uid: 'fr-s',
+    modulosLiberados: ['manuais', 'senhas'],
+    ativo: true,
+    criadoPor: 'admin-1',
+    criadoEm: criado,
+    atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'unidades', 'un-s2'), {
+    nome: 'Unidade Dois Senhas',
+    cidade: 'Uberaba',
+    responsavel: 'Dono Dois Senhas',
+    email: 'fr-s2@ubox.test',
+    uid: 'fr-s2',
+    modulosLiberados: ['manuais', 'senhas'],
+    ativo: true,
+    criadoPor: 'admin-1',
+    criadoEm: criado,
+    atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'usuarios', 'fr-s'), usuario('fr-s', { unidadeId: 'un-s', modulos: ['manuais', 'senhas'], nome: 'Dono Senhas' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-s2'), usuario('fr-s2', { unidadeId: 'un-s2', modulos: ['manuais', 'senhas'], nome: 'Dono Dois Senhas' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-s-visivel'), usuario('eq-s-visivel', { papel: 'equipe_franqueado', unidadeId: 'un-s', modulos: ['manuais', 'senhas'], criadoPor: 'fr-s', nome: 'Equipe Visivel' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-s-oculto'), usuario('eq-s-oculto', { papel: 'equipe_franqueado', unidadeId: 'un-s', modulos: ['manuais', 'senhas'], criadoPor: 'fr-s', nome: 'Equipe Oculto' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-s'), usuario('eq-rede-s', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['manuais', 'senhas'], nome: 'Rede Senhas' }))
+})
+
+const frS = ambiente.authenticatedContext('fr-s', { email: 'fr-s@ubox.test' }).firestore()
+const frS2 = ambiente.authenticatedContext('fr-s2', { email: 'fr-s2@ubox.test' }).firestore()
+const eqSVisivel = ambiente.authenticatedContext('eq-s-visivel', { email: 'eq-s-visivel@ubox.test' }).firestore()
+const eqSOculto = ambiente.authenticatedContext('eq-s-oculto', { email: 'eq-s-oculto@ubox.test' }).firestore()
+const eqRedeS = ambiente.authenticatedContext('eq-rede-s', { email: 'eq-rede-s@ubox.test' }).firestore()
+
+function acessoPayload(extra = {}) {
+  return {
+    nome: 'Sistema de Gestão',
+    categoria: 'gestao',
+    url: 'https://gestao.ubox.com.br',
+    escopo: 'unidade',
+    unidadeId: 'un-s',
+    unidadeNome: 'Unidade Senhas',
+    responsavelId: 'fr-s',
+    responsavelNome: 'Dono Senhas',
+    visivelPara: ['eq-s-visivel'],
+    visivelParaEquipe: false,
+    ultimaTrocaEm: serverTimestamp(),
+    pendenteTroca: false,
+    criadoPor: 'fr-s',
+    criadoPorNome: 'Dono Senhas',
+    criadoEm: serverTimestamp(),
+    atualizadoEm: serverTimestamp(),
+    ...extra,
+  }
+}
+
+function segredoPayload(extra = {}) {
+  return {
+    login: 'admin@unidade',
+    senha: 'senha-super-secreta',
+    notas: 'Notas operacionais',
+    atualizadoEm: serverTimestamp(),
+    atualizadoPor: 'fr-s',
+    ...extra,
+  }
+}
+
+await caso('franqueado cria acesso da unidade', assertSucceeds(setDoc(doc(frS, 'acessos', 'ac-s1'), acessoPayload())))
+await caso('franqueado cria segredo do acesso', assertSucceeds(setDoc(doc(frS, 'acessos', 'ac-s1', 'segredo', 'atual'), segredoPayload())))
+
+await caso('equipe fora de visivelPara lê metadados', assertSucceeds(getDoc(doc(eqSOculto, 'acessos', 'ac-s1'))))
+await caso('equipe fora de visivelPara NÃO lê segredo', assertFails(getDoc(doc(eqSOculto, 'acessos', 'ac-s1', 'segredo', 'atual'))))
+
+await caso('equipe em visivelPara lê segredo', assertSucceeds(getDoc(doc(eqSVisivel, 'acessos', 'ac-s1', 'segredo', 'atual'))))
+
+await caso('outra unidade não lê metadados', assertFails(getDoc(doc(frS2, 'acessos', 'ac-s1'))))
+await caso('outra unidade não lê segredo', assertFails(getDoc(doc(frS2, 'acessos', 'ac-s1', 'segredo', 'atual'))))
+
+await caso('franqueado sem módulo senhas não lê metadados', assertFails(getDoc(doc(dono, 'acessos', 'ac-s1'))))
+await caso('franqueado sem módulo senhas não lê segredo', assertFails(getDoc(doc(dono, 'acessos', 'ac-s1', 'segredo', 'atual'))))
+
+await caso('usuário inativo não lê acesso', assertFails(getDoc(doc(inativo, 'acessos', 'ac-s1'))))
+await caso('unidade desativada não lê acesso', assertFails(getDoc(doc(parado, 'acessos', 'ac-s1'))))
+
+await caso('equipe da franqueadora lê metadados da unidade', assertSucceeds(getDoc(doc(eqRedeS, 'acessos', 'ac-s1'))))
+await caso('equipe da franqueadora NÃO lê segredo da unidade', assertFails(getDoc(doc(eqRedeS, 'acessos', 'ac-s1', 'segredo', 'atual'))))
+
+await caso('equipe da franqueadora cria acesso da rede', assertSucceeds(setDoc(doc(eqRedeS, 'acessos', 'ac-rede1'), acessoPayload({
+  escopo: 'rede',
+  unidadeId: '',
+  unidadeNome: '',
+  responsavelId: null,
+  responsavelNome: 'Franqueadora',
+  visivelPara: [],
+  visivelParaEquipe: true,
+  criadoPor: 'eq-rede-s',
+  criadoPorNome: 'Rede Senhas',
+}))))
+await caso('equipe da franqueadora grava segredo da rede', assertSucceeds(setDoc(doc(eqRedeS, 'acessos', 'ac-rede1', 'segredo', 'atual'), segredoPayload({
+  atualizadoPor: 'eq-rede-s',
+}))))
+await caso('franqueado com módulo lê segredo da rede', assertSucceeds(getDoc(doc(frS, 'acessos', 'ac-rede1', 'segredo', 'atual'))))
+
+await caso('quem pode ler segredo registra evento revelou', assertSucceeds(setDoc(doc(eqSVisivel, 'acessos', 'ac-s1', 'eventos', 'ev-1'), {
+  tipo: 'revelou',
+  texto: 'Visualizou a senha',
+  autorId: 'eq-s-visivel',
+  autorNome: 'Equipe Visivel',
+  criadoEm: serverTimestamp(),
+})))
+await caso('quem NÃO pode ler segredo é recusado ao registrar evento revelou', assertFails(setDoc(doc(eqSOculto, 'acessos', 'ac-s1', 'eventos', 'ev-2'), {
+  tipo: 'revelou',
+  texto: 'Tentou visualizar a senha',
+  autorId: 'eq-s-oculto',
+  autorNome: 'Equipe Oculto',
+  criadoEm: serverTimestamp(),
+})))
+await caso('evento de acesso recusa autorNome forjado', assertFails(setDoc(doc(eqSVisivel, 'acessos', 'ac-s1', 'eventos', 'ev-3'), {
+  tipo: 'revelou',
+  texto: 'Visualizou a senha',
+  autorId: 'eq-s-visivel',
+  autorNome: 'Nome Falso',
+  criadoEm: serverTimestamp(),
+})))
+
+await caso('equipe da unidade cria solicitação de acesso', assertSucceeds(setDoc(doc(eqSOculto, 'solicitacoesAcesso', 'sol-s1'), {
+  tipo: 'pedir_acesso',
+  status: 'aberta',
+  acessoId: 'ac-s1',
+  acessoNome: 'Sistema de Gestão',
+  unidadeId: 'un-s',
+  unidadeNome: 'Unidade Senhas',
+  solicitadoPor: 'eq-s-oculto',
+  solicitadoPorNome: 'Equipe Oculto',
+  motivo: 'Preciso emitir relatórios da unidade.',
+  alvoUid: 'eq-s-oculto',
+  alvoNome: 'Equipe Oculto',
+  decididoPor: null,
+  decididoPorNome: null,
+  criadoEm: serverTimestamp(),
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('outra unidade não aprova solicitação', assertFails(updateDoc(doc(frS2, 'solicitacoesAcesso', 'sol-s1'), {
+  status: 'aprovada',
+  decididoPor: 'fr-s2',
+  decididoPorNome: 'Dono Dois Senhas',
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('franqueado da unidade aprova solicitação', assertSucceeds(updateDoc(doc(frS, 'solicitacoesAcesso', 'sol-s1'), {
+  status: 'aprovada',
+  decididoPor: 'fr-s',
+  decididoPorNome: 'Dono Senhas',
+  atualizadoEm: serverTimestamp(),
+})))
+
+await caso('franqueado não apaga acesso', assertFails(deleteDoc(doc(frS, 'acessos', 'ac-s1'))))
+await caso('admin não apaga acesso', assertFails(deleteDoc(doc(admin, 'acessos', 'ac-s1'))))
 
 void manual
 await ambiente.cleanup()
