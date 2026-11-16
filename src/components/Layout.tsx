@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { GRUPOS, MODULOS } from '../data/modulos'
 import { useAuth } from '../lib/auth'
+import { podeModulo } from '../lib/modulosAcesso'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
 import { useVisao } from '../lib/visao'
@@ -23,13 +24,16 @@ const itensManuais = [
 function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/modulos/')) return pathname.split('/')[2] || null
   if (pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
-  if (pathname === '/') return null
+  if (pathname.startsWith('/franqueadora')) return 'gestao-franqueadora'
+  if (pathname.startsWith('/gestao-usuarios')) return 'gestao-usuarios'
+  if (pathname === '/' || pathname.startsWith('/minha-equipe')) return null
   return 'manuais'
 }
 
 export function Layout() {
   const { user, sair } = useAuth()
-  const { comoFranqueado, ehAdmin, alternar } = useVisao()
+  const { comoFranqueado, ehAdmin, alternar, simulado, franqueados, escolher } = useVisao()
+  const pessoa = comoFranqueado ? simulado : user
   const { avisos, avisosLidos, categorias, documentos } = usePortal()
   const [menuAberto, setMenuAberto] = useState(false)
   const [consulta, setConsulta] = useState('')
@@ -46,6 +50,12 @@ export function Layout() {
     setExpandido(dono)
     localStorage.setItem(CHAVE, dono)
   }, [pathname])
+
+  useEffect(() => {
+    const dono = moduloDaRota(pathname)
+    if (!dono || ehAdmin) return
+    if (!podeModulo(pessoa, dono, comoFranqueado)) navigate('/')
+  }, [pathname, ehAdmin, pessoa, comoFranqueado, navigate])
 
   useEffect(() => {
     const aoTeclar = (evento: KeyboardEvent) => {
@@ -93,11 +103,14 @@ export function Layout() {
         />
       </form>
       <nav className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-        {GRUPOS.map((grupo) => (
+        {GRUPOS.map((grupo) => {
+          const doGrupo = MODULOS.filter((modulo) => modulo.grupo === grupo && (ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado)))
+          if (!doGrupo.length) return null
+          return (
           <div key={grupo}>
             <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/35">{grupo}</p>
             <div className="mt-1 space-y-0.5">
-              {MODULOS.filter((modulo) => modulo.grupo === grupo).map((modulo) => {
+              {doGrupo.map((modulo) => {
                 const aberto = expandido === modulo.slug
                 const Icone = modulo.icon
                 return (
@@ -155,6 +168,11 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' ? (
+                          <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            Abrir
+                          </NavLink>
+                        ) : null}
                         {!modulo.ativo
                           ? modulo.recursos.slice(0, 4).map((nome) => (
                               <Link
@@ -175,12 +193,34 @@ export function Layout() {
               })}
             </div>
           </div>
-        ))}
+          )
+        })}
       </nav>
+      {user?.papel === 'franqueado' && !comoFranqueado ? (
+        <NavLink to="/minha-equipe" onClick={() => setMenuAberto(false)} className="mt-3 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
+          Minha equipe
+        </NavLink>
+      ) : null}
       {user?.papel === 'admin' ? (
-        <button type="button" onClick={alternar} className="mt-3 w-full shrink-0 rounded-xl border border-brand/40 px-3 py-2 text-left text-sm font-semibold text-brand-dark hover:bg-brand/10">
-          {comoFranqueado ? 'Voltar para franqueadora' : 'Ver como franqueado'}
-        </button>
+        <div className="mt-3 shrink-0 space-y-2">
+          <button type="button" onClick={alternar} className="w-full rounded-xl border border-brand/40 px-3 py-2 text-left text-sm font-semibold text-brand-dark hover:bg-brand/10">
+            {comoFranqueado ? 'Voltar para franqueadora' : 'Ver como franqueado'}
+          </button>
+          {comoFranqueado ? (
+            <select
+              value={simulado?.uid ?? ''}
+              onChange={(evento) => escolher(evento.target.value)}
+              className="w-full rounded-xl border border-line bg-white px-2 py-2 text-sm"
+            >
+              <option value="">Escolha o franqueado</option>
+              {franqueados.map((pessoa) => (
+                <option key={pessoa.uid} value={pessoa.uid}>
+                  {pessoa.unidade || pessoa.nome}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
       ) : null}
       <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-line pt-3">
         <NavLink to="/perfil" className="min-w-0 flex-1" onClick={() => setMenuAberto(false)}>
@@ -231,7 +271,7 @@ export function Layout() {
         </div>
         {comoFranqueado ? (
           <div className="no-print flex items-center justify-between gap-3 bg-brand px-4 py-2 text-sm font-semibold text-white md:px-8">
-            <span>Visualizando como franqueado</span>
+            <span>Visualizando como franqueado{simulado ? ` · ${simulado.unidade || simulado.nome}` : ''}</span>
             <button type="button" onClick={alternar} className="rounded-lg bg-white px-3 py-1 text-brand-dark">
               Voltar para franqueadora
             </button>

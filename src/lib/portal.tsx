@@ -26,7 +26,7 @@ const PortalContext = createContext<PortalValue | null>(null)
 
 export function PortalProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
-  const { comoFranqueado } = useVisao()
+  const { comoFranqueado, simulado } = useVisao()
   const [categorias, setCategorias] = useState<Categoria[]>([])
   const [documentos, setDocumentos] = useState<Documento[]>([])
   const [trilhas, setTrilhas] = useState<Trilha[]>([])
@@ -70,19 +70,21 @@ export function PortalProvider({ children }: { children: ReactNode }) {
   }, [user, tick])
 
   const documentosVisiveis = useMemo(
-    () => (comoFranqueado && user ? documentos.filter((documento) => documentoVisivelAoFranqueado(documento, user)) : documentos),
-    [comoFranqueado, documentos, user],
+    () => (comoFranqueado && simulado ? documentos.filter((documento) => documentoVisivelAoFranqueado(documento, simulado)) : comoFranqueado ? [] : documentos),
+    [comoFranqueado, documentos, simulado],
   )
   const trilhasVisiveis = useMemo(
-    () => (comoFranqueado && user ? trilhas.filter((trilha) => trilhaVisivelAoFranqueado(trilha, user)) : trilhas),
-    [comoFranqueado, trilhas, user],
+    () => (comoFranqueado && simulado ? trilhas.filter((trilha) => trilhaVisivelAoFranqueado(trilha, simulado)) : comoFranqueado ? [] : trilhas),
+    [comoFranqueado, trilhas, simulado],
   )
   const categoriasVisiveis = useMemo(
     () =>
-      comoFranqueado && user
-        ? categorias.filter((categoria) => categoria.publico || categoria.uids.includes(user.uid))
-        : categorias,
-    [comoFranqueado, categorias, user],
+      comoFranqueado && simulado
+        ? categorias.filter((categoria) => categoria.publico || categoria.uids.includes(simulado.uid))
+        : comoFranqueado
+          ? []
+          : categorias,
+    [comoFranqueado, categorias, simulado],
   )
 
   const valor = useMemo<PortalValue>(

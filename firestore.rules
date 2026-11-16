@@ -84,7 +84,37 @@ service cloud.firestore {
       return userExists()
         && userData().ativo == true
         && userData().recusado == false
-        && userData().papel in ['admin', 'franqueado'];
+        && userData().papel in ['admin', 'franqueado', 'equipe_franqueadora', 'equipe_franqueado']
+        && unidadeDoUsuarioAtiva();
+    }
+
+    function unidadePath(id) {
+      return /databases/$(database)/documents/unidades/$(id);
+    }
+
+    function unidadeDoUsuarioAtiva() {
+      return userData().papel == 'admin'
+        || userData().papel == 'equipe_franqueadora'
+        || !('unidadeId' in userData())
+        || userData().unidadeId == null
+        || userData().unidadeId == ''
+        || (
+          exists(unidadePath(userData().unidadeId))
+          && get(unidadePath(userData().unidadeId)).data.ativo == true
+        );
+    }
+
+    function podeModulo(slug) {
+      return isAdmin()
+        || (
+          userData().papel == 'franqueado'
+          && !('modulosLiberados' in userData())
+        )
+        || (
+          'modulosLiberados' in userData()
+          && userData().modulosLiberados is list
+          && slug in userData().modulosLiberados
+        );
     }
 
     function isAdmin() {
@@ -119,19 +149,46 @@ service cloud.firestore {
         && data.uids is list && data.uids.size() <= 500;
     }
 
+    function modulosOk(data) {
+      return !('modulosLiberados' in data)
+        || (data.modulosLiberados is list && data.modulosLiberados.size() <= 40);
+    }
+
     function isValidUsuario(data, uid) {
       return data.keys().hasOnly([
           'uid', 'email', 'nome', 'papel', 'ativo', 'recusado',
-          'unidade', 'cidade', 'criadoEm', 'atualizadoEm'
+          'unidade', 'cidade', 'unidadeId', 'modulosLiberados', 'criadoPor',
+          'criadoEm', 'atualizadoEm'
         ])
         && data.uid == uid
         && validEmail(data.email)
         && validName(data.nome)
-        && data.papel in ['admin', 'franqueado']
+        && data.papel in ['admin', 'franqueado', 'equipe_franqueadora', 'equipe_franqueado']
         && data.ativo is bool
         && data.recusado is bool
         && validShort(data.unidade, 120)
         && validShort(data.cidade, 120)
+        && (!('unidadeId' in data) || data.unidadeId == null || validShort(data.unidadeId, 80))
+        && modulosOk(data)
+        && (!('criadoPor' in data) || validShort(data.criadoPor, 128))
+        && data.criadoEm is timestamp
+        && data.atualizadoEm is timestamp;
+    }
+
+    function isValidUnidade(data) {
+      return data.keys().hasOnly([
+          'nome', 'cidade', 'responsavel', 'email', 'uid',
+          'modulosLiberados', 'ativo', 'criadoEm', 'atualizadoEm', 'criadoPor'
+        ])
+        && validName(data.nome)
+        && validShort(data.cidade, 120)
+        && validName(data.responsavel)
+        && validEmail(data.email)
+        && (data.uid == null || (data.uid is string && data.uid.size() <= 128))
+        && data.modulosLiberados is list
+        && data.modulosLiberados.size() <= 40
+        && data.ativo is bool
+        && validShort(data.criadoPor, 128)
         && data.criadoEm is timestamp
         && data.atualizadoEm is timestamp;
     }
@@ -423,8 +480,16 @@ service cloud.firestore {
       return signedIn() && data.uid == request.auth.uid;
     }
 
+    function equipeDaMinhaUnidade() {
+      return isActive()
+        && userData().papel == 'franqueado'
+        && resource.data.papel == 'equipe_franqueado'
+        && resource.data.unidadeId == userData().unidadeId;
+    }
+
     match /usuarios/{uid} {
-      allow read: if isSelf(uid) || isAdmin();
+      allow get: if isSelf(uid) || isAdmin() || equipeDaMinhaUnidade();
+      allow list: if isAdmin() || equipeDaMinhaUnidade();
 
       allow create: if isSelf(uid)
         && isValidUsuario(request.resource.data, uid)
@@ -432,6 +497,31 @@ service cloud.firestore {
         && request.resource.data.papel == 'franqueado'
         && request.resource.data.ativo == false
         && request.resource.data.recusado == false
+        && (!('modulosLiberados' in request.resource.data) || request.resource.data.modulosLiberados.size() == 0)
+        && (!('unidadeId' in request.resource.data) || request.resource.data.unidadeId == null || request.resource.data.unidadeId == '')
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+
+      allow create: if isAdmin()
+        && isValidUsuario(request.resource.data, uid)
+        && request.resource.data.papel in ['franqueado', 'equipe_franqueadora', 'equipe_franqueado']
+        && request.resource.data.recusado == false
+        && request.resource.data.criadoPor == request.auth.uid
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+
+      allow create: if isActive()
+        && userData().papel == 'franqueado'
+        && isValidUsuario(request.resource.data, uid)
+        && request.resource.data.papel == 'equipe_franqueado'
+        && request.resource.data.ativo == true
+        && request.resource.data.recusado == false
+        && request.resource.data.unidadeId == userData().unidadeId
+        && userData().unidadeId is string
+        && userData().unidadeId.size() > 0
+        && request.resource.data.modulosLiberados is list
+        && request.resource.data.modulosLiberados.hasOnly(userData().modulosLiberados)
+        && request.resource.data.criadoPor == request.auth.uid
         && request.resource.data.criadoEm == request.time
         && request.resource.data.atualizadoEm == request.time;
 
@@ -440,9 +530,11 @@ service cloud.firestore {
         && request.resource.data.email == resource.data.email
         && request.resource.data.criadoEm == resource.data.criadoEm
         && request.resource.data.atualizadoEm == request.time
+        && (!('criadoPor' in resource.data) || request.resource.data.criadoPor == resource.data.criadoPor)
         && (
           (
             isAdmin()
+            && request.resource.data.papel == resource.data.papel
           ) || (
             isSelf(uid)
             && request.resource.data.papel == resource.data.papel
@@ -451,6 +543,17 @@ service cloud.firestore {
             && request.resource.data.unidade == resource.data.unidade
             && request.resource.data.cidade == resource.data.cidade
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'atualizadoEm'])
+          ) || (
+            isActive()
+            && userData().papel == 'franqueado'
+            && resource.data.papel == 'equipe_franqueado'
+            && resource.data.unidadeId == userData().unidadeId
+            && request.resource.data.papel == 'equipe_franqueado'
+            && request.resource.data.unidadeId == resource.data.unidadeId
+            && request.resource.data.modulosLiberados is list
+            && request.resource.data.modulosLiberados.hasOnly(userData().modulosLiberados)
+            && request.resource.data.recusado == resource.data.recusado
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'ativo', 'modulosLiberados', 'atualizadoEm'])
           ) || (
             isSelf(uid)
             && !exists(adminLockPath())
@@ -462,9 +565,27 @@ service cloud.firestore {
             && request.resource.data.nome == resource.data.nome
             && request.resource.data.unidade == resource.data.unidade
             && request.resource.data.cidade == resource.data.cidade
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['papel', 'ativo', 'atualizadoEm'])
           )
         );
 
+      allow delete: if isAdmin();
+    }
+
+    match /unidades/{id} {
+      allow read: if isAdmin()
+        || (isActive() && resource.data.uid == request.auth.uid)
+        || (isActive() && userData().unidadeId == id);
+      allow create: if isAdmin()
+        && isValidUnidade(request.resource.data)
+        && request.resource.data.criadoPor == request.auth.uid
+        && request.resource.data.criadoEm == request.time
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if isAdmin()
+        && isValidUnidade(request.resource.data)
+        && request.resource.data.criadoPor == resource.data.criadoPor
+        && request.resource.data.criadoEm == resource.data.criadoEm
+        && request.resource.data.atualizadoEm == request.time;
       allow delete: if isAdmin();
     }
 
@@ -481,9 +602,9 @@ service cloud.firestore {
 
     match /categorias/{id} {
       allow read: if isAdmin();
-      allow read: if isActive() && resource.data.publico == true;
-      allow read: if isActive() && uidsContemUsuario();
-      allow read: if isActive() && !('publico' in resource.data);
+      allow read: if isActive() && podeModulo('manuais') && resource.data.publico == true;
+      allow read: if isActive() && podeModulo('manuais') && uidsContemUsuario();
+      allow read: if isActive() && podeModulo('manuais') && !('publico' in resource.data);
 
       allow create: if isAdmin()
         && isValidCategoria(request.resource.data)
@@ -498,9 +619,11 @@ service cloud.firestore {
     match /documentos/{id} {
       allow read: if isAdmin();
       allow read: if isActive()
+        && podeModulo('manuais')
         && resource.data.status == 'publicado'
         && resource.data.publico == true;
       allow read: if isActive()
+        && podeModulo('manuais')
         && resource.data.status == 'publicado'
         && uidsContemUsuario();
 
@@ -530,8 +653,8 @@ service cloud.firestore {
 
     match /trilhas/{id} {
       allow read: if isAdmin();
-      allow read: if isActive() && legadoPublicado() && legadoPublico();
-      allow read: if isActive() && legadoPublicado() && uidsContemUsuario();
+      allow read: if isActive() && podeModulo('universidade') && legadoPublicado() && legadoPublico();
+      allow read: if isActive() && podeModulo('universidade') && legadoPublicado() && uidsContemUsuario();
 
       allow create: if isAdmin()
         && isValidTrilha(request.resource.data)
@@ -545,8 +668,8 @@ service cloud.firestore {
 
     match /quizzes/{id} {
       allow read: if isAdmin();
-      allow read: if isActive() && legadoPublicado() && legadoPublico();
-      allow read: if isActive() && legadoPublicado() && uidsContemUsuario();
+      allow read: if isActive() && podeModulo('universidade') && legadoPublicado() && legadoPublico();
+      allow read: if isActive() && podeModulo('universidade') && legadoPublicado() && uidsContemUsuario();
 
       allow create: if isAdmin()
         && isValidQuiz(request.resource.data)
@@ -570,8 +693,8 @@ service cloud.firestore {
 
     match /avisos/{id} {
       allow read: if isAdmin();
-      allow read: if isActive() && resource.data.publico == true;
-      allow read: if isActive() && uidsContemUsuario();
+      allow read: if isActive() && podeModulo('manuais') && resource.data.publico == true;
+      allow read: if isActive() && podeModulo('manuais') && uidsContemUsuario();
       allow create: if isAdmin() && isValidAviso(request.resource.data);
       allow update: if false;
       allow delete: if isAdmin();

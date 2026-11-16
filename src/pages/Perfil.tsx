@@ -3,6 +3,14 @@ import { Aviso, Button, Campo, inputClass } from '../components/ui'
 import { atualizarMeuNome } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
+import type { Papel } from '../types'
+
+function rotuloPapel(papel: Papel): string {
+  if (papel === 'admin') return 'Admin da franqueadora'
+  if (papel === 'equipe_franqueadora') return 'Equipe da franqueadora'
+  if (papel === 'franqueado') return 'Franqueado'
+  return 'Equipe do franqueado'
+}
 
 export function PerfilPage() {
   const { user, refresh, recuperar } = useAuth()
@@ -42,7 +50,7 @@ export function PerfilPage() {
         <Campo label="Cidade">
           <input className={inputClass} value={user.cidade} disabled />
         </Campo>
-        <p className="text-sm text-ink/60">Papel: {user.papel === 'admin' ? 'Franqueadora' : 'Franqueado'}</p>
+        <p className="text-sm text-ink/60">Papel: {rotuloPapel(user.papel)}</p>
         <Button type="submit">Salvar nome</Button>
       </form>
       <Button

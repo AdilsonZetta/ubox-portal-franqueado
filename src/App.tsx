@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { useVisao, VisaoProvider } from './lib/visao'
 import { PortalProvider } from './lib/portal'
 import { AguardandoPage, CadastroPage, CompletarPage, ConfigPendentePage, EntrarPage, RecuperarPage } from './pages/AuthPages'
+import { FranqueadoraPage, GestaoUsuariosPage, MinhaEquipePage } from './pages/GestaoAcessos'
 import { BibliotecaPage } from './pages/Biblioteca'
 import { BuscaPage } from './pages/Busca'
 import { CertificadoPage } from './pages/Certificado'
@@ -84,6 +85,9 @@ function Area() {
           <Route path="/pergunte" element={<PerguntePage />} />
           <Route path="/notificacoes" element={<NotificacoesPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
+          <Route path="/franqueadora" element={<Admin><FranqueadoraPage /></Admin>} />
+          <Route path="/gestao-usuarios" element={<Admin><GestaoUsuariosPage /></Admin>} />
+          <Route path="/minha-equipe" element={<MinhaEquipePage />} />
           <Route path="/admin" element={<Admin><PainelPage /></Admin>} />
           <Route path="/admin/usuarios" element={<Admin><UsuariosPage /></Admin>} />
           <Route path="/admin/conformidade" element={<Admin><ConformidadePage /></Admin>} />

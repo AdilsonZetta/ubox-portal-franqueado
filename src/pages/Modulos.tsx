@@ -2,9 +2,13 @@ import { Link, useParams } from 'react-router-dom'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
 import { useAuth } from '../lib/auth'
 import { primeiroNome } from '../lib/format'
+import { podeModulo } from '../lib/modulosAcesso'
+import { useVisao } from '../lib/visao'
 
 export function ModulosPage() {
   const { user } = useAuth()
+  const { ehAdmin, comoFranqueado, simulado } = useVisao()
+  const pessoa = comoFranqueado ? simulado : user
   return (
     <div>
       <div className="mx-auto max-w-6xl">
@@ -14,11 +18,14 @@ export function ModulosPage() {
           Cada frente da rede tem o seu lugar. Manuais e a Universidade já estão abertos. Os demais módulos mostram o que vem por aí.
         </p>
         <div className="mt-8 space-y-8">
-          {GRUPOS.map((grupo) => (
+          {GRUPOS.map((grupo) => {
+            const itens = MODULOS.filter((modulo) => modulo.grupo === grupo && (ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado)))
+            if (!itens.length) return null
+            return (
             <section key={grupo}>
               <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/40">{grupo}</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {MODULOS.filter((modulo) => modulo.grupo === grupo).map((modulo) => {
+                {itens.map((modulo) => {
                   const Icone = modulo.icon
                   const destino = modulo.ativo && modulo.para ? modulo.para : `/modulos/${modulo.slug}`
                   return (
@@ -42,7 +49,8 @@ export function ModulosPage() {
                 })}
               </div>
             </section>
-          ))}
+            )
+          })}
         </div>
       </div>
     </div>

@@ -66,18 +66,23 @@ function audiencia(data: DocumentData, publicoPadrao: boolean): Audiencia {
   }
 }
 
+const PAPEIS: Papel[] = ['admin', 'equipe_franqueadora', 'franqueado', 'equipe_franqueado']
+
 export function mapUsuario(id: string, data: DocumentData): Usuario | null {
-  if (data.papel !== 'admin' && data.papel !== 'franqueado') return null
+  if (!PAPEIS.includes(data.papel as Papel)) return null
   if (typeof data.email !== 'string' || typeof data.nome !== 'string') return null
   return {
     uid: typeof data.uid === 'string' ? data.uid : id,
     email: data.email,
     nome: data.nome,
-    papel: data.papel,
+    papel: data.papel as Papel,
     ativo: data.ativo === true,
     recusado: data.recusado === true,
     unidade: texto(data.unidade),
     cidade: texto(data.cidade),
+    unidadeId: typeof data.unidadeId === 'string' ? data.unidadeId : null,
+    modulosLiberados: Array.isArray(data.modulosLiberados) ? listaTexto(data.modulosLiberados) : undefined,
+    criadoPor: texto(data.criadoPor) || undefined,
     criadoEm: data.criadoEm,
     atualizadoEm: data.atualizadoEm,
   }
@@ -550,7 +555,7 @@ export async function reidratarAcessos(): Promise<void> {
 
 export async function atualizarUsuario(
   uid: string,
-  patch: Partial<Pick<Usuario, 'nome' | 'papel' | 'ativo' | 'recusado' | 'unidade' | 'cidade'>>,
+  patch: Partial<Pick<Usuario, 'nome' | 'papel' | 'ativo' | 'recusado' | 'unidade' | 'cidade' | 'modulosLiberados'>>,
 ): Promise<void> {
   await updateDoc(doc(requireDb(), 'usuarios', uid), { ...patch, atualizadoEm: serverTimestamp() })
 }

@@ -1,4 +1,4 @@
-export type Papel = 'admin' | 'franqueado'
+export type Papel = 'admin' | 'equipe_franqueadora' | 'franqueado' | 'equipe_franqueado'
 export type TipoDocumento = 'pop' | 'manual' | 'processo' | 'politica' | 'checklist' | 'html'
 export type FormatoDocumento = 'richtext' | 'html'
 export type StatusDocumento = 'rascunho' | 'publicado'
@@ -14,6 +14,23 @@ export interface Usuario {
   recusado: boolean
   unidade: string
   cidade: string
+  unidadeId?: string | null
+  modulosLiberados?: string[]
+  criadoPor?: string
+  criadoEm?: unknown
+  atualizadoEm?: unknown
+}
+
+export interface Unidade {
+  id: string
+  nome: string
+  cidade: string
+  responsavel: string
+  email: string
+  uid: string | null
+  modulosLiberados: string[]
+  ativo: boolean
+  criadoPor?: string
   criadoEm?: unknown
   atualizadoEm?: unknown
 }

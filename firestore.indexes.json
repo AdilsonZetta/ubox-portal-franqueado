@@ -47,6 +47,14 @@
         { "fieldPath": "publicado", "order": "ASCENDING" },
         { "fieldPath": "uids", "arrayConfig": "CONTAINS" }
       ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadeId", "order": "ASCENDING" },
+        { "fieldPath": "papel", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

@@ -1,12 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Aviso, Button, inputClass } from '../../components/ui'
 import { atualizarUsuario, listarUsuarios, reidratarAcessos } from '../../lib/api'
-import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import type { Papel, Usuario } from '../../types'
 
+function rotuloPapel(papel: Papel): string {
+  if (papel === 'admin') return 'Admin da franqueadora'
+  if (papel === 'equipe_franqueadora') return 'Equipe da franqueadora'
+  if (papel === 'franqueado') return 'Franqueado'
+  return 'Equipe do franqueado'
+}
+
 export function UsuariosPage() {
-  const { user } = useAuth()
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
@@ -31,12 +36,13 @@ export function UsuariosPage() {
     }
   }
 
-  const adminsAtivos = usuarios.filter((usuario) => usuario.papel === 'admin' && usuario.ativo).length
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-extrabold">Usuários</h1>
+        <div>
+          <h1 className="text-3xl font-extrabold">Usuários</h1>
+          <p className="text-sm text-ink/60">Unidades novas nascem em Gestão da Franqueadora. Esta lista aprova cadastros antigos e mostra a situação da conta.</p>
+        </div>
         <Button
           variant="secondary"
           onClick={() => {
@@ -78,28 +84,12 @@ export function UsuariosPage() {
                     }}
                   />
                 </td>
-                <td className="px-3 py-3">
-                  <select
-                    className={inputClass}
-                    value={usuario.papel}
-                    onChange={(evento) => {
-                      const papel = evento.target.value as Papel
-                      if (usuario.uid === user?.uid && papel !== 'admin' && adminsAtivos < 2) {
-                        setErro('Mantenha pelo menos um administrador ativo.')
-                        return
-                      }
-                      void salvar(usuario, { papel })
-                    }}
-                  >
-                    <option value="franqueado">Franqueado</option>
-                    <option value="admin">Franqueadora</option>
-                  </select>
-                </td>
+                <td className="px-3 py-3">{rotuloPapel(usuario.papel)}</td>
                 <td className="px-3 py-3">{usuario.recusado ? 'Recusado' : usuario.ativo ? 'Ativo' : 'Pendente'}</td>
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap gap-2">
                     {!usuario.ativo && !usuario.recusado ? (
-                      <Button onClick={() => void salvar(usuario, { ativo: true, recusado: false })}>Aprovar</Button>
+                      <Button onClick={() => void salvar(usuario, { ativo: true, recusado: false, modulosLiberados: usuario.modulosLiberados ?? [] })}>Aprovar</Button>
                     ) : null}
                     {usuario.ativo ? (
                       <Button variant="secondary" onClick={() => void salvar(usuario, { ativo: false })}>
