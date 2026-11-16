@@ -1,0 +1,6 @@
+Upstream: https://github.com/openai/skills/tree/main/skills/.curated/security-best-practices
+Note: openai/skills is marked deprecated as a catalog, but this curated skill remains Apache-2.0 licensed and is instruction-only markdown.
+SKILL.md revision: 5c8f1e26803b (2026-02-02)
+Repo HEAD: 49f948faa925 (2026-06-24)
+Only the React/TypeScript frontend reference was vendored, which matches this stack. Other language guides were omitted on purpose.
+This copy, and this SOURCE.txt, were prepared by Grok Bot for the Ubox portal.

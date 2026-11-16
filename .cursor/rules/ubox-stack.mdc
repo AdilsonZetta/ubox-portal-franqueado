@@ -1,0 +1,15 @@
+---
+description: Convenções do portal Ubox (Firebase Spark, papéis, módulos fail-closed, testes).
+alwaysApply: true
+---
+
+# Convenções do repositório
+
+- SPA React + Vite + TypeScript, GitHub Pages, textos em pt-BR.
+- Firebase no plano Spark apenas: não habilitar faturamento, Blaze, Functions ou Storage sem pedido explícito.
+- Quatro papéis: `admin`, `equipe_franqueadora`, `franqueado`, `equipe_franqueado`. Módulos são fail-closed (`modulosLiberados`).
+- Não imprimir nem commitar segredos. Não alterar compartilhamento do Drive sem autorização.
+- Política completa em `AGENTS.md`. Skills em `.agents/skills/`.
+- Testes: `npm test` (regras + Vitest + emulador). `npm run typecheck` e `npm run build` também precisam passar quando o código de `src/` muda.
+
+Este arquivo foi preparado por Grok Bot.

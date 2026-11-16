@@ -1,0 +1,6 @@
+Upstream: https://github.com/vercel-labs/agent-skills/tree/main/skills/composition-patterns
+SKILL.md revision: a5343bd997c4 (2026-01-28)
+Repo HEAD used at install: 1a2c79d4e6c4
+License: MIT (frontmatter and parent repo README). Compiled guide is AGENTS.md.
+This project already uses React 19, so the React 19 API section applies (no forwardRef, prefer use()).
+This copy, and this SOURCE.txt, were prepared by Grok Bot for the Ubox portal.

@@ -1,0 +1,17 @@
+---
+description: Sistema visual e acabamento do Portal do Franqueado Ubox — evite UI genérica ou simples demais.
+alwaysApply: true
+---
+
+# Visual Ubox
+
+O portal precisa parecer um produto premium de operação de franquias, não um CRUD simples nem um template de IA.
+
+- Use as variáveis de `src/index.css` (paper, ink, brand laranja `#f37021`, lime `#9dbe2e`, Inter). Não invente outra paleta ou fonte.
+- Mantenha cards, tabelas, filtros e tipografia consistentes entre os módulos.
+- Toda lista ou painel tem estados de carregamento, vazio e erro, em português do Brasil, com próxima ação.
+- Interface responsiva e acessível: teclado, foco visível, labels, contraste, `prefers-reduced-motion`.
+- Antes de criar ou revisar UI, leia `.agents/skills/ubox-design/SKILL.md`, `.agents/skills/frontend-design/SKILL.md` e `.agents/skills/web-design-guidelines/SKILL.md`.
+- Este projeto é React + Vite (SPA, rotas em hash), não Next.js.
+
+Este arquivo foi preparado por Grok Bot.
