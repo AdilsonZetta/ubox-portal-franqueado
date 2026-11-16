@@ -19,8 +19,8 @@ describe('módulos efetivos', () => {
     expect(modulosEfetivos({ ...base, papel: 'admin' })).toBeNull()
   })
 
-  it('franqueado antigo sem lista mantém os módulos do franqueado', () => {
-    expect(modulosEfetivos(base)).toContain('manuais')
+  it('franqueado sem lista não recebe módulo', () => {
+    expect(modulosEfetivos(base)).toEqual([])
   })
 
   it('lista explícita vale mesmo vazia', () => {

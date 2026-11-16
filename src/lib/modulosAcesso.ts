@@ -1,11 +1,9 @@
-import { SLUGS_FRANQUEADO } from '../data/modulos'
 import type { Usuario } from '../types'
 
-/** null significa todos os módulos (admin da franqueadora). */
+/** null significa todos os módulos (admin da franqueadora). Sem a lista, ninguém mais recebe módulo. */
 export function modulosEfetivos(usuario: Usuario | null | undefined): string[] | null {
   if (!usuario) return []
   if (usuario.papel === 'admin') return null
-  if (usuario.papel === 'franqueado' && usuario.modulosLiberados === undefined) return [...SLUGS_FRANQUEADO]
   return usuario.modulosLiberados ?? []
 }
 

@@ -1,8 +1,8 @@
-import { collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
+import { collection, doc, getDocs, query, runTransaction, serverTimestamp, setDoc, updateDoc, where } from 'firebase/firestore'
 import { SLUGS_FRANQUEADO, subconjunto } from '../data/modulos'
 import type { Papel, Unidade, Usuario } from '../types'
 import { mapUsuario } from './api'
-import { criarLoginSemDeslogar, senhaProvisoria } from './criarConta'
+import { criarLoginEGravar, senhaProvisoria } from './criarConta'
 import { requireDb } from './firebase'
 
 export interface NovaConta {
@@ -18,8 +18,8 @@ export interface NovaConta {
   criadoPor: string
 }
 
-export async function criarPerfil(uid: string, conta: NovaConta): Promise<void> {
-  await setDoc(doc(requireDb(), 'usuarios', uid), {
+export function dadosPerfil(uid: string, conta: NovaConta) {
+  return {
     uid,
     email: conta.email.trim(),
     nome: conta.nome.trim(),
@@ -33,7 +33,11 @@ export async function criarPerfil(uid: string, conta: NovaConta): Promise<void> 
     criadoPor: conta.criadoPor,
     criadoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
-  })
+  }
+}
+
+export async function criarPerfil(uid: string, conta: NovaConta): Promise<void> {
+  await setDoc(doc(requireDb(), 'usuarios', uid), dadosPerfil(uid, conta))
 }
 
 export async function criarUnidade(dados: {
@@ -46,32 +50,36 @@ export async function criarUnidade(dados: {
 }): Promise<{ id: string; senha: string; uid: string }> {
   const senha = senhaProvisoria()
   const modulos = dados.modulosLiberados.filter((slug) => SLUGS_FRANQUEADO.includes(slug))
-  const uid = await criarLoginSemDeslogar(dados.email, senha)
   const id = `un-${crypto.randomUUID().slice(0, 8)}`
   const banco = requireDb()
-  await setDoc(doc(banco, 'unidades', id), {
-    nome: dados.nome.trim(),
-    cidade: dados.cidade.trim(),
-    responsavel: dados.responsavel.trim(),
-    email: dados.email.trim(),
-    uid,
-    modulosLiberados: modulos,
-    ativo: true,
-    criadoPor: dados.criadoPor,
-    criadoEm: serverTimestamp(),
-    atualizadoEm: serverTimestamp(),
-  })
-  await criarPerfil(uid, {
-    nome: dados.responsavel,
-    email: dados.email,
-    senha,
-    papel: 'franqueado',
-    unidade: dados.nome,
-    cidade: dados.cidade,
-    unidadeId: id,
-    modulosLiberados: modulos,
-    ativo: true,
-    criadoPor: dados.criadoPor,
+  const uid = await criarLoginEGravar(dados.email, senha, async (novoUid) => {
+    await runTransaction(banco, async (tx) => {
+      tx.set(doc(banco, 'unidades', id), {
+        nome: dados.nome.trim(),
+        cidade: dados.cidade.trim(),
+        responsavel: dados.responsavel.trim(),
+        email: dados.email.trim(),
+        uid: novoUid,
+        modulosLiberados: modulos,
+        ativo: true,
+        criadoPor: dados.criadoPor,
+        criadoEm: serverTimestamp(),
+        atualizadoEm: serverTimestamp(),
+      })
+      tx.set(doc(banco, 'usuarios', novoUid), dadosPerfil(novoUid, {
+        nome: dados.responsavel,
+        email: dados.email,
+        senha,
+        papel: 'franqueado',
+        unidade: dados.nome,
+        cidade: dados.cidade,
+        unidadeId: id,
+        modulosLiberados: modulos,
+        ativo: true,
+        criadoPor: dados.criadoPor,
+      }))
+    })
+    return novoUid
   })
   return { id, senha, uid }
 }
@@ -140,8 +148,7 @@ export async function listarUnidades(): Promise<Unidade[]> {
 
 export async function criarUsuarioEquipe(conta: Omit<NovaConta, 'senha'> & { senha?: string }): Promise<string> {
   const senha = conta.senha || senhaProvisoria()
-  const uid = await criarLoginSemDeslogar(conta.email, senha)
-  await criarPerfil(uid, { ...conta, senha })
+  await criarLoginEGravar(conta.email, senha, (uid) => criarPerfil(uid, { ...conta, senha }))
   return senha
 }
 

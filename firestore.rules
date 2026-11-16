@@ -107,10 +107,6 @@ service cloud.firestore {
     function podeModulo(slug) {
       return isAdmin()
         || (
-          userData().papel == 'franqueado'
-          && !('modulosLiberados' in userData())
-        )
-        || (
           'modulosLiberados' in userData()
           && userData().modulosLiberados is list
           && slug in userData().modulosLiberados
@@ -497,7 +493,8 @@ service cloud.firestore {
         && request.resource.data.papel == 'franqueado'
         && request.resource.data.ativo == false
         && request.resource.data.recusado == false
-        && (!('modulosLiberados' in request.resource.data) || request.resource.data.modulosLiberados.size() == 0)
+        && request.resource.data.modulosLiberados is list
+        && request.resource.data.modulosLiberados.size() == 0
         && (!('unidadeId' in request.resource.data) || request.resource.data.unidadeId == null || request.resource.data.unidadeId == '')
         && request.resource.data.criadoEm == request.time
         && request.resource.data.atualizadoEm == request.time;

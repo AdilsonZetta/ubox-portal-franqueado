@@ -12,6 +12,7 @@
     "test:rules": "npx -y firebase-tools@latest emulators:exec --only firestore --project demo-ubox \"node tests/regras.mjs\"",
     "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes --project ubox-portal-franqueado",
     "make-admin": "node scripts/make-admin.mjs",
+    "migrar-modulos": "node --experimental-strip-types scripts/migrar-modulos.mjs",
     "seed": "node scripts/seed.mjs"
   },
   "dependencies": {

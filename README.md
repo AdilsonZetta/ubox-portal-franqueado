@@ -50,7 +50,7 @@ O comando publica `firestore.rules` e `firestore.indexes.json` no projeto `ubox-
 Resumo da proteção:
 
 - Há quatro papéis: `admin`, `equipe_franqueadora`, `franqueado` e `equipe_franqueado`.
-- Só usuário ativo, de unidade ativa, lê conteúdo publicado que seja público ou esteja na lista `uids`, e só se o módulo estiver em `modulosLiberados`. O admin lê tudo. Franqueado antigo, sem essa lista, continua vendo os módulos do franqueado.
+- Só usuário ativo, de unidade ativa, lê conteúdo publicado que seja público ou esteja na lista `uids`, e só se o slug estiver em `modulosLiberados`. Sem essa lista, o usuário não vê módulo nenhum. O admin lê tudo. Franqueado antigo e ativo, sem a lista, recebe o catálogo atual com `npm run migrar-modulos`.
 - Rascunho fica só com o admin da franqueadora.
 - O cadastro público cria `usuarios/{uid}` como `franqueado` inativo, sem módulos. A própria pessoa não altera `papel`, `ativo` nem `modulosLiberados`.
 - O admin cria unidades e a equipe da franqueadora. O franqueado só cria `equipe_franqueado` da própria unidade, com módulos que já foram liberados para ela. Usuário inativo não lê conteúdo.
@@ -77,6 +77,12 @@ ADMIN_EMAIL=voce@email.com ADMIN_PASSWORD=senha npm run seed
 ```
 
 `SEED_FORCE=1` regrava os documentos de exemplo. Sem isso, o seed não mexe em documento que já existe.
+
+Franqueado que já estava ativo e ainda não tem `modulosLiberados` fica sem módulos até a migração. Ela grava o catálogo atual do franqueado só nessas contas:
+
+```bash
+ADMIN_EMAIL=voce@email.com ADMIN_PASSWORD=senha npm run migrar-modulos
+```
 
 Para desfazer a promoção no futuro, use o console do Authentication junto com o painel de usuários. O script não apaga a conta.
 

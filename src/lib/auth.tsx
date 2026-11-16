@@ -86,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           recusado: false,
           unidade: unidade.trim(),
           cidade: cidade.trim(),
+          modulosLiberados: [],
           criadoEm: serverTimestamp(),
           atualizadoEm: serverTimestamp(),
         })
@@ -103,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           recusado: false,
           unidade: unidade.trim(),
           cidade: cidade.trim(),
+          modulosLiberados: [],
           criadoEm: serverTimestamp(),
           atualizadoEm: serverTimestamp(),
         })

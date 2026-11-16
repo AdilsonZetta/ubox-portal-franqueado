@@ -132,7 +132,7 @@ const manual = doc(admin, 'documentos', 'pub')
 
 await caso('admin lê manual publicado', assertSucceeds(getDoc(doc(admin, 'documentos', 'pub'))))
 await caso('franqueado com manuais lê o manual', assertSucceeds(getDoc(doc(dono, 'documentos', 'pub'))))
-await caso('franqueado legado sem lista ainda lê o manual', assertSucceeds(getDoc(doc(legado, 'documentos', 'pub'))))
+await caso('franqueado sem lista não lê o manual', assertFails(getDoc(doc(legado, 'documentos', 'pub'))))
 await caso('equipe da franqueadora com manuais lê o manual', assertSucceeds(getDoc(doc(equipeRede, 'documentos', 'pub'))))
 await caso('equipe da franqueadora sem manuais não lê o manual', assertFails(getDoc(doc(equipeVazio, 'documentos', 'pub'))))
 await caso('equipe da unidade com manuais lê o manual', assertSucceeds(getDoc(doc(equipe, 'documentos', 'pub'))))
@@ -210,7 +210,7 @@ await caso('franqueado não lista a equipe de outra unidade', assertFails(getDoc
 await caso('franqueado não lista todos os usuários', assertFails(getDocs(collection(dono, 'usuarios'))))
 
 const visitante = ambiente.authenticatedContext('visitante', { email: 'visitante@ubox.test' }).firestore()
-await caso('cadastro próprio nasce franqueado inativo', assertSucceeds(setDoc(doc(visitante, 'usuarios', 'visitante'), {
+await caso('cadastro próprio nasce franqueado inativo e sem módulos', assertSucceeds(setDoc(doc(visitante, 'usuarios', 'visitante'), {
   uid: 'visitante',
   email: 'visitante@ubox.test',
   nome: 'Visitante',
@@ -219,9 +219,31 @@ await caso('cadastro próprio nasce franqueado inativo', assertSucceeds(setDoc(d
   recusado: false,
   unidade: '',
   cidade: '',
+  modulosLiberados: [],
   criadoEm: serverTimestamp(),
   atualizadoEm: serverTimestamp(),
 })))
+const visitanteModulo = ambiente.authenticatedContext('visitante-mod', { email: 'visitante-mod@ubox.test' }).firestore()
+await caso('cadastro não escolhe os próprios módulos', assertFails(setDoc(doc(visitanteModulo, 'usuarios', 'visitante-mod'), {
+  uid: 'visitante-mod',
+  email: 'visitante-mod@ubox.test',
+  nome: 'Visitante Mod',
+  papel: 'franqueado',
+  ativo: false,
+  recusado: false,
+  unidade: '',
+  cidade: '',
+  modulosLiberados: ['manuais'],
+  criadoEm: serverTimestamp(),
+  atualizadoEm: serverTimestamp(),
+})))
+const baseLegado = usuario('fr-legado', { semModulos: true, semUnidadeId: true, nome: 'Legado' })
+await caso('admin grava os módulos do franqueado legado', assertSucceeds(setDoc(doc(admin, 'usuarios', 'fr-legado'), {
+  ...baseLegado,
+  modulosLiberados: ['manuais'],
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('franqueado legado passa a ler o manual depois da migração', assertSucceeds(getDoc(doc(legado, 'documentos', 'pub'))))
 await caso('cadastro não nasce admin', assertFails(setDoc(doc(visitante, 'usuarios', 'visitante'), {
   uid: 'visitante',
   email: 'visitante@ubox.test',
