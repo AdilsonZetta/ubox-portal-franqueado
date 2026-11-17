@@ -1,9 +1,11 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Aviso, Button, Campo, Selo, inputClass } from '../../components/ui'
 import {
   CATEGORIAS_ACESSO,
   nomeCategoriaAcesso,
   senhaVencida,
+  podeGerenciarAcesso,
+  textoEventoAcesso,
   usuarioPodeVerSegredo,
   type CategoriaAcesso,
 } from '../../data/senhas'
@@ -60,6 +62,7 @@ export function ModalDetalheAcesso({
   const [editUrl, setEditUrl] = useState('')
   const [editResponsavel, setEditResponsavel] = useState('')
   const [salvandoEdicao, setSalvandoEdicao] = useState(false)
+  const dialogRef = useRef<HTMLDivElement>(null)
 
   // Limpa segredo e revelação ao trocar de acesso ou fechar
   useEffect(() => {
@@ -76,6 +79,7 @@ export function ModalDetalheAcesso({
       setEditCategoria(acesso.categoria)
       setEditUrl(acesso.url)
       setEditResponsavel(acesso.responsavelNome)
+      setTimeout(() => dialogRef.current?.focus(), 50)
     }
   }, [acesso])
 
@@ -95,6 +99,17 @@ export function ModalDetalheAcesso({
     }, 30_000)
     return () => clearTimeout(timer)
   }, [revelado])
+
+  useEffect(() => {
+    if (!acesso) return
+    function aoTecla(e: KeyboardEvent) {
+      if (e.key === 'Escape' && !salvandoTroca && !salvandoEdicao) {
+        aoFechar()
+      }
+    }
+    window.addEventListener('keydown', aoTecla)
+    return () => window.removeEventListener('keydown', aoTecla)
+  }, [acesso, salvandoTroca, salvandoEdicao, aoFechar])
 
   if (!acesso) return null
 
@@ -119,33 +134,32 @@ export function ModalDetalheAcesso({
     comoFranqueado,
   )
 
-  const podeGerenciar =
-    !comoFranqueado &&
-    ((acesso.escopo === 'unidade' && usuario.papel === 'franqueado' && usuario.unidadeId === acesso.unidadeId) ||
-      (acesso.escopo === 'rede' && (usuario.papel === 'admin' || usuario.papel === 'equipe_franqueadora')) ||
-      usuario.papel === 'admin')
+  const podeGerenciar = podeGerenciarAcesso(usuario, acesso, comoFranqueado)
 
-  async function carregarSegredoSeNecessario(): Promise<SegredoAcesso> {
+  async function obterSegredo(): Promise<SegredoAcesso> {
     if (segredo) return segredo
     setCarregandoSegredo(true)
     try {
-      const dados = await buscarSegredo(acesso!.id)
-      setSegredo(dados)
-      setNovoLogin(dados.login)
-      setNovasNotas(dados.notas)
-      return dados
+      return await buscarSegredo(acesso!.id)
     } finally {
       setCarregandoSegredo(false)
     }
+  }
+
+  function aplicarSegredo(dados: SegredoAcesso) {
+    setSegredo(dados)
+    setNovoLogin(dados.login)
+    setNovasNotas(dados.notas)
   }
 
   async function handleRevelar() {
     if (!podeLerSegredo) return
     setErro('')
     try {
-      await carregarSegredoSeNecessario()
+      const dados = await obterSegredo()
+      await gravarEventoAcesso(acesso!.id, usuario, 'revelou')
+      aplicarSegredo(dados)
       setRevelado(true)
-      await gravarEventoAcesso(acesso!.id, usuario, 'revelou', 'Visualizou a senha do sistema.')
     } catch (falha: unknown) {
       setErro(mensagemErro(falha))
     }
@@ -155,11 +169,12 @@ export function ModalDetalheAcesso({
     if (!podeLerSegredo) return
     setErro('')
     try {
-      const dados = await carregarSegredoSeNecessario()
+      const dados = await obterSegredo()
+      await gravarEventoAcesso(acesso!.id, usuario, 'copiou')
+      aplicarSegredo(dados)
       await navigator.clipboard.writeText(dados.senha)
       setCopiadoSenha(true)
       setTimeout(() => setCopiadoSenha(false), 2500)
-      await gravarEventoAcesso(acesso!.id, usuario, 'copiou', 'Copiou a senha do sistema.')
     } catch (falha: unknown) {
       setErro(mensagemErro(falha))
     }
@@ -236,8 +251,15 @@ export function ModalDetalheAcesso({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-line bg-white p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm" role="presentation">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="titulo-detalhe-acesso"
+        tabIndex={-1}
+        className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-line bg-white p-6 shadow-2xl outline-none"
+      >
         {/* Cabeçalho */}
         <div className="flex items-start justify-between border-b border-line pb-4">
           <div>
@@ -250,7 +272,7 @@ export function ModalDetalheAcesso({
                 {acesso.escopo === 'rede' ? 'Rede Ubox' : acesso.unidadeNome || 'Unidade'}
               </span>
             </div>
-            <h2 className="mt-1.5 text-2xl font-black text-ink">{acesso.nome}</h2>
+            <h2 id="titulo-detalhe-acesso" className="mt-1.5 text-2xl font-black text-ink">{acesso.nome}</h2>
             {acesso.url ? (
               <a
                 href={acesso.url}
@@ -294,9 +316,11 @@ export function ModalDetalheAcesso({
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Visibilidade</p>
               <p className="mt-1 font-semibold text-ink">
-                {acesso.visivelParaEquipe
-                  ? 'Toda a equipe'
-                  : `${acesso.visivelPara.length} ${acesso.visivelPara.length === 1 ? 'pessoa' : 'pessoas'}`}
+                {acesso.escopo === 'rede'
+                  ? 'Todas as unidades com o módulo'
+                  : acesso.visivelParaEquipe
+                    ? 'Toda a equipe'
+                    : `${acesso.visivelPara.length} ${acesso.visivelPara.length === 1 ? 'pessoa' : 'pessoas'}`}
               </p>
             </div>
           </div>
@@ -311,7 +335,7 @@ export function ModalDetalheAcesso({
                 </p>
               </div>
               {revelado ? (
-                <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-semibold text-brand-dark">
                   Visível (auto-oculta em 30s)
                 </span>
               ) : null}
@@ -340,10 +364,10 @@ export function ModalDetalheAcesso({
                   <div className="mt-1 flex items-center gap-2">
                     <input
                       readOnly
-                      value={segredo ? segredo.login : 'Clique em revelar ou copiar para carregar'}
+                      value={revelado && segredo ? segredo.login : '••••••••'}
                       className="w-full rounded-xl border border-line bg-white px-3 py-2 text-sm text-ink outline-none"
                     />
-                    {segredo ? (
+                    {revelado && segredo ? (
                       <Button
                         type="button"
                         variant="secondary"
@@ -532,7 +556,7 @@ export function ModalDetalheAcesso({
                   <div key={ev.id} className="flex items-start justify-between border-b border-line/40 pb-1.5 text-xs">
                     <div>
                       <span className="font-semibold text-ink">{ev.autorNome}</span>
-                      <span className="text-ink/60"> — {ev.texto}</span>
+                      <span className="text-ink/60"> — {textoEventoAcesso(ev.tipo)}</span>
                     </div>
                     <span className="shrink-0 text-[10px] text-ink/40">
                       {formatarData(paraMillis(ev.criadoEm))}
@@ -551,9 +575,11 @@ export function ModalDetalheAcesso({
               <Button
                 type="button"
                 variant="secondary"
-                onClick={async () => {
-                  await carregarSegredoSeNecessario().catch(() => null)
-                  setTrocandoSenha(true)
+                onClick={() => {
+                  void obterSegredo()
+                    .then((dados) => aplicarSegredo(dados))
+                    .catch((falha: unknown) => setErro(mensagemErro(falha)))
+                    .finally(() => setTrocandoSenha(true))
                 }}
               >
                 Trocar senha

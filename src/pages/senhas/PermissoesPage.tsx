@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Aviso, Button, Carregando, Selo, Vazio } from '../../components/ui'
 import {
   nomeCategoriaAcesso,
+  podeGerenciarAcesso,
   senhaVencida,
 } from '../../data/senhas'
 import {
@@ -19,7 +20,7 @@ import { ModalDetalheAcesso } from './ModalDetalheAcesso'
 
 export function PermissoesPage() {
   const { user } = useAuth()
-  const { ehAdmin, comoFranqueado, simulado } = useVisao()
+  const { comoFranqueado, simulado } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
 
   const rede = Boolean(user && (user.papel === 'admin' || user.papel === 'equipe_franqueadora') && !comoFranqueado)
@@ -58,14 +59,25 @@ export function PermissoesPage() {
       { rede, unidadeId },
       (itens) => {
         setAcessos(itens)
-        const estadoInicial: Record<string, { visivelParaEquipe: boolean; visivelPara: string[] }> = {}
-        for (const item of itens) {
-          estadoInicial[item.id] = {
-            visivelParaEquipe: item.visivelParaEquipe,
-            visivelPara: [...item.visivelPara],
+        setPermissoesEditadas((prev) => {
+          const proximo: Record<string, { visivelParaEquipe: boolean; visivelPara: string[] }> = {}
+          for (const item of itens) {
+            const local = prev[item.id]
+            const sujo =
+              local &&
+              (local.visivelParaEquipe !== item.visivelParaEquipe ||
+                local.visivelPara.length !== item.visivelPara.length ||
+                local.visivelPara.some((uid) => !item.visivelPara.includes(uid)) ||
+                item.visivelPara.some((uid) => !local.visivelPara.includes(uid)))
+            proximo[item.id] = sujo
+              ? local
+              : {
+                  visivelParaEquipe: item.visivelParaEquipe,
+                  visivelPara: [...item.visivelPara],
+                }
           }
-        }
-        setPermissoesEditadas(estadoInicial)
+          return proximo
+        })
         setCarregando(false)
       },
       (falha) => {
@@ -123,7 +135,7 @@ export function PermissoesPage() {
     }
   }
 
-  const podeEditar = !comoFranqueado && (user?.papel === 'franqueado' || ehAdmin)
+  const podeEditarItem = (acesso: { escopo: string; unidadeId: string }) => Boolean(user && podeGerenciarAcesso(user, acesso, comoFranqueado))
 
   if (!user) return null
   if (comoFranqueado && !simulado) {
@@ -147,14 +159,14 @@ export function PermissoesPage() {
       </div>
 
       {/* Alerta de Desligamento Obrigatório */}
-      <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 shadow-sm text-sm text-amber-950">
+      <div className="rounded-2xl border border-brand/30 bg-brand/10 p-4 shadow-sm text-sm text-ink">
         <div className="flex items-start gap-3">
-          <span className="mt-0.5 text-lg">⚠️</span>
+          <Selo tom="alerta">Atenção</Selo>
           <div>
             <h2 className="font-bold">Política de Segurança da Rede Ubox: Desligamento na equipe</h2>
-            <p className="mt-1 leading-relaxed text-xs text-amber-900">
-              Quando alguém sai da equipe, a permissão deve ser revogada imediatamente e a senha do
-              sistema trocada no mesmo dia. Não reutilize senhas nem mantenha acessos antigos ativos.
+            <p className="mt-1 leading-relaxed text-xs text-ink/70">
+              Quando alguém sai da equipe, aprove a revogação para encerrar o acesso (inclusive se a senha
+              era visível para toda a equipe) e trocar a senha do cofre no mesmo passo.
             </p>
           </div>
         </div>
@@ -215,9 +227,7 @@ export function PermissoesPage() {
                         {nomeCategoriaAcesso(acesso.categoria)}
                       </span>
                       {acesso.pendenteTroca ? (
-                        <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-bold text-red-800">
-                          Troca pendente pós-revogação
-                        </span>
+                        <Selo tom="alerta">Troca pendente pós-revogação</Selo>
                       ) : null}
                     </div>
                     <h3 className="mt-1 text-base font-bold text-ink">{acesso.nome}</h3>
@@ -228,6 +238,7 @@ export function PermissoesPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {podeEditarItem(acesso) ? (
                     <Button
                       type="button"
                       variant="secondary"
@@ -236,7 +247,8 @@ export function PermissoesPage() {
                     >
                       Trocar senha agora
                     </Button>
-                    {podeEditar && houveAlteracao ? (
+                    ) : null}
+                    {podeEditarItem(acesso) && houveAlteracao ? (
                       <Button
                         type="button"
                         variant="primary"
@@ -251,9 +263,9 @@ export function PermissoesPage() {
                 </div>
 
                 {/* Alerta de membro inativo com acesso */}
-                {membrosInativosComAcesso.length > 0 ? (
-                  <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-xs text-red-900 space-y-1">
-                    <p className="font-bold">⚠️ Risco de segurança detectado:</p>
+                {membrosInativosComAcesso.length > 0 && acesso.escopo === 'unidade' ? (
+                  <div className="rounded-2xl border border-brand/30 bg-brand/10 p-3 text-xs text-ink space-y-1">
+                    <p className="font-bold text-brand-dark">Risco de segurança detectado:</p>
                     <p>
                       O(s) colaborador(es) inativo(s){' '}
                       <span className="font-semibold">
@@ -266,13 +278,19 @@ export function PermissoesPage() {
                 ) : null}
 
                 {/* Opções de permissão */}
+                {acesso.escopo === 'rede' ? (
+                  <div className="rounded-2xl border border-brand/20 bg-paper p-3 text-xs text-ink/70 leading-relaxed">
+                    Este acesso é da rede e o segredo é compartilhado com todas as unidades que têm o módulo
+                    Central de Acessos e Senhas. Não há lista individual de visualização.
+                  </div>
+                ) : (
                 <div className="space-y-3 pt-1">
                   <label className="flex items-center gap-2.5 text-xs text-ink cursor-pointer">
                     <input
                       type="checkbox"
                       checked={edicao.visivelParaEquipe}
                       onChange={(e) => alternarEquipeToda(acesso.id, e.target.checked)}
-                      disabled={!podeEditar}
+                      disabled={!podeEditarItem(acesso)}
                       className="h-4 w-4 rounded text-brand focus:ring-brand"
                     />
                     <span className="font-semibold">
@@ -298,13 +316,13 @@ export function PermissoesPage() {
                                   temAcesso
                                     ? 'border-brand/40 bg-brand/5 text-ink'
                                     : 'border-line bg-white text-ink/70'
-                                } ${!membro.ativo ? 'border-red-300 bg-red-50/50' : ''}`}
+                                } ${!membro.ativo ? 'border-brand/40 bg-brand/10' : ''}`}
                               >
                                 <input
                                   type="checkbox"
                                   checked={temAcesso}
                                   onChange={() => alternarMembro(acesso.id, membro.uid)}
-                                  disabled={!podeEditar}
+                                  disabled={!podeEditarItem(acesso)}
                                   className="rounded text-brand focus:ring-brand"
                                 />
                                 <div className="min-w-0 flex-1 truncate">
@@ -321,6 +339,7 @@ export function PermissoesPage() {
                     </div>
                   ) : null}
                 </div>
+                )}
               </article>
             )
           })}

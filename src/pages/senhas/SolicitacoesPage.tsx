@@ -19,10 +19,11 @@ import { mensagemErro } from '../../lib/errors'
 import { formatarData, paraMillis } from '../../lib/format'
 import { useVisao } from '../../lib/visao'
 import { ModalSolicitacao } from './ModalSolicitacao'
+import { ModalAprovarRevogacao } from './ModalAprovarRevogacao'
 
 export function SolicitacoesPage() {
   const { user } = useAuth()
-  const { ehAdmin, comoFranqueado, simulado } = useVisao()
+  const { comoFranqueado, simulado } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
 
   const rede = Boolean(user && (user.papel === 'admin' || user.papel === 'equipe_franqueadora') && !comoFranqueado)
@@ -43,6 +44,7 @@ export function SolicitacoesPage() {
   // Modal nova solicitação
   const [modalNovaAberto, setModalNovaAberto] = useState(false)
   const [processandoId, setProcessandoId] = useState<string | null>(null)
+  const [solicitacaoRevogar, setSolicitacaoRevogar] = useState<SolicitacaoAcesso | null>(null)
 
   useEffect(() => {
     if (!unidadeId) {
@@ -103,10 +105,14 @@ export function SolicitacoesPage() {
     novoStatus: 'aprovada' | 'recusada' | 'concluida',
   ) {
     if (!user || comoFranqueado) return
+    if (novoStatus === 'aprovada' && sol.tipo === 'revogar') {
+      setSolicitacaoRevogar(sol)
+      return
+    }
     setProcessandoId(sol.id)
     setErro('')
     try {
-      const acessoRelacionado = acessos.find((a) => a.id === sol.acessoId)
+      const acessoRelacionado = acessos.find((a) => a.id === sol.acessoId) ?? null
       await decidirSolicitacaoAcesso(user, sol, novoStatus, acessoRelacionado)
     } catch (falha: unknown) {
       setErro(mensagemErro(falha))
@@ -115,7 +121,7 @@ export function SolicitacoesPage() {
     }
   }
 
-  const podeDecidir = !comoFranqueado && (user?.papel === 'franqueado' || ehAdmin)
+  const podeDecidir = !comoFranqueado && user?.papel === 'franqueado' && Boolean(unidadeId)
 
   if (!user) return null
   if (comoFranqueado && !simulado) {
@@ -138,6 +144,7 @@ export function SolicitacoesPage() {
             Pedidos de acesso, homologação de novos sistemas, revogação por desligamento e trocas de senha.
           </p>
         </div>
+        {unidadeId ? (
         <Button
           type="button"
           variant="primary"
@@ -146,6 +153,7 @@ export function SolicitacoesPage() {
         >
           <span className="font-bold">+</span> Nova solicitação
         </Button>
+        ) : null}
       </div>
 
       {comoFranqueado ? (
@@ -319,6 +327,22 @@ export function SolicitacoesPage() {
           // Atualizado via listener em tempo real
         }}
       />
+      <ModalAprovarRevogacao
+        aberto={Boolean(solicitacaoRevogar)}
+        solicitacao={solicitacaoRevogar}
+        acesso={solicitacaoRevogar ? acessos.find((item) => item.id === solicitacaoRevogar.acessoId) ?? null : null}
+        aoFechar={() => setSolicitacaoRevogar(null)}
+        aoConfirmar={async (novaSenha, login, notas) => {
+          if (!user || !solicitacaoRevogar) return
+          const acessoRelacionado = acessos.find((item) => item.id === solicitacaoRevogar.acessoId) ?? null
+          await decidirSolicitacaoAcesso(user, solicitacaoRevogar, 'aprovada', acessoRelacionado, {
+            novaSenha,
+            login,
+            notas,
+          })
+        }}
+      />
+
     </div>
   )
 }

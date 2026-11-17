@@ -1,5 +1,15 @@
 export const DIAS_ROTACAO = 90
 export const MS_POR_DIA = 24 * 60 * 60 * 1000
+export const MAX_VISIVEL_PARA = 20
+
+export const TEXTO_EVENTO_ACESSO = {
+  criacao: 'Acesso criado.',
+  atualizacao: 'Acesso atualizado.',
+  permissao: 'Permissão alterada.',
+  troca_senha: 'Senha trocada.',
+  revelou: 'Visualizou a senha.',
+  copiou: 'Copiou a senha.',
+} as const
 
 export const CATEGORIAS_ACESSO = [
   { id: 'gestao', nome: 'Gestão' },
@@ -58,6 +68,10 @@ export function nomeStatusSolicitacao(status: string): string {
 
 export function nomeTipoEvento(tipo: string): string {
   return TIPOS_EVENTO_ACESSO.find((item) => item.id === tipo)?.nome ?? tipo
+}
+
+export function textoEventoAcesso(tipo: string): string {
+  return TEXTO_EVENTO_ACESSO[tipo as keyof typeof TEXTO_EVENTO_ACESSO] ?? tipo
 }
 
 export function senhaVencida(ultimaTrocaEmMillis: number, agora = Date.now(), pendenteTroca = false): boolean {
@@ -135,4 +149,24 @@ export function contarPessoasComAcesso(
   }
 
   return pessoas.size
+}
+
+export function acessosParaIndicadores<T extends { escopo: string }>(acessos: T[], visaoRede: boolean): T[] {
+  return visaoRede ? acessos.filter((item) => item.escopo === 'rede') : acessos
+}
+
+export function podeGerenciarAcesso(
+  usuario: { papel: string; unidadeId?: string | null; modulosLiberados?: string[] },
+  acesso: { escopo: string; unidadeId: string },
+  comoFranqueado = false,
+): boolean {
+  if (comoFranqueado) return false
+  if (acesso.escopo === 'unidade') {
+    return usuario.papel === 'franqueado' && usuario.unidadeId === acesso.unidadeId
+  }
+  if (acesso.escopo === 'rede') {
+    if (usuario.papel === 'admin') return true
+    return usuario.papel === 'equipe_franqueadora' && Boolean(usuario.modulosLiberados?.includes('senhas'))
+  }
+  return false
 }

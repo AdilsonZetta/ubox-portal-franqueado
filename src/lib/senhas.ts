@@ -22,14 +22,16 @@ import {
   query,
   serverTimestamp,
   setDoc,
-  updateDoc,
   where,
+  writeBatch,
   type Timestamp,
 } from 'firebase/firestore'
 import {
   CATEGORIAS_ACESSO,
   ESCOPOS_ACESSO,
+  MAX_VISIVEL_PARA,
   STATUS_SOLICITACAO,
+  TEXTO_EVENTO_ACESSO,
   TIPOS_EVENTO_ACESSO,
   TIPOS_SOLICITACAO,
   type CategoriaAcesso,
@@ -114,7 +116,9 @@ export function mapAcesso(id: string, data: Record<string, unknown>): Acesso | n
   if (!categorias.has(categoria) || !escopos.has(escopo)) return null
 
   const visivelPara = Array.isArray(data.visivelPara)
-    ? data.visivelPara.filter((item): item is string => typeof item === 'string')
+    ? data.visivelPara
+        .filter((item): item is string => typeof item === 'string' && item.length > 0 && item.length <= 128)
+        .slice(0, MAX_VISIVEL_PARA)
     : []
 
   return {
@@ -292,13 +296,13 @@ export async function gravarEventoAcesso(
   acessoId: string,
   autor: Usuario,
   tipo: TipoEventoAcesso,
-  textoEvento: string,
+  _textoLegado?: string,
 ): Promise<void> {
   const banco = requireDb()
   const ref = doc(collection(banco, 'acessos', acessoId, 'eventos'))
   await setDoc(ref, {
     tipo,
-    texto: textoEvento.slice(0, 2000),
+    texto: TEXTO_EVENTO_ACESSO[tipo],
     autorId: autor.uid,
     autorNome: autor.nome,
     criadoEm: serverTimestamp(),
@@ -335,9 +339,10 @@ export async function criarAcesso(autor: Usuario, dados: NovoAcessoDados): Promi
   }
 
   const agora = serverTimestamp()
+  const batch = writeBatch(banco)
 
   // 1. Grava metadados do acesso
-  await setDoc(acessoRef, {
+  batch.set(acessoRef, {
     nome: dados.nome.trim(),
     categoria: dados.categoria,
     url: dados.url.trim(),
@@ -346,8 +351,8 @@ export async function criarAcesso(autor: Usuario, dados: NovoAcessoDados): Promi
     unidadeNome,
     responsavelId: dados.responsavelId || null,
     responsavelNome: dados.responsavelNome.trim() || 'Equipe da unidade',
-    visivelPara: dados.visivelPara,
-    visivelParaEquipe: dados.visivelParaEquipe,
+    visivelPara: dados.escopo === 'rede' ? [] : dados.visivelPara.slice(0, MAX_VISIVEL_PARA),
+    visivelParaEquipe: dados.escopo === 'rede' ? false : dados.visivelParaEquipe,
     ultimaTrocaEm: agora,
     pendenteTroca: false,
     criadoPor: autor.uid,
@@ -358,7 +363,7 @@ export async function criarAcesso(autor: Usuario, dados: NovoAcessoDados): Promi
 
   // 2. Grava segredo na subcoleção atual
   const segredoRef = doc(banco, 'acessos', acessoRef.id, 'segredo', 'atual')
-  await setDoc(segredoRef, {
+  batch.set(segredoRef, {
     login: dados.login.trim(),
     senha: dados.senha,
     notas: (dados.notas ?? '').trim(),
@@ -366,9 +371,17 @@ export async function criarAcesso(autor: Usuario, dados: NovoAcessoDados): Promi
     atualizadoPor: autor.uid,
   })
 
-  // 3. Grava evento de criação
-  await gravarEventoAcesso(acessoRef.id, autor, 'criacao', 'Sistema cadastrado no cofre.')
+  // 3. Grava evento de criação com frase oficial
+  const eventoRef = doc(collection(banco, 'acessos', acessoRef.id, 'eventos'))
+  batch.set(eventoRef, {
+    tipo: 'criacao',
+    texto: TEXTO_EVENTO_ACESSO.criacao,
+    autorId: autor.uid,
+    autorNome: autor.nome,
+    criadoEm: agora,
+  })
 
+  await batch.commit()
   return acessoRef.id
 }
 
@@ -388,9 +401,10 @@ export async function atualizarMetadadosAcesso(
 ): Promise<void> {
   const banco = requireDb()
   const ref = doc(banco, 'acessos', acesso.id)
+  const agora = serverTimestamp()
 
   const alteracoes: Record<string, unknown> = {
-    atualizadoEm: serverTimestamp(),
+    atualizadoEm: agora,
   }
 
   let mudouPermissao = false
@@ -402,21 +416,27 @@ export async function atualizarMetadadosAcesso(
   if (patch.responsavelNome !== undefined) alteracoes.responsavelNome = patch.responsavelNome.trim()
   if (patch.pendenteTroca !== undefined) alteracoes.pendenteTroca = patch.pendenteTroca
   if (patch.visivelPara !== undefined) {
-    alteracoes.visivelPara = patch.visivelPara
+    alteracoes.visivelPara = acesso.escopo === 'rede' ? [] : patch.visivelPara.slice(0, MAX_VISIVEL_PARA)
     mudouPermissao = true
   }
   if (patch.visivelParaEquipe !== undefined) {
-    alteracoes.visivelParaEquipe = patch.visivelParaEquipe
+    alteracoes.visivelParaEquipe = acesso.escopo === 'rede' ? false : patch.visivelParaEquipe
     mudouPermissao = true
   }
 
-  await updateDoc(ref, alteracoes)
+  const batch = writeBatch(banco)
+  batch.update(ref, alteracoes)
 
-  if (mudouPermissao) {
-    await gravarEventoAcesso(acesso.id, autor, 'permissao', 'Permissões de visualização alteradas.')
-  } else {
-    await gravarEventoAcesso(acesso.id, autor, 'atualizacao', 'Metadados do sistema atualizados.')
-  }
+  const eventoRef = doc(collection(banco, 'acessos', acesso.id, 'eventos'))
+  batch.set(eventoRef, {
+    tipo: mudouPermissao ? 'permissao' : 'atualizacao',
+    texto: mudouPermissao ? TEXTO_EVENTO_ACESSO.permissao : TEXTO_EVENTO_ACESSO.atualizacao,
+    autorId: autor.uid,
+    autorNome: autor.nome,
+    criadoEm: agora,
+  })
+
+  await batch.commit()
 }
 
 export async function trocarSenhaAcesso(
@@ -426,10 +446,11 @@ export async function trocarSenhaAcesso(
 ): Promise<void> {
   const banco = requireDb()
   const agora = serverTimestamp()
+  const batch = writeBatch(banco)
 
   // Atualiza segredo
   const segredoRef = doc(banco, 'acessos', acessoId, 'segredo', 'atual')
-  await setDoc(segredoRef, {
+  batch.set(segredoRef, {
     login: novosDados.login.trim(),
     senha: novosDados.senha,
     notas: (novosDados.notas ?? '').trim(),
@@ -439,14 +460,23 @@ export async function trocarSenhaAcesso(
 
   // Atualiza metadados com nova data de troca e remove pendência
   const acessoRef = doc(banco, 'acessos', acessoId)
-  await updateDoc(acessoRef, {
+  batch.update(acessoRef, {
     ultimaTrocaEm: agora,
     pendenteTroca: false,
     atualizadoEm: agora,
   })
 
-  // Grava evento
-  await gravarEventoAcesso(acessoId, autor, 'troca_senha', 'Senha do sistema rotacionada com sucesso.')
+  // Grava evento com frase oficial
+  const eventoRef = doc(collection(banco, 'acessos', acessoId, 'eventos'))
+  batch.set(eventoRef, {
+    tipo: 'troca_senha',
+    texto: TEXTO_EVENTO_ACESSO.troca_senha,
+    autorId: autor.uid,
+    autorNome: autor.nome,
+    criadoEm: agora,
+  })
+
+  await batch.commit()
 }
 
 export function observarSolicitacoes(
@@ -491,7 +521,7 @@ export async function criarSolicitacaoAcesso(
     acessoId?: string
     acessoNome?: string
     unidadeId: string
-    unidadeNome: string
+    unidadeNome?: string
     motivo: string
     alvoUid?: string
     alvoNome?: string
@@ -501,13 +531,20 @@ export async function criarSolicitacaoAcesso(
   const ref = doc(collection(banco, 'solicitacoesAcesso'))
   const agora = serverTimestamp()
 
+  const unidadeId = (autor.unidadeId || dados.unidadeId).trim()
+  if (!unidadeId) throw new Error('Unidade é obrigatória para criar solicitação.')
+
+  const unidadeSnap = await getDoc(doc(banco, 'unidades', unidadeId))
+  if (!unidadeSnap.exists()) throw new Error('Unidade não encontrada.')
+  const unidadeNome = String(unidadeSnap.data()?.nome || dados.unidadeNome || '').trim()
+
   await setDoc(ref, {
     tipo: dados.tipo,
     status: 'aberta',
     acessoId: dados.acessoId?.trim() ?? '',
     acessoNome: dados.acessoNome?.trim() ?? '',
-    unidadeId: dados.unidadeId.trim(),
-    unidadeNome: dados.unidadeNome.trim(),
+    unidadeId,
+    unidadeNome,
     solicitadoPor: autor.uid,
     solicitadoPorNome: autor.nome,
     motivo: dados.motivo.trim().slice(0, 2000),
@@ -527,29 +564,87 @@ export async function decidirSolicitacaoAcesso(
   solicitacao: SolicitacaoAcesso,
   novoStatus: 'aprovada' | 'recusada' | 'concluida',
   acessoAtual?: Acesso | null,
+  dadosRevogacao?: { novaSenha: string; login?: string; notas?: string },
 ): Promise<void> {
   const banco = requireDb()
   const agora = serverTimestamp()
 
-  // 1. Atualiza status da solicitação
+  if (novoStatus === 'aprovada') {
+    if (solicitacao.tipo === 'pedir_acesso' || solicitacao.tipo === 'revogar') {
+      if (!solicitacao.acessoId || !acessoAtual) {
+        throw new Error('Acesso correspondente não encontrado para aprovação da solicitação.')
+      }
+      if (!solicitacao.alvoUid) {
+        throw new Error('A solicitação não indica quem deve ganhar ou perder o acesso.')
+      }
+    }
+  }
+
+  const batch = writeBatch(banco)
+
+  if (novoStatus === 'aprovada' && solicitacao.acessoId && acessoAtual) {
+    if (solicitacao.tipo === 'pedir_acesso' && solicitacao.alvoUid) {
+      const novosUids = Array.from(new Set([...acessoAtual.visivelPara, solicitacao.alvoUid])).slice(0, MAX_VISIVEL_PARA)
+      const acessoRef = doc(banco, 'acessos', acessoAtual.id)
+      batch.update(acessoRef, {
+        visivelPara: novosUids,
+        atualizadoEm: agora,
+      })
+      const eventoRef = doc(collection(banco, 'acessos', acessoAtual.id, 'eventos'))
+      batch.set(eventoRef, {
+        tipo: 'permissao',
+        texto: TEXTO_EVENTO_ACESSO.permissao,
+        autorId: decisor.uid,
+        autorNome: decisor.nome,
+        criadoEm: agora,
+      })
+    } else if (solicitacao.tipo === 'revogar' && solicitacao.alvoUid) {
+      if (!dadosRevogacao?.novaSenha?.trim()) {
+        throw new Error('Nova senha é obrigatória para aprovação da revogação com rotação imediata.')
+      }
+      const novosUids = acessoAtual.visivelPara.filter((uid) => uid !== solicitacao.alvoUid)
+      const acessoRef = doc(banco, 'acessos', acessoAtual.id)
+      batch.update(acessoRef, {
+        visivelPara: novosUids,
+        visivelParaEquipe: false,
+        pendenteTroca: false,
+        ultimaTrocaEm: agora,
+        atualizadoEm: agora,
+      })
+      const segredoRef = doc(banco, 'acessos', acessoAtual.id, 'segredo', 'atual')
+      batch.set(segredoRef, {
+        login: (dadosRevogacao.login ?? '').trim(),
+        senha: dadosRevogacao.novaSenha.trim(),
+        notas: (dadosRevogacao.notas ?? '').trim(),
+        atualizadoEm: agora,
+        atualizadoPor: decisor.uid,
+      })
+      const eventoTrocaRef = doc(collection(banco, 'acessos', acessoAtual.id, 'eventos'))
+      batch.set(eventoTrocaRef, {
+        tipo: 'troca_senha',
+        texto: TEXTO_EVENTO_ACESSO.troca_senha,
+        autorId: decisor.uid,
+        autorNome: decisor.nome,
+        criadoEm: agora,
+      })
+      const eventoPermRef = doc(collection(banco, 'acessos', acessoAtual.id, 'eventos'))
+      batch.set(eventoPermRef, {
+        tipo: 'permissao',
+        texto: TEXTO_EVENTO_ACESSO.permissao,
+        autorId: decisor.uid,
+        autorNome: decisor.nome,
+        criadoEm: agora,
+      })
+    }
+  }
+
   const solRef = doc(banco, 'solicitacoesAcesso', solicitacao.id)
-  await updateDoc(solRef, {
+  batch.update(solRef, {
     status: novoStatus,
     decididoPor: decisor.uid,
     decididoPorNome: decisor.nome,
     atualizadoEm: agora,
   })
 
-  // 2. Se for aprovada e estiver relacionada a um acesso:
-  if (novoStatus === 'aprovada' && solicitacao.acessoId && acessoAtual) {
-    if (solicitacao.tipo === 'pedir_acesso' && solicitacao.alvoUid) {
-      // Adiciona o alvoUid na lista visivelPara
-      const novosUids = Array.from(new Set([...acessoAtual.visivelPara, solicitacao.alvoUid]))
-      await atualizarMetadadosAcesso(decisor, acessoAtual, { visivelPara: novosUids })
-    } else if (solicitacao.tipo === 'revogar' && solicitacao.alvoUid) {
-      // Remove o alvoUid e marca pendenteTroca
-      const novosUids = acessoAtual.visivelPara.filter((uid) => uid !== solicitacao.alvoUid)
-      await atualizarMetadadosAcesso(decisor, acessoAtual, { visivelPara: novosUids, pendenteTroca: true })
-    }
-  }
+  await batch.commit()
 }

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Aviso, Button, Carregando, Selo, Vazio } from '../../components/ui'
 import {
   CATEGORIAS_ACESSO,
+  acessosParaIndicadores,
   contarPessoasComAcesso,
   nomeCategoriaAcesso,
   nomeStatusSolicitacao,
@@ -22,11 +23,12 @@ import { formatarData, paraMillis } from '../../lib/format'
 import { useVisao } from '../../lib/visao'
 import { ModalDetalheAcesso } from './ModalDetalheAcesso'
 import { ModalNovoSistema } from './ModalNovoSistema'
+import { ModalAprovarRevogacao } from './ModalAprovarRevogacao'
 import { ModalSolicitacao } from './ModalSolicitacao'
 
 export function CofrePage() {
   const { user } = useAuth()
-  const { ehAdmin, comoFranqueado, simulado } = useVisao()
+  const { comoFranqueado, simulado } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
 
   const rede = Boolean(user && (user.papel === 'admin' || user.papel === 'equipe_franqueadora') && !comoFranqueado)
@@ -47,6 +49,8 @@ export function CofrePage() {
   const [modalNovoAberto, setModalNovoAberto] = useState(false)
   const [modalPedirAberto, setModalPedirAberto] = useState(false)
   const [acessoSelecionado, setAcessoSelecionado] = useState<Acesso | null>(null)
+  const [solicitacaoRevogar, setSolicitacaoRevogar] = useState<SolicitacaoAcesso | null>(null)
+  const [aprovandoId, setAprovandoId] = useState<string | null>(null)
 
   // Carrega equipe da unidade
   useEffect(() => {
@@ -86,7 +90,7 @@ export function CofrePage() {
     return observarSolicitacoes(
       { rede, unidadeId },
       setSolicitacoes,
-      (falha) => console.warn('Erro ao carregar solicitações:', falha),
+      (falha) => setErro(mensagemErro(falha)),
     )
   }, [user, rede, unidadeId])
 
@@ -107,16 +111,17 @@ export function CofrePage() {
 
   // KPIs
   const kpis = useMemo(() => {
-    const totalSistemas = acessos.length
+    const base = acessosParaIndicadores(acessos, rede)
+    const totalSistemas = base.length
     const uidsEquipe = equipeUnidade.map((m) => m.uid)
-    const totalPessoas = contarPessoasComAcesso(acessos, uidsEquipe, pessoa?.uid)
-    const totalVencidas = acessos.filter((a) =>
+    const totalPessoas = contarPessoasComAcesso(base, uidsEquipe, pessoa?.uid)
+    const totalVencidas = base.filter((a) =>
       senhaVencida(paraMillis(a.ultimaTrocaEm), Date.now(), a.pendenteTroca),
     ).length
     const pedidosEmAberto = solicitacoes.filter((s) => s.status === 'aberta').length
 
     return { totalSistemas, totalPessoas, totalVencidas, pedidosEmAberto }
-  }, [acessos, equipeUnidade, pessoa, solicitacoes])
+  }, [acessos, equipeUnidade, pessoa, solicitacoes, rede])
 
   // Solicitações recentes (máximo 4)
   const solicitacoesRecentes = useMemo(() => {
@@ -147,6 +152,7 @@ export function CofrePage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2.5">
+          {unidadeId ? (
           <Button
             type="button"
             variant="secondary"
@@ -155,6 +161,7 @@ export function CofrePage() {
           >
             Pedir acesso
           </Button>
+          ) : null}
           <Button
             type="button"
             variant="primary"
@@ -189,7 +196,7 @@ export function CofrePage() {
             {rede ? 'Sistemas da rede' : 'Sistemas da unidade'}
           </p>
           <p className="mt-1.5 text-3xl font-black text-ink">{kpis.totalSistemas}</p>
-          <p className="mt-1 text-xs text-ink/50">Homologados pela franqueadora</p>
+          <p className="mt-1 text-xs text-ink/50">{rede ? 'Homologados pela franqueadora' : 'Sistemas cadastrados no cofre'}</p>
         </article>
 
         <article className="rounded-2xl border border-line bg-white p-4 shadow-sm">
@@ -202,7 +209,7 @@ export function CofrePage() {
           <p className="text-xs font-bold uppercase tracking-wider text-ink/40">Senhas vencidas</p>
           <p
             className={`mt-1.5 text-3xl font-black ${
-              kpis.totalVencidas > 0 ? 'text-amber-600' : 'text-ink'
+              kpis.totalVencidas > 0 ? 'text-brand-dark' : 'text-ink'
             }`}
           >
             {kpis.totalVencidas}
@@ -232,7 +239,11 @@ export function CofrePage() {
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="busca-cofre" className="sr-only">
+                  Buscar sistema ou responsável
+                </label>
                 <input
+                  id="busca-cofre"
                   type="search"
                   placeholder="Buscar sistema ou dono…"
                   className="rounded-xl border border-line bg-paper px-3 py-1.5 text-xs text-ink outline-none focus:border-brand focus:bg-white"
@@ -266,7 +277,9 @@ export function CofrePage() {
                 texto={
                   busca || categoriaFiltro
                     ? 'Nenhum resultado corresponde aos filtros aplicados.'
-                    : 'Cadastre o primeiro sistema homologado usando o botão Novo sistema acima.'
+                    : user.papel === 'equipe_franqueado'
+                      ? 'Nenhum sistema cadastrado ainda. Use Pedir acesso para solicitar um sistema ou uma permissão à unidade.'
+                      : 'Cadastre o primeiro sistema com o botão Novo sistema.'
                 }
               />
             </div>
@@ -288,8 +301,17 @@ export function CofrePage() {
                     return (
                       <tr
                         key={item.id}
+                        tabIndex={0}
+                        role="button"
+                        aria-label={`Abrir ${item.nome}`}
                         onClick={() => setAcessoSelecionado(item)}
-                        className="cursor-pointer transition hover:bg-paper/70"
+                        onKeyDown={(evento) => {
+                          if (evento.key === 'Enter' || evento.key === ' ') {
+                            evento.preventDefault()
+                            setAcessoSelecionado(item)
+                          }
+                        }}
+                        className="cursor-pointer transition hover:bg-paper/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand"
                       >
                         <td className="px-5 py-3.5">
                           <p className="font-bold text-ink">{item.nome}</p>
@@ -351,16 +373,31 @@ export function CofrePage() {
                         {sol.solicitadoPorNome} · {formatarData(paraMillis(sol.criadoEm))}
                       </p>
                     </div>
-                    {sol.status === 'aberta' && !comoFranqueado && (user?.papel === 'franqueado' || ehAdmin) ? (
+                    {sol.status === 'aberta' && !comoFranqueado && user.papel === 'franqueado' && unidadeId ? (
                       <button
                         type="button"
-                        onClick={async () => {
-                          const acessoRelacionado = acessos.find((a) => a.id === sol.acessoId)
-                          await decidirSolicitacaoAcesso(user, sol, 'aprovada', acessoRelacionado)
+                        disabled={aprovandoId === sol.id}
+                        onClick={() => {
+                          void (async () => {
+                            if (sol.tipo === 'revogar') {
+                              setSolicitacaoRevogar(sol)
+                              return
+                            }
+                            setAprovandoId(sol.id)
+                            setErro('')
+                            try {
+                              const acessoRelacionado = acessos.find((a) => a.id === sol.acessoId) ?? null
+                              await decidirSolicitacaoAcesso(user, sol, 'aprovada', acessoRelacionado)
+                            } catch (falha: unknown) {
+                              setErro(mensagemErro(falha))
+                            } finally {
+                              setAprovandoId(null)
+                            }
+                          })()
                         }}
-                        className="shrink-0 rounded-full bg-brand/10 px-2.5 py-1 text-[11px] font-bold text-brand hover:bg-brand hover:text-white transition"
+                        className="shrink-0 rounded-full bg-brand/10 px-2.5 py-1 text-[11px] font-bold text-brand hover:bg-brand hover:text-white transition disabled:opacity-50"
                       >
-                        Aprovar
+                        {aprovandoId === sol.id ? 'Aprovando…' : 'Aprovar'}
                       </button>
                     ) : (
                       <Selo
@@ -380,9 +417,10 @@ export function CofrePage() {
               )}
             </div>
 
-            <div className="mt-4 rounded-xl border border-line/60 bg-paper/60 p-3 text-[11px] text-ink/65 leading-relaxed">
-              <span className="font-semibold text-ink">Regra de segurança:</span> Quando alguém sai da
-              equipe, a senha é trocada no mesmo dia e o acesso antigo é encerrado.
+            <div className="mt-4 rounded-xl border border-brand/30 bg-brand/10 p-3 text-[11px] text-ink/80 leading-relaxed">
+              <span className="font-semibold text-brand-dark">Regra de segurança:</span> ao aprovar uma
+              revogação, o acesso da pessoa é encerrado (mesmo que a senha fosse visível para toda a
+              equipe) e a senha do cofre é trocada no mesmo passo.
             </div>
           </div>
         </aside>
@@ -423,6 +461,22 @@ export function CofrePage() {
         ehAdminOuFranqueadora={rede}
         aoAtualizado={() => {
           // Atualizado via listener em tempo real
+        }}
+      />
+
+      <ModalAprovarRevogacao
+        aberto={Boolean(solicitacaoRevogar)}
+        solicitacao={solicitacaoRevogar}
+        acesso={solicitacaoRevogar ? acessos.find((item) => item.id === solicitacaoRevogar.acessoId) ?? null : null}
+        aoFechar={() => setSolicitacaoRevogar(null)}
+        aoConfirmar={async (novaSenha, login, notas) => {
+          if (!solicitacaoRevogar) return
+          const acessoRelacionado = acessos.find((item) => item.id === solicitacaoRevogar.acessoId) ?? null
+          await decidirSolicitacaoAcesso(user, solicitacaoRevogar, 'aprovada', acessoRelacionado, {
+            novaSenha,
+            login,
+            notas,
+          })
         }}
       />
     </div>

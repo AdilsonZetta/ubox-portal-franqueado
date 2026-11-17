@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest'
 import {
   DIAS_ROTACAO,
   MS_POR_DIA,
+  acessosParaIndicadores,
   contarPessoasComAcesso,
   nomeCategoriaAcesso,
+  podeGerenciarAcesso,
   nomeStatusSolicitacao,
   nomeTipoEvento,
   nomeTipoSolicitacao,
   senhaVencida,
+  textoEventoAcesso,
   usuarioPodeVerSegredo,
 } from './senhas'
 
@@ -173,5 +176,32 @@ describe('Central de Acessos e Senhas — data helpers', () => {
     const total = contarPessoasComAcesso(acessos, ['user-1', 'user-2', 'user-3', 'user-4'], 'dono-unidade')
     // dono-unidade + user-1, user-2, user-3, user-4
     expect(total).toBe(5)
+  })
+
+  it('usa frases oficiais de evento e filtra indicadores da rede', () => {
+    expect(textoEventoAcesso('revelou')).toBe('Visualizou a senha.')
+    expect(textoEventoAcesso('copiou')).toBe('Copiou a senha.')
+    const lista = [
+      { escopo: 'rede' as const },
+      { escopo: 'unidade' as const },
+      { escopo: 'rede' as const },
+    ]
+    expect(acessosParaIndicadores(lista, true)).toHaveLength(2)
+    expect(acessosParaIndicadores(lista, false)).toHaveLength(3)
+  })
+
+  it('restringe a gestão do cofre: unidade só com o franqueado e rede com a franqueadora', () => {
+    const unidade = { escopo: 'unidade', unidadeId: 'un-1' }
+    const rede = { escopo: 'rede', unidadeId: '' }
+    const franqueado = { uid: 'fr', papel: 'franqueado', unidadeId: 'un-1', modulosLiberados: ['senhas'] }
+    const admin = { uid: 'ad', papel: 'admin', unidadeId: null, modulosLiberados: [] }
+    const equipeRede = { uid: 'eq', papel: 'equipe_franqueadora', unidadeId: null, modulosLiberados: ['senhas'] }
+    expect(podeGerenciarAcesso(franqueado, unidade)).toBe(true)
+    expect(podeGerenciarAcesso(admin, unidade)).toBe(false)
+    expect(podeGerenciarAcesso(equipeRede, unidade)).toBe(false)
+    expect(podeGerenciarAcesso(admin, rede)).toBe(true)
+    expect(podeGerenciarAcesso(equipeRede, rede)).toBe(true)
+    expect(podeGerenciarAcesso(franqueado, rede)).toBe(false)
+    expect(podeGerenciarAcesso(franqueado, unidade, true)).toBe(false)
   })
 })

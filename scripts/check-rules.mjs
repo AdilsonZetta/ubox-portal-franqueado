@@ -36,6 +36,7 @@ exigir(rules.includes('allow update, delete: if false'), 'registros de leitura n
 exigir(rules.includes('match /acessos/{acessoId}'), 'coleção acessos ausente')
 exigir(rules.includes('match /segredo/{segredoId}'), 'subcoleção segredo ausente')
 exigir(rules.includes('match /solicitacoesAcesso/{solicitacaoId}'), 'coleção solicitacoesAcesso ausente')
+exigir(rules.includes("data.texto == 'Visualizou a senha.'"), 'evento de acesso sem frase oficial')
 exigir(rules.includes('allow delete: if false'), 'recusa de delete ausente')
 
 

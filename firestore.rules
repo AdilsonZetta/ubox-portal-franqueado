@@ -566,7 +566,22 @@ service cloud.firestore {
         && request.resource.data.atualizadoEm == request.time
         && modulosCabemNaUnidade(request.resource.data);
 
-      allow update: if resource != null && atualizaUsuario(uid);
+      allow update: if resource != null && isSelf(uid)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'atualizadoEm'])
+        && validName(request.resource.data.nome)
+        && emailConfere(request.resource.data)
+        && request.resource.data.atualizadoEm == request.time
+        && request.resource.data.papel == resource.data.papel
+        && request.resource.data.email == resource.data.email;
+      allow update: if resource != null && isSelf(uid)
+        && !exists(adminLockPath())
+        && resource.data.papel == 'franqueado'
+        && resource.data.ativo == false
+        && request.resource.data.papel == 'admin'
+        && request.resource.data.ativo == true
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['papel', 'ativo', 'atualizadoEm'])
+        && request.resource.data.atualizadoEm == request.time;
+      allow update: if resource != null && signedIn() && exists(userPath()) && atualizaComPerfil(uid);
 
       allow delete: if isAdmin();
     }
@@ -1080,25 +1095,19 @@ service cloud.firestore {
         && slaChamadoCerto(request.resource.data)
         && isValidChamado(request.resource.data)
         && podeEncerrarChamado(request.resource.data);
-      allow update: if resource != null && resource.data.abertoPor == request.auth.uid && (
-        (request.resource.data.status == 'fechado' && fechaChamado())
-        || (request.resource.data.status == 'aberto' && reabreChamado())
-      );
-      allow update: if resource != null && podeEncerrarChamado(resource.data) && request.auth.uid != resource.data.abertoPor && (
-        (request.resource.data.status == 'fechado' && fechaChamado())
-        || (request.resource.data.status == 'aberto' && reabreChamado())
-      );
-      allow update: if resource != null && (isAdmin() || operaRede()) && (
-        (resource.data.status != 'fechado' && conduzChamado())
-        || (resource.data.status == 'fechado' && tiraDeFechado())
-      );
+      allow update: if resource != null && request.resource.data.status == 'fechado' && resource.data.abertoPor == request.auth.uid && fechaChamado();
+      allow update: if resource != null && request.resource.data.status == 'aberto' && resource.data.abertoPor == request.auth.uid && reabreChamado();
+      allow update: if resource != null && request.resource.data.status == 'fechado' && request.auth.uid != resource.data.abertoPor && podeEncerrarChamado(resource.data) && fechaChamado();
+      allow update: if resource != null && request.resource.data.status == 'aberto' && request.auth.uid != resource.data.abertoPor && podeEncerrarChamado(resource.data) && reabreChamado();
+      allow update: if resource != null && resource.data.status != 'fechado' && (isAdmin() || operaRede()) && conduzChamado();
+      allow update: if resource != null && resource.data.status == 'fechado' && (isAdmin() || operaRede()) && tiraDeFechado();
       allow delete: if false;
 
       match /eventos/{eventoId} {
         allow read: if acessaChamado(get(chamadoPath(chamadoId)).data);
-        allow create: if request.resource.data.tipo == 'comentario' && comentarioConfere(chamadoId)
-          || request.resource.data.tipo == 'status' && statusConfere(chamadoId)
-          || request.resource.data.tipo == 'responsavel' && responsavelConfere(chamadoId);
+        allow create: if request.resource.data.tipo == 'comentario' && comentarioConfere(chamadoId);
+        allow create: if request.resource.data.tipo == 'status' && statusConfere(chamadoId);
+        allow create: if request.resource.data.tipo == 'responsavel' && responsavelConfere(chamadoId);
         allow update, delete: if false;
       }
     }
@@ -1119,6 +1128,34 @@ service cloud.firestore {
       return exists(acessoPath(id)) ? get(acessoPath(id)).data : getAfter(acessoPath(id)).data;
     }
 
+    function visivelParaItemOk(item) {
+      return item is string && item.size() > 0 && item.size() <= 128;
+    }
+
+    function visivelParaOk(lista) {
+      return lista is list && lista.size() <= 20
+        && (lista.size() < 1 || visivelParaItemOk(lista[0]))
+        && (lista.size() < 2 || visivelParaItemOk(lista[1]))
+        && (lista.size() < 3 || visivelParaItemOk(lista[2]))
+        && (lista.size() < 4 || visivelParaItemOk(lista[3]))
+        && (lista.size() < 5 || visivelParaItemOk(lista[4]))
+        && (lista.size() < 6 || visivelParaItemOk(lista[5]))
+        && (lista.size() < 7 || visivelParaItemOk(lista[6]))
+        && (lista.size() < 8 || visivelParaItemOk(lista[7]))
+        && (lista.size() < 9 || visivelParaItemOk(lista[8]))
+        && (lista.size() < 10 || visivelParaItemOk(lista[9]))
+        && (lista.size() < 11 || visivelParaItemOk(lista[10]))
+        && (lista.size() < 12 || visivelParaItemOk(lista[11]))
+        && (lista.size() < 13 || visivelParaItemOk(lista[12]))
+        && (lista.size() < 14 || visivelParaItemOk(lista[13]))
+        && (lista.size() < 15 || visivelParaItemOk(lista[14]))
+        && (lista.size() < 16 || visivelParaItemOk(lista[15]))
+        && (lista.size() < 17 || visivelParaItemOk(lista[16]))
+        && (lista.size() < 18 || visivelParaItemOk(lista[17]))
+        && (lista.size() < 19 || visivelParaItemOk(lista[18]))
+        && (lista.size() < 20 || visivelParaItemOk(lista[19]));
+    }
+
     function isValidAcesso(data) {
       return data.keys().hasOnly([
           'nome', 'categoria', 'url', 'escopo', 'unidadeId', 'unidadeNome',
@@ -1134,7 +1171,7 @@ service cloud.firestore {
         && data.unidadeNome is string && data.unidadeNome.size() <= 120
         && (data.responsavelId == null || (data.responsavelId is string && data.responsavelId.size() <= 128))
         && data.responsavelNome is string && data.responsavelNome.size() > 0 && data.responsavelNome.size() <= 120
-        && data.visivelPara is list && data.visivelPara.size() <= 100
+        && visivelParaOk(data.visivelPara)
         && data.visivelParaEquipe is bool
         && data.pendenteTroca is bool
         && data.criadoPor is string && data.criadoPor.size() <= 128
@@ -1188,6 +1225,8 @@ service cloud.firestore {
           && (isAdmin() || (dados.papel == 'equipe_franqueadora' && contaAtiva(dados) && temLista(dados, 'senhas')))
           && data.unidadeId == ''
           && data.unidadeNome == ''
+          && data.visivelPara.size() == 0
+          && data.visivelParaEquipe == false
           && data.criadoPor == request.auth.uid
           && data.criadoPorNome == dados.nome
           && data.criadoEm == request.time
@@ -1197,7 +1236,23 @@ service cloud.firestore {
       );
     }
 
-    function podeAtualizarAcesso(antes, depois) {
+    function rotacionouSegredo(acessoId) {
+      let segredoRef = /databases/$(database)/documents/acessos/$(acessoId)/segredo/atual;
+      return existsAfter(segredoRef) && getAfter(segredoRef).data.atualizadoEm == request.time;
+    }
+
+    function trocaOuPreserva(acessoId, antes, depois) {
+      let trocou = rotacionouSegredo(acessoId);
+      return (
+        depois.ultimaTrocaEm == antes.ultimaTrocaEm
+        || (depois.ultimaTrocaEm == request.time && trocou)
+      ) && (
+        !(antes.pendenteTroca == true && depois.pendenteTroca == false)
+        || trocou
+      );
+    }
+
+    function podeAtualizarAcesso(acessoId, antes, depois) {
       let dados = userData();
       return contaAtiva(dados)
         && depois.escopo == antes.escopo
@@ -1207,6 +1262,7 @@ service cloud.firestore {
         && depois.criadoPorNome == antes.criadoPorNome
         && depois.criadoEm == antes.criadoEm
         && depois.atualizadoEm == request.time
+        && trocaOuPreserva(acessoId, antes, depois)
         && (
           (
             antes.escopo == 'unidade'
@@ -1214,10 +1270,12 @@ service cloud.firestore {
             && unidadeIdPreenchido(dados)
             && dados.unidadeId == antes.unidadeId
             && temLista(dados, 'senhas')
-            && (dados.papel == 'franqueado' || isAdmin())
+            && dados.papel == 'franqueado'
           )
           || (
             antes.escopo == 'rede'
+            && depois.visivelPara.size() == 0
+            && depois.visivelParaEquipe == false
             && (isAdmin() || (dados.papel == 'equipe_franqueadora' && contaAtiva(dados) && temLista(dados, 'senhas')))
           )
         );
@@ -1276,7 +1334,14 @@ service cloud.firestore {
     function isValidEventoAcesso(data) {
       return data.keys().hasOnly(['tipo', 'texto', 'autorId', 'autorNome', 'criadoEm'])
         && data.tipo in ['criacao', 'atualizacao', 'revelou', 'copiou', 'permissao', 'troca_senha']
-        && data.texto is string && data.texto.size() > 0 && data.texto.size() <= 2000
+        && (
+          (data.tipo == 'criacao' && data.texto == 'Acesso criado.')
+          || (data.tipo == 'atualizacao' && data.texto == 'Acesso atualizado.')
+          || (data.tipo == 'permissao' && data.texto == 'Permissão alterada.')
+          || (data.tipo == 'troca_senha' && data.texto == 'Senha trocada.')
+          || (data.tipo == 'revelou' && data.texto == 'Visualizou a senha.')
+          || (data.tipo == 'copiou' && data.texto == 'Copiou a senha.')
+        )
         && data.autorId == request.auth.uid
         && validName(data.autorNome)
         && data.criadoEm == request.time;
@@ -1327,6 +1392,16 @@ service cloud.firestore {
         && temLista(dados, 'senhas')
         && dados.papel in ['franqueado', 'equipe_franqueado']
         && dados.unidadeId == data.unidadeId
+        && exists(unidadePath(data.unidadeId))
+        && data.unidadeNome == get(unidadePath(data.unidadeId)).data.nome
+        && (
+          data.acessoId == ''
+          || (
+            exists(acessoPath(data.acessoId))
+            && get(acessoPath(data.acessoId)).data.unidadeId == data.unidadeId
+            && get(acessoPath(data.acessoId)).data.escopo == 'unidade'
+          )
+        )
         && data.solicitadoPor == request.auth.uid
         && data.solicitadoPorNome == dados.nome
         && data.status == 'aberta'
@@ -1340,13 +1415,16 @@ service cloud.firestore {
       let dados = userData();
       return contaAtiva(dados)
         && (
-          isAdmin()
-          || (
+          (
             dados.papel == 'franqueado'
             && unidadeAtiva(dados)
             && unidadeIdPreenchido(dados)
             && dados.unidadeId == resource.data.unidadeId
             && temLista(dados, 'senhas')
+          )
+          || (
+            resource.data.unidadeId == ''
+            && (isAdmin() || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'senhas')))
           )
         )
         && resource.data.status == 'aberta'
@@ -1360,7 +1438,7 @@ service cloud.firestore {
     match /acessos/{acessoId} {
       allow read: if acessaMetadadosAcesso(resource.data);
       allow create: if signedIn() && exists(userPath()) && isValidAcesso(request.resource.data) && podeCriarAcesso(request.resource.data);
-      allow update: if signedIn() && exists(userPath()) && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(resource.data, request.resource.data);
+      allow update: if signedIn() && exists(userPath()) && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(acessoId, resource.data, request.resource.data);
       allow delete: if false;
 
       match /segredo/{segredoId} {
@@ -1379,7 +1457,7 @@ service cloud.firestore {
           && request.resource.data.autorNome == userData().nome
           && (
             (request.resource.data.tipo in ['revelou', 'copiou'] && perfilPodeLerSegredo(userData(), acessoDoc(acessoId)))
-            || (request.resource.data.tipo in ['criacao', 'atualizacao', 'permissao', 'troca_senha'] && (perfilPodeEscreverSegredo(userData(), acessoDoc(acessoId)) || isAdmin()))
+            || (request.resource.data.tipo in ['criacao', 'atualizacao', 'permissao', 'troca_senha'] && perfilPodeEscreverSegredo(userData(), acessoDoc(acessoId)))
           );
         allow update, delete: if false;
       }

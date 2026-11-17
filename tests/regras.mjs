@@ -584,7 +584,7 @@ await caso('equipe da franqueadora cria acesso da rede', assertSucceeds(setDoc(d
   responsavelId: null,
   responsavelNome: 'Franqueadora',
   visivelPara: [],
-  visivelParaEquipe: true,
+  visivelParaEquipe: false,
   criadoPor: 'eq-rede-s',
   criadoPorNome: 'Rede Senhas',
 }))))
@@ -593,27 +593,65 @@ await caso('equipe da franqueadora grava segredo da rede', assertSucceeds(setDoc
 }))))
 await caso('franqueado com módulo lê segredo da rede', assertSucceeds(getDoc(doc(frS, 'acessos', 'ac-rede1', 'segredo', 'atual'))))
 
+await caso('acesso recusa visivelPara com tipo não string', assertFails(setDoc(doc(frS, 'acessos', 'ac-invalido-1'), acessoPayload({
+  visivelPara: [123],
+}))))
+
+await caso('acesso recusa visivelPara com uid longo demais', assertFails(setDoc(doc(frS, 'acessos', 'ac-invalido-2'), acessoPayload({
+  visivelPara: ['a'.repeat(129)],
+}))))
+
 await caso('quem pode ler segredo registra evento revelou', assertSucceeds(setDoc(doc(eqSVisivel, 'acessos', 'ac-s1', 'eventos', 'ev-1'), {
   tipo: 'revelou',
-  texto: 'Visualizou a senha',
+  texto: 'Visualizou a senha.',
+  autorId: 'eq-s-visivel',
+  autorNome: 'Equipe Visivel',
+  criadoEm: serverTimestamp(),
+})))
+await caso('quem pode ler segredo NÃO consegue gravar texto livre no evento', assertFails(setDoc(doc(eqSVisivel, 'acessos', 'ac-s1', 'eventos', 'ev-livre'), {
+  tipo: 'revelou',
+  texto: 'senha-vazada-123',
+  autorId: 'eq-s-visivel',
+  autorNome: 'Equipe Visivel',
+  criadoEm: serverTimestamp(),
+})))
+await caso('evento de acesso recusa frase diferente da oficial', assertFails(setDoc(doc(eqSVisivel, 'acessos', 'ac-s1', 'eventos', 'ev-frase-falsa'), {
+  tipo: 'revelou',
+  texto: 'Visualizou a senha sem ponto',
   autorId: 'eq-s-visivel',
   autorNome: 'Equipe Visivel',
   criadoEm: serverTimestamp(),
 })))
 await caso('quem NÃO pode ler segredo é recusado ao registrar evento revelou', assertFails(setDoc(doc(eqSOculto, 'acessos', 'ac-s1', 'eventos', 'ev-2'), {
   tipo: 'revelou',
-  texto: 'Tentou visualizar a senha',
+  texto: 'Visualizou a senha.',
   autorId: 'eq-s-oculto',
   autorNome: 'Equipe Oculto',
   criadoEm: serverTimestamp(),
 })))
 await caso('evento de acesso recusa autorNome forjado', assertFails(setDoc(doc(eqSVisivel, 'acessos', 'ac-s1', 'eventos', 'ev-3'), {
   tipo: 'revelou',
-  texto: 'Visualizou a senha',
+  texto: 'Visualizou a senha.',
   autorId: 'eq-s-visivel',
   autorNome: 'Nome Falso',
   criadoEm: serverTimestamp(),
 })))
+await caso('admin não grava evento em acesso da unidade', assertFails(setDoc(doc(admin, 'acessos', 'ac-s1', 'eventos', 'ev-admin'), {
+  tipo: 'atualizacao',
+  texto: 'Acesso atualizado.',
+  autorId: 'admin-1',
+  autorNome: 'Administrador',
+  criadoEm: serverTimestamp(),
+})))
+
+await caso('franqueado 2 cria acesso da unidade 2', assertSucceeds(setDoc(doc(frS2, 'acessos', 'ac-s2'), acessoPayload({
+  unidadeId: 'un-s2',
+  unidadeNome: 'Unidade Dois Senhas',
+  responsavelId: 'fr-s2',
+  responsavelNome: 'Dono Dois Senhas',
+  criadoPor: 'fr-s2',
+  criadoPorNome: 'Dono Dois Senhas',
+}))))
 
 await caso('equipe da unidade cria solicitação de acesso', assertSucceeds(setDoc(doc(eqSOculto, 'solicitacoesAcesso', 'sol-s1'), {
   tipo: 'pedir_acesso',
@@ -625,6 +663,40 @@ await caso('equipe da unidade cria solicitação de acesso', assertSucceeds(setD
   solicitadoPor: 'eq-s-oculto',
   solicitadoPorNome: 'Equipe Oculto',
   motivo: 'Preciso emitir relatórios da unidade.',
+  alvoUid: 'eq-s-oculto',
+  alvoNome: 'Equipe Oculto',
+  decididoPor: null,
+  decididoPorNome: null,
+  criadoEm: serverTimestamp(),
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('solicitação com acessoId de outra unidade falha', assertFails(setDoc(doc(eqSOculto, 'solicitacoesAcesso', 'sol-outra-un'), {
+  tipo: 'pedir_acesso',
+  status: 'aberta',
+  acessoId: 'ac-s2',
+  acessoNome: 'Sistema de Outra Unidade',
+  unidadeId: 'un-s',
+  unidadeNome: 'Unidade Senhas',
+  solicitadoPor: 'eq-s-oculto',
+  solicitadoPorNome: 'Equipe Oculto',
+  motivo: 'Acesso indevido a outra unidade.',
+  alvoUid: 'eq-s-oculto',
+  alvoNome: 'Equipe Oculto',
+  decididoPor: null,
+  decididoPorNome: null,
+  criadoEm: serverTimestamp(),
+  atualizadoEm: serverTimestamp(),
+})))
+await caso('solicitação com unidadeNome forjado falha', assertFails(setDoc(doc(eqSOculto, 'solicitacoesAcesso', 'sol-nome-forjado'), {
+  tipo: 'pedir_acesso',
+  status: 'aberta',
+  acessoId: 'ac-s1',
+  acessoNome: 'Sistema de Gestão',
+  unidadeId: 'un-s',
+  unidadeNome: 'Nome Forjado de Unidade',
+  solicitadoPor: 'eq-s-oculto',
+  solicitadoPorNome: 'Equipe Oculto',
+  motivo: 'Teste nome forjado.',
   alvoUid: 'eq-s-oculto',
   alvoNome: 'Equipe Oculto',
   decididoPor: null,
@@ -654,6 +726,7 @@ await ambiente.cleanup()
 const recusasNoLimite = estouros.length
 if (recusasNoLimite) {
   console.error(`\nrecusas que ainda citam o limite de 1000 expressões: ${recusasNoLimite}`)
+  process.exit(1)
 }
 
 if (falhas.length) {
