@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useFocusTrap } from '../../lib/focusTrap'
 import { Aviso, Button, Campo, inputClass } from '../../components/ui'
 import { buscarSegredo, type Acesso, type SolicitacaoAcesso } from '../../lib/senhas'
 
@@ -26,6 +27,7 @@ export function ModalAprovarRevogacao({
   const [erro, setErro] = useState('')
 
   const senhaInputRef = useRef<HTMLInputElement>(null)
+  const armadilhaRef = useFocusTrap<HTMLDivElement>(Boolean(aberto && solicitacao))
 
   useEffect(() => {
     if (!aberto || !solicitacao || !acesso) {
@@ -95,6 +97,7 @@ export function ModalAprovarRevogacao({
 
   return (
     <div
+      ref={armadilhaRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="titulo-modal-revogacao"
@@ -137,8 +140,19 @@ export function ModalAprovarRevogacao({
           <p className="font-bold text-brand-dark">Proteção do cofre no desligamento:</p>
           <p className="mt-0.5 text-ink/80">
             A aprovação encerra imediatamente o acesso de{' '}
-            <span className="font-semibold">{solicitacao.alvoNome || 'colaborador'}</span> (inclusive se a senha era visível para toda a equipe) e troca a senha no cofre no mesmo passo para que credenciais antigas não continuem ativas.
+            <span className="font-semibold">{solicitacao.alvoNome || 'colaborador'}</span> e troca a senha no cofre no mesmo passo para que credenciais antigas não continuem ativas.
           </p>
+          {acesso?.visivelParaEquipe ? (
+            <p className="mt-2 font-semibold text-brand-dark" role="note">
+              Atenção: este sistema está liberado para a equipe toda da unidade. Ao revogar, a opção “visível para toda a
+              equipe” será desligada e só continuam vendo a senha o franqueado e as pessoas marcadas uma a uma. Se precisar,
+              libere de novo quem deve continuar com acesso depois da troca.
+            </p>
+          ) : (
+            <p className="mt-2 text-ink/70">
+              A revogação mantém desligada a opção “visível para toda a equipe” deste sistema.
+            </p>
+          )}
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">

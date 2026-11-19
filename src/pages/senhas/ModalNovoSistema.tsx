@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useFocusTrap } from '../../lib/focusTrap'
 import { Aviso, Button, Campo, inputClass } from '../../components/ui'
 import {
   CATEGORIAS_ACESSO,
@@ -46,6 +47,7 @@ export function ModalNovoSistema({
   const [erro, setErro] = useState('')
 
   const nomeInputRef = useRef<HTMLInputElement>(null)
+  const armadilhaRef = useFocusTrap<HTMLDivElement>(aberto)
 
   useEffect(() => {
     if (aberto) {
@@ -134,6 +136,7 @@ export function ModalNovoSistema({
 
   return (
     <div
+      ref={armadilhaRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="titulo-novo-sistema"

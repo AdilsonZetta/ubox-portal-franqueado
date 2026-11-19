@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useFocusTrap } from '../../lib/focusTrap'
 import { Aviso, Button, Campo, inputClass } from '../../components/ui'
 import { TIPOS_SOLICITACAO, type TipoSolicitacaoAcesso } from '../../data/senhas'
 import { criarSolicitacaoAcesso, type Acesso } from '../../lib/senhas'
@@ -39,6 +40,7 @@ export function ModalSolicitacao({
   const [erro, setErro] = useState('')
 
   const selectTipoRef = useRef<HTMLSelectElement>(null)
+  const armadilhaRef = useFocusTrap<HTMLDivElement>(aberto)
 
   // Só permite solicitar para acessos da unidade do usuário
   const acessosValidos = acessos.filter(
@@ -123,6 +125,7 @@ export function ModalSolicitacao({
 
   return (
     <div
+      ref={armadilhaRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby="titulo-modal-solicitacao"

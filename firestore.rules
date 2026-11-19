@@ -529,42 +529,51 @@ service cloud.firestore {
     }
 
     match /usuarios/{uid} {
+      // Limite de 1000 expressões: com serverTimestamp o emulador avalia uma passada em que
+      // request.resource ainda não existe e o && não faz curto-circuito em erro. Por isso as
+      // regras caras ficam atrás de um portão barato em ternário (cond ? corpo : false).
       allow get: if isSelf(uid) || isAdmin() || equipeDaMinhaUnidade();
       allow list: if isAdmin() || equipeDaMinhaUnidade();
 
-      allow create: if isSelf(uid)
-        && request.resource.data.papel == 'franqueado'
-        && request.resource.data.ativo == false
-        && request.resource.data.modulosLiberados is list
-        && request.resource.data.modulosLiberados.size() == 0
-        && isValidUsuario(request.resource.data, uid)
-        && emailConfere(request.resource.data)
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.recusado == false
-        && (!('unidadeId' in request.resource.data) || request.resource.data.unidadeId == null || request.resource.data.unidadeId == '')
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+      allow create: if request.resource.data.papel == 'franqueado' ? (
+        isSelf(uid)
+          && request.resource.data.papel == 'franqueado'
+          && request.resource.data.ativo == false
+          && request.resource.data.modulosLiberados is list
+          && request.resource.data.modulosLiberados.size() == 0
+          && isValidUsuario(request.resource.data, uid)
+          && emailConfere(request.resource.data)
+          && request.resource.data.email == request.auth.token.email
+          && request.resource.data.recusado == false
+          && (!('unidadeId' in request.resource.data) || request.resource.data.unidadeId == null || request.resource.data.unidadeId == '')
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.atualizadoEm == request.time
+      ) : false;
 
-      allow create: if isAdmin()
-        && isValidUsuario(request.resource.data, uid)
-        && request.resource.data.papel in ['franqueado', 'equipe_franqueadora', 'equipe_franqueado']
-        && request.resource.data.recusado == false
-        && request.resource.data.criadoPor == request.auth.uid
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time
-        && modulosCabemNaUnidade(request.resource.data);
+      allow create: if request.resource.data.papel in ['franqueado', 'equipe_franqueadora', 'equipe_franqueado'] ? (
+        isAdmin()
+          && isValidUsuario(request.resource.data, uid)
+          && request.resource.data.papel in ['franqueado', 'equipe_franqueadora', 'equipe_franqueado']
+          && request.resource.data.recusado == false
+          && request.resource.data.criadoPor == request.auth.uid
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.atualizadoEm == request.time
+          && modulosCabemNaUnidade(request.resource.data)
+      ) : false;
 
-      allow create: if request.resource.data.papel == 'equipe_franqueado'
-        && franqueadoCriaEquipe()
-        && request.resource.data.keys().hasOnly(['uid', 'email', 'nome', 'papel', 'ativo', 'recusado', 'unidade', 'cidade', 'unidadeId', 'modulosLiberados', 'criadoPor', 'criadoEm', 'atualizadoEm'])
-        && validEmail(request.resource.data.email)
-        && validName(request.resource.data.nome)
-        && request.resource.data.ativo == true
-        && request.resource.data.recusado == false
-        && request.resource.data.criadoPor == request.auth.uid
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time
-        && modulosCabemNaUnidade(request.resource.data);
+      allow create: if request.resource.data.papel == 'equipe_franqueado' ? (
+        request.resource.data.papel == 'equipe_franqueado'
+          && franqueadoCriaEquipe()
+          && request.resource.data.keys().hasOnly(['uid', 'email', 'nome', 'papel', 'ativo', 'recusado', 'unidade', 'cidade', 'unidadeId', 'modulosLiberados', 'criadoPor', 'criadoEm', 'atualizadoEm'])
+          && validEmail(request.resource.data.email)
+          && validName(request.resource.data.nome)
+          && request.resource.data.ativo == true
+          && request.resource.data.recusado == false
+          && request.resource.data.criadoPor == request.auth.uid
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.atualizadoEm == request.time
+          && modulosCabemNaUnidade(request.resource.data)
+      ) : false;
 
       allow update: if resource != null && isSelf(uid)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'atualizadoEm'])
@@ -1090,24 +1099,44 @@ service cloud.firestore {
 
     match /chamados/{chamadoId} {
       allow read: if acessaChamado(resource.data);
-      allow create: if request.resource.data.status == 'aberto'
-        && request.resource.data.abertoPor == request.auth.uid
-        && slaChamadoCerto(request.resource.data)
-        && isValidChamado(request.resource.data)
-        && podeEncerrarChamado(request.resource.data);
-      allow update: if resource != null && request.resource.data.status == 'fechado' && resource.data.abertoPor == request.auth.uid && fechaChamado();
-      allow update: if resource != null && request.resource.data.status == 'aberto' && resource.data.abertoPor == request.auth.uid && reabreChamado();
-      allow update: if resource != null && request.resource.data.status == 'fechado' && request.auth.uid != resource.data.abertoPor && podeEncerrarChamado(resource.data) && fechaChamado();
-      allow update: if resource != null && request.resource.data.status == 'aberto' && request.auth.uid != resource.data.abertoPor && podeEncerrarChamado(resource.data) && reabreChamado();
-      allow update: if resource != null && resource.data.status != 'fechado' && (isAdmin() || operaRede()) && conduzChamado();
-      allow update: if resource != null && resource.data.status == 'fechado' && (isAdmin() || operaRede()) && tiraDeFechado();
+      allow create: if request.resource.data.status == 'aberto' ? (
+        request.resource.data.status == 'aberto'
+          && request.resource.data.abertoPor == request.auth.uid
+          && slaChamadoCerto(request.resource.data)
+          && isValidChamado(request.resource.data)
+          && podeEncerrarChamado(request.resource.data)
+      ) : false;
+      allow update: if request.resource.data.status == 'fechado' && resource.data.status == 'resolvido' ? (
+        resource != null && request.resource.data.status == 'fechado' && resource.data.abertoPor == request.auth.uid && fechaChamado()
+      ) : false;
+      allow update: if request.resource.data.status == 'aberto' && resource.data.status in ['fechado', 'resolvido'] ? (
+        resource != null && request.resource.data.status == 'aberto' && resource.data.abertoPor == request.auth.uid && reabreChamado()
+      ) : false;
+      allow update: if request.resource.data.status == 'fechado' && resource.data.status == 'resolvido' ? (
+        resource != null && request.resource.data.status == 'fechado' && request.auth.uid != resource.data.abertoPor && podeEncerrarChamado(resource.data) && fechaChamado()
+      ) : false;
+      allow update: if request.resource.data.status == 'aberto' && resource.data.status in ['fechado', 'resolvido'] ? (
+        resource != null && request.resource.data.status == 'aberto' && request.auth.uid != resource.data.abertoPor && podeEncerrarChamado(resource.data) && reabreChamado()
+      ) : false;
+      allow update: if resource.data.status != 'fechado' && request.resource.data.atualizadoEm == request.time ? (
+        resource != null && resource.data.status != 'fechado' && (isAdmin() || operaRede()) && conduzChamado()
+      ) : false;
+      allow update: if resource.data.status == 'fechado' && request.resource.data.atualizadoEm == request.time ? (
+        resource != null && resource.data.status == 'fechado' && (isAdmin() || operaRede()) && tiraDeFechado()
+      ) : false;
       allow delete: if false;
 
       match /eventos/{eventoId} {
         allow read: if acessaChamado(get(chamadoPath(chamadoId)).data);
-        allow create: if request.resource.data.tipo == 'comentario' && comentarioConfere(chamadoId);
-        allow create: if request.resource.data.tipo == 'status' && statusConfere(chamadoId);
-        allow create: if request.resource.data.tipo == 'responsavel' && responsavelConfere(chamadoId);
+        allow create: if request.resource.data.tipo == 'comentario' && request.resource.data.autorId == request.auth.uid ? (
+          request.resource.data.tipo == 'comentario' && comentarioConfere(chamadoId)
+        ) : false;
+        allow create: if request.resource.data.tipo == 'status' && request.resource.data.autorId == request.auth.uid ? (
+          request.resource.data.tipo == 'status' && statusConfere(chamadoId)
+        ) : false;
+        allow create: if request.resource.data.tipo == 'responsavel' && request.resource.data.autorId == request.auth.uid ? (
+          request.resource.data.tipo == 'responsavel' && responsavelConfere(chamadoId)
+        ) : false;
         allow update, delete: if false;
       }
     }
@@ -1437,16 +1466,23 @@ service cloud.firestore {
 
     match /acessos/{acessoId} {
       allow read: if acessaMetadadosAcesso(resource.data);
-      allow create: if signedIn() && exists(userPath()) && isValidAcesso(request.resource.data) && podeCriarAcesso(request.resource.data);
-      allow update: if signedIn() && exists(userPath()) && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(acessoId, resource.data, request.resource.data);
+      allow create: if request.resource.data.escopo in ['unidade', 'rede'] && request.resource.data.criadoPor == request.auth.uid ? (
+        signedIn() && exists(userPath()) && isValidAcesso(request.resource.data) && podeCriarAcesso(request.resource.data)
+      ) : false;
+      allow update: if request.resource.data.escopo == resource.data.escopo && request.resource.data.atualizadoEm == request.time ? (
+        signedIn() && exists(userPath()) && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(acessoId, resource.data, request.resource.data)
+      ) : false;
       allow delete: if false;
 
       match /segredo/{segredoId} {
         allow read: if segredoId == 'atual' && signedIn() && exists(userPath()) && perfilPodeLerSegredo(userData(), acessoDoc(acessoId));
         allow create, update: if segredoId == 'atual'
           && signedIn() && exists(userPath())
+          && isValidSegredo(request.resource.data)
           && perfilPodeEscreverSegredo(userData(), acessoDoc(acessoId))
-          && isValidSegredo(request.resource.data);
+          // a troca direta do segredo exige registrar a troca no acesso no mesmo lote
+          && existsAfter(acessoPath(acessoId))
+          && getAfter(acessoPath(acessoId)).data.ultimaTrocaEm == request.time;
         allow delete: if false;
       }
 

@@ -5,6 +5,7 @@ import {
   CATEGORIAS_ACESSO,
   acessosParaIndicadores,
   contarPessoasComAcesso,
+  filtrarAcessosCofre,
   nomeCategoriaAcesso,
   nomeStatusSolicitacao,
   senhaVencida,
@@ -95,19 +96,10 @@ export function CofrePage() {
   }, [user, rede, unidadeId])
 
   // Filtro de acessos
-  const acessosFiltrados = useMemo(() => {
-    return acessos.filter((item) => {
-      if (categoriaFiltro && item.categoria !== categoriaFiltro) return false
-      if (busca.trim()) {
-        const termo = busca.toLowerCase()
-        const nomeMatch = item.nome.toLowerCase().includes(termo)
-        const respMatch = item.responsavelNome.toLowerCase().includes(termo)
-        const catMatch = nomeCategoriaAcesso(item.categoria).toLowerCase().includes(termo)
-        if (!nomeMatch && !respMatch && !catMatch) return false
-      }
-      return true
-    })
-  }, [acessos, categoriaFiltro, busca])
+  const acessosFiltrados = useMemo(
+    () => filtrarAcessosCofre(acessos, { visaoRede: rede, categoria: categoriaFiltro, busca }),
+    [acessos, categoriaFiltro, busca, rede],
+  )
 
   // KPIs
   const kpis = useMemo(() => {
@@ -129,6 +121,8 @@ export function CofrePage() {
   }, [solicitacoes])
 
   if (!user) return null
+  // A equipe da unidade não cadastra sistemas (as rules só deixam o franqueado ou a franqueadora criar).
+  const podeCriarSistema = user.papel !== 'equipe_franqueado'
   if (comoFranqueado && !simulado) {
     return <Aviso>Escolha qual franqueado simular para ver a Central de Acessos dessa unidade.</Aviso>
   }
@@ -162,6 +156,7 @@ export function CofrePage() {
             Pedir acesso
           </Button>
           ) : null}
+          {podeCriarSistema ? (
           <Button
             type="button"
             variant="primary"
@@ -170,6 +165,7 @@ export function CofrePage() {
           >
             <span className="font-bold">+</span> Novo sistema
           </Button>
+          ) : null}
         </div>
       </div>
 
@@ -250,7 +246,11 @@ export function CofrePage() {
                   value={busca}
                   onChange={(e) => setBusca(e.target.value)}
                 />
+                <label htmlFor="categoria-cofre" className="sr-only">
+                  Filtrar por categoria
+                </label>
                 <select
+                  id="categoria-cofre"
                   className="rounded-xl border border-line bg-paper px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brand focus:bg-white"
                   value={categoriaFiltro}
                   onChange={(e) => setCategoriaFiltro(e.target.value)}

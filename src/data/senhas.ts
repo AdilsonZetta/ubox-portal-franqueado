@@ -155,6 +155,26 @@ export function acessosParaIndicadores<T extends { escopo: string }>(acessos: T[
   return visaoRede ? acessos.filter((item) => item.escopo === 'rede') : acessos
 }
 
+/**
+ * Lista da tabela do cofre: parte da mesma base dos indicadores (na visão da rede só os
+ * sistemas de escopo rede) e aplica categoria e busca por nome, responsável ou categoria.
+ */
+export function filtrarAcessosCofre<T extends { escopo: string; nome: string; responsavelNome: string; categoria: string }>(
+  acessos: T[],
+  filtro: { visaoRede: boolean; categoria?: string; busca?: string },
+): T[] {
+  const termo = (filtro.busca ?? '').trim().toLowerCase()
+  return acessosParaIndicadores(acessos, filtro.visaoRede).filter((item) => {
+    if (filtro.categoria && item.categoria !== filtro.categoria) return false
+    if (!termo) return true
+    return (
+      item.nome.toLowerCase().includes(termo) ||
+      item.responsavelNome.toLowerCase().includes(termo) ||
+      nomeCategoriaAcesso(item.categoria).toLowerCase().includes(termo)
+    )
+  })
+}
+
 export function podeGerenciarAcesso(
   usuario: { papel: string; unidadeId?: string | null; modulosLiberados?: string[] },
   acesso: { escopo: string; unidadeId: string },

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
+import { useFocusTrap } from '../../lib/focusTrap'
 import { Aviso, Button, Campo, Selo, inputClass } from '../../components/ui'
 import {
   CATEGORIAS_ACESSO,
@@ -62,7 +63,7 @@ export function ModalDetalheAcesso({
   const [editUrl, setEditUrl] = useState('')
   const [editResponsavel, setEditResponsavel] = useState('')
   const [salvandoEdicao, setSalvandoEdicao] = useState(false)
-  const dialogRef = useRef<HTMLDivElement>(null)
+  const dialogRef = useFocusTrap<HTMLDivElement>(Boolean(acesso))
 
   // Limpa segredo e revelação ao trocar de acesso ou fechar
   useEffect(() => {

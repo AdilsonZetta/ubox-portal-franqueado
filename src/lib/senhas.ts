@@ -559,6 +559,17 @@ export async function criarSolicitacaoAcesso(
   return ref.id
 }
 
+export const MENSAGEM_VISIVEL_CHEIO = 'Este acesso já tem 20 pessoas com permissão. Remova alguém antes de aprovar.'
+
+/**
+ * Antes de aprovar um pedido de acesso: se a pessoa ainda não está na lista e a lista já
+ * tem o máximo de pessoas, a aprovação é bloqueada (nada é gravado).
+ */
+export function bloqueioAprovarPedido(visivelPara: string[], alvoUid: string): string | null {
+  if (visivelPara.includes(alvoUid)) return null
+  return visivelPara.length >= MAX_VISIVEL_PARA ? MENSAGEM_VISIVEL_CHEIO : null
+}
+
 export async function decidirSolicitacaoAcesso(
   decisor: Usuario,
   solicitacao: SolicitacaoAcesso,
@@ -580,11 +591,16 @@ export async function decidirSolicitacaoAcesso(
     }
   }
 
+  if (novoStatus === 'aprovada' && solicitacao.tipo === 'pedir_acesso' && acessoAtual && solicitacao.alvoUid) {
+    const bloqueio = bloqueioAprovarPedido(acessoAtual.visivelPara, solicitacao.alvoUid)
+    if (bloqueio) throw new Error(bloqueio)
+  }
+
   const batch = writeBatch(banco)
 
   if (novoStatus === 'aprovada' && solicitacao.acessoId && acessoAtual) {
     if (solicitacao.tipo === 'pedir_acesso' && solicitacao.alvoUid) {
-      const novosUids = Array.from(new Set([...acessoAtual.visivelPara, solicitacao.alvoUid])).slice(0, MAX_VISIVEL_PARA)
+      const novosUids = Array.from(new Set([...acessoAtual.visivelPara, solicitacao.alvoUid]))
       const acessoRef = doc(banco, 'acessos', acessoAtual.id)
       batch.update(acessoRef, {
         visivelPara: novosUids,

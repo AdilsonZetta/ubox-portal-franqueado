@@ -557,8 +557,17 @@ function segredoPayload(extra = {}) {
   }
 }
 
-await caso('franqueado cria acesso da unidade', assertSucceeds(setDoc(doc(frS, 'acessos', 'ac-s1'), acessoPayload())))
-await caso('franqueado cria segredo do acesso', assertSucceeds(setDoc(doc(frS, 'acessos', 'ac-s1', 'segredo', 'atual'), segredoPayload())))
+await caso('equipe da unidade não cadastra sistema no cofre', assertFails(setDoc(doc(eqSVisivel, 'acessos', 'ac-equipe'), acessoPayload({
+  criadoPor: 'eq-s-visivel',
+  criadoPorNome: 'Pessoa Teste',
+}))))
+await caso('segredo de acesso inexistente é recusado', assertFails(setDoc(doc(frS, 'acessos', 'ac-s-solto', 'segredo', 'atual'), segredoPayload())))
+await caso('franqueado cria acesso e segredo no mesmo lote', (async () => {
+  const lote = writeBatch(frS)
+  lote.set(doc(frS, 'acessos', 'ac-s1'), acessoPayload())
+  lote.set(doc(frS, 'acessos', 'ac-s1', 'segredo', 'atual'), segredoPayload())
+  await assertSucceeds(lote.commit())
+})())
 
 await caso('equipe fora de visivelPara lê metadados', assertSucceeds(getDoc(doc(eqSOculto, 'acessos', 'ac-s1'))))
 await caso('equipe fora de visivelPara NÃO lê segredo', assertFails(getDoc(doc(eqSOculto, 'acessos', 'ac-s1', 'segredo', 'atual'))))
@@ -577,20 +586,22 @@ await caso('unidade desativada não lê acesso', assertFails(getDoc(doc(parado, 
 await caso('equipe da franqueadora lê metadados da unidade', assertSucceeds(getDoc(doc(eqRedeS, 'acessos', 'ac-s1'))))
 await caso('equipe da franqueadora NÃO lê segredo da unidade', assertFails(getDoc(doc(eqRedeS, 'acessos', 'ac-s1', 'segredo', 'atual'))))
 
-await caso('equipe da franqueadora cria acesso da rede', assertSucceeds(setDoc(doc(eqRedeS, 'acessos', 'ac-rede1'), acessoPayload({
-  escopo: 'rede',
-  unidadeId: '',
-  unidadeNome: '',
-  responsavelId: null,
-  responsavelNome: 'Franqueadora',
-  visivelPara: [],
-  visivelParaEquipe: false,
-  criadoPor: 'eq-rede-s',
-  criadoPorNome: 'Rede Senhas',
-}))))
-await caso('equipe da franqueadora grava segredo da rede', assertSucceeds(setDoc(doc(eqRedeS, 'acessos', 'ac-rede1', 'segredo', 'atual'), segredoPayload({
-  atualizadoPor: 'eq-rede-s',
-}))))
+await caso('equipe da franqueadora cria acesso e segredo da rede no mesmo lote', (async () => {
+  const lote = writeBatch(eqRedeS)
+  lote.set(doc(eqRedeS, 'acessos', 'ac-rede1'), acessoPayload({
+    escopo: 'rede',
+    unidadeId: '',
+    unidadeNome: '',
+    responsavelId: null,
+    responsavelNome: 'Franqueadora',
+    visivelPara: [],
+    visivelParaEquipe: false,
+    criadoPor: 'eq-rede-s',
+    criadoPorNome: 'Rede Senhas',
+  }))
+  lote.set(doc(eqRedeS, 'acessos', 'ac-rede1', 'segredo', 'atual'), segredoPayload({ atualizadoPor: 'eq-rede-s' }))
+  await assertSucceeds(lote.commit())
+})())
 await caso('franqueado com módulo lê segredo da rede', assertSucceeds(getDoc(doc(frS, 'acessos', 'ac-rede1', 'segredo', 'atual'))))
 
 await caso('acesso recusa visivelPara com tipo não string', assertFails(setDoc(doc(frS, 'acessos', 'ac-invalido-1'), acessoPayload({
@@ -719,6 +730,22 @@ await caso('franqueado da unidade aprova solicitação', assertSucceeds(updateDo
 
 await caso('franqueado não apaga acesso', assertFails(deleteDoc(doc(frS, 'acessos', 'ac-s1'))))
 await caso('admin não apaga acesso', assertFails(deleteDoc(doc(admin, 'acessos', 'ac-s1'))))
+
+// Item 7 — segredo exige ultimaTrocaEm == request.time no acesso pai
+await caso('gravar segredo sem atualizar ultimaTrocaEm é recusado', assertFails(
+  setDoc(doc(frS, 'acessos', 'ac-s1', 'segredo', 'atual'), segredoPayload())
+))
+
+await caso('gravar segredo com batch correto é aceito', (async () => {
+  const lote = writeBatch(frS)
+  lote.update(doc(frS, 'acessos', 'ac-s1'), {
+    ultimaTrocaEm: serverTimestamp(),
+    pendenteTroca: false,
+    atualizadoEm: serverTimestamp(),
+  })
+  lote.set(doc(frS, 'acessos', 'ac-s1', 'segredo', 'atual'), segredoPayload())
+  await assertSucceeds(lote.commit())
+})())
 
 void manual
 await ambiente.cleanup()
