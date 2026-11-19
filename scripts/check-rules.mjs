@@ -60,6 +60,17 @@ exigir(rules.includes('d.numero is int && d.numero >= 1 && d.numero <= 3'), 'ten
   exigir(leituras.length === 1 && leituras[0].includes('gereUniversidade(userData())') && !leituras[0].includes('podeModulo'), 'gabarito da prova legível por quem não é da franqueadora')
 }
 
+{
+  const ini = rules.indexOf('match /folha/{folhaId}')
+  const folha = rules.slice(ini, rules.indexOf('allow update, delete: if false;', ini))
+  exigir(ini > 0, 'folha de respostas ausente')
+  exigir(!folha.includes('leResultadoUnidade') && !folha.includes('podeModulo'), 'folha de respostas legível pela unidade')
+  const tentativa = rules.slice(rules.indexOf('function isValidTentativaProva'), rules.indexOf('function alunoConfere'))
+  exigir(!tentativa.includes("'respostas'"), 'respostas voltaram para o doc da tentativa')
+}
+exigir(rules.includes('o[5] is string'), 'alternativas da prova sem checagem de texto')
+exigir(rules.includes(': depois.aprovado == false'), 'tentativa presa quando a versão do gabarito muda')
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)

@@ -22,7 +22,7 @@ import {
   type Prova,
   type TentativaProva,
 } from '../../lib/universidade'
-import { listarCursos, listarGabaritos, listarProvas, listarResultados, salvarCurso, salvarProva, type CursoEdicao } from '../../lib/universidadeApi'
+import { fecharTentativaPendente, listarCursos, listarFolhas, listarGabaritos, listarProvas, listarResultados, salvarCurso, salvarProva, type CursoEdicao } from '../../lib/universidadeApi'
 import { useVisao } from '../../lib/visao'
 
 type Aba = 'cursos' | 'resultados'
@@ -49,6 +49,7 @@ export function GestaoUniversidadePage() {
   const [gabaritos, setGabaritos] = useState<Map<string, number[]>>(new Map())
   const [trilha, setTrilha] = useState<ItemTrilhaManual[]>([])
   const [tentativas, setTentativas] = useState<TentativaProva[]>([])
+  const [folhas, setFolhas] = useState<Map<string, number[]>>(new Map())
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
@@ -71,6 +72,7 @@ export function GestaoUniversidadePage() {
         setGabaritos(g)
         setTrilha(ordenarTrilha(t.filter((i) => i.ativo)))
         setTentativas(r)
+        return listarFolhas(r).then((f) => ativo && setFolhas(f))
       })
       .catch((falha) => ativo && setErro(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
@@ -80,7 +82,8 @@ export function GestaoUniversidadePage() {
   }, [user, permitido, tique])
 
   const titulosTrilha = useMemo(() => new Map(trilha.map((i) => [i.documentoId, i.titulo])), [trilha])
-  const resultados = useMemo(() => resumirResultados(tentativas, gabaritos), [tentativas, gabaritos])
+  const resultados = useMemo(() => resumirResultados(tentativas, gabaritos, folhas), [tentativas, gabaritos, folhas])
+  const pendentes = tentativas.filter((t) => t.aprovado === null)
   const titulosCurso = new Map(cursos.map((c) => [c.id, c.titulo]))
 
   if (!user) return null
@@ -156,6 +159,18 @@ export function GestaoUniversidadePage() {
       setErro(mensagemErro(falha))
     } finally {
       setSalvando(false)
+    }
+  }
+
+  async function fecharPendente(id: string) {
+    if (!window.confirm('Fechar esta tentativa como não aprovada? A pessoa perde esta chance.')) return
+    setErro('')
+    try {
+      await fecharTentativaPendente(id)
+      setOk('Tentativa fechada como não aprovada.')
+      setTique((t) => t + 1)
+    } catch (falha) {
+      setErro(mensagemErro(falha))
     }
   }
 
@@ -349,6 +364,20 @@ export function GestaoUniversidadePage() {
             </select>
             <span className="text-sm text-ink/55">{tentativas.length} tentativa{tentativas.length === 1 ? '' : 's'} na rede</span>
           </div>
+          {pendentes.length ? (
+            <Aviso>
+              <p className="font-semibold">Tentativas sem correção</p>
+              <p className="mt-1 text-xs">Normalmente o próprio aparelho corrige em segundos. Se uma ficou parada (por exemplo, a prova mudou de versão no meio), feche como não aprovada.</p>
+              <ul className="mt-2 space-y-1">
+                {pendentes.map((t) => (
+                  <li key={t.id} className="flex flex-wrap items-center gap-2 text-sm">
+                    <span>{t.nome} · {titulosCurso.get(t.cursoId) ?? t.cursoId} · tentativa {t.numero} (ciclo {t.ciclo})</span>
+                    <button type="button" className="text-xs font-semibold text-red-700 underline" onClick={() => void fecharPendente(t.id)}>Fechar como não aprovada</button>
+                  </li>
+                ))}
+              </ul>
+            </Aviso>
+          ) : null}
           {!unidades.length ? <Vazio titulo="Sem resultados ainda" texto="Quando as unidades fizerem as provas, os resultados aparecem aqui." /> : null}
           {unidades.map((u) => (
             <article key={u.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">

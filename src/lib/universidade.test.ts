@@ -27,7 +27,6 @@ const t = (ciclo: number, numero: number, aprovado: boolean | null, extra: Parti
   unidadeId: 'un-1',
   unidadeNome: 'Centro',
   versao: 1,
-  respostas: [0, 1],
   aprovado,
   ...extra,
 })
@@ -72,6 +71,8 @@ describe('nota', () => {
     expect(mensagemResultado(false, 1)).toMatch(/Resta 1 chance/)
     expect(mensagemResultado(false, 0)).toMatch(/reestudo/)
     expect(mensagemResultado(true, 0)).toMatch(/Aprovado/)
+    expect(mensagemResultado(false, 2, true)).toMatch(/atualizou esta prova/)
+    expect(mensagemResultado(false, 0, true)).toMatch(/reestudo/)
   })
 })
 
@@ -100,10 +101,13 @@ describe('edição da prova', () => {
 
 describe('resultados e acesso', () => {
   it('agrupa por unidade e pessoa, com nota só quando há gabarito', () => {
-    const lista = [t(1, 1, false, { respostas: [0, 0] }), t(1, 2, true, { respostas: [0, 1] })]
+    const lista = [t(1, 1, false), t(1, 2, true)]
+    const folhas = new Map([[lista[0].id, [0, 0]], [lista[1].id, [0, 1]]])
     const semNota = resumirResultados(lista, null)
     expect(semNota[0].pessoas[0].cursos[0]).toMatchObject({ aprovado: true, tentativas: 2, melhorNota: null })
-    const comNota = resumirResultados(lista, new Map([['c1', [0, 1]]]))
+    // Franqueado: tem as tentativas, mas não o gabarito nem as folhas.
+    expect(resumirResultados(lista, new Map([['c1', [0, 1]]]), null)[0].pessoas[0].cursos[0].melhorNota).toBeNull()
+    const comNota = resumirResultados(lista, new Map([['c1', [0, 1]]]), folhas)
     expect(comNota[0].pessoas[0].cursos[0].melhorNota).toBe(100)
     const reprovado = resumirResultados([t(1, 1, false), t(1, 2, false), t(1, 3, false)], null)
     expect(reprovado[0].pessoas[0].cursos[0].aguardandoReestudo).toBe(true)

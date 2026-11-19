@@ -1690,6 +1690,11 @@ service cloud.firestore {
       return /databases/$(database)/documents/tentativasProva/$(id);
     }
 
+    // Folha de respostas: subdocumento que só o dono e a franqueadora leem.
+    function folhaPath(id) {
+      return /databases/$(database)/documents/tentativasProva/$(id)/folha/atual;
+    }
+
     function reestudoPath(id) {
       return /databases/$(database)/documents/reestudos/$(id);
     }
@@ -1758,7 +1763,17 @@ service cloud.firestore {
         && q.keys().hasOnly(['id', 'enunciado', 'opcoes'])
         && q.id is string && q.id.size() > 0 && q.id.size() <= 40
         && q.enunciado is string && q.enunciado.size() > 0 && q.enunciado.size() <= 600
-        && q.opcoes is list && q.opcoes.size() >= 2 && q.opcoes.size() <= 6;
+        && opcoesOk(q.opcoes);
+    }
+
+    function opcoesOk(o) {
+      return o is list && o.size() >= 2 && o.size() <= 6
+        && (o.size() <= 0 || (o[0] is string && o[0].size() > 0 && o[0].size() <= 300))
+        && (o.size() <= 1 || (o[1] is string && o[1].size() > 0 && o[1].size() <= 300))
+        && (o.size() <= 2 || (o[2] is string && o[2].size() > 0 && o[2].size() <= 300))
+        && (o.size() <= 3 || (o[3] is string && o[3].size() > 0 && o[3].size() <= 300))
+        && (o.size() <= 4 || (o[4] is string && o[4].size() > 0 && o[4].size() <= 300))
+        && (o.size() <= 5 || (o[5] is string && o[5].size() > 0 && o[5].size() <= 300));
     }
 
     function perguntasOk(p) {
@@ -1905,8 +1920,8 @@ service cloud.firestore {
     }
 
     function isValidTentativaProva(d) {
-      return d.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'respostas', 'aprovado', 'criadoEm', 'corrigidoEm'])
-        && d.keys().hasAll(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'respostas', 'aprovado', 'criadoEm', 'corrigidoEm'])
+      return d.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'aprovado', 'criadoEm', 'corrigidoEm'])
+        && d.keys().hasAll(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'aprovado', 'criadoEm', 'corrigidoEm'])
         && idCursoOk(d.cursoId)
         && d.ciclo is int && d.ciclo >= 1 && d.ciclo <= 50
         && d.numero is int && d.numero >= 1 && d.numero <= 3
@@ -1923,14 +1938,15 @@ service cloud.firestore {
 
     function provaAceita(prova, d) {
       return prova.publicado == true
-        && d.versao == prova.versao
-        && respostasOk(d.respostas, prova.totalPerguntas);
+        && d.versao == prova.versao;
     }
 
     // Correção feita pelas rules: aprovado precisa bater com a conta sobre o gabarito.
-    function correcaoConfere(antes, depois, prova, gabarito) {
+    // Se a prova ganhou versão nova entre o envio e a correção, a tentativa só fecha como reprovada (perde a chance).
+    function correcaoConfere(antes, depois, prova, gabarito, folha) {
       return gabarito.versao == antes.versao
-        && depois.aprovado == (contarAcertos(antes.respostas, gabarito.corretas) * 100 >= prova.notaMinima * prova.totalPerguntas);
+        ? depois.aprovado == (contarAcertos(folha.respostas, gabarito.corretas) * 100 >= prova.notaMinima * prova.totalPerguntas)
+        : depois.aprovado == false;
     }
 
     function leResultadoUnidade(dados, unidadeId) {
@@ -2003,6 +2019,7 @@ service cloud.firestore {
           && alunoConfere(userData(), request.resource.data)
           && exists(provaPath(request.resource.data.cursoId))
           && provaAceita(get(provaPath(request.resource.data.cursoId)).data, request.resource.data)
+          && existsAfter(folhaPath(tentativaId))
           && tentativaNaVez(request.resource.data)
         ) : false;
 
@@ -2011,9 +2028,36 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aprovado', 'corrigidoEm'])
           && request.resource.data.corrigidoEm == request.time
           && exists(gabaritoProvaPath(resource.data.cursoId))
-          && correcaoConfere(resource.data, request.resource.data, get(provaPath(resource.data.cursoId)).data, get(gabaritoProvaPath(resource.data.cursoId)).data)
+          && correcaoConfere(resource.data, request.resource.data, get(provaPath(resource.data.cursoId)).data, get(gabaritoProvaPath(resource.data.cursoId)).data, get(folhaPath(tentativaId)).data)
+        ) : false;
+
+      // A franqueadora pode fechar como reprovada uma tentativa que ficou sem correção.
+      allow update: if resource.data.aprovado == null && request.resource.data.aprovado == false ? (
+          signedIn() && exists(userPath())
+          && gereUniversidade(userData())
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aprovado', 'corrigidoEm'])
+          && request.resource.data.corrigidoEm == request.time
         ) : false;
       allow delete: if false;
+
+      // Folha de respostas: nasce no mesmo lote da tentativa e nunca muda.
+      // O franqueado lê o resultado da equipe no doc pai, mas não a folha (senão reconstruiria o gabarito).
+      match /folha/{folhaId} {
+        allow read: if signedIn() && resource.data.uid == request.auth.uid;
+        allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+        allow create: if request.resource.data.uid == request.auth.uid && folhaId == 'atual' ? (
+            request.resource.data.keys().hasOnly(['uid', 'versao', 'respostas'])
+            && request.resource.data.keys().hasAll(['uid', 'versao', 'respostas'])
+            && tentativaId.size() > request.auth.uid.size() + 1
+            && tentativaId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
+            && !exists(tentativaProvaPath(tentativaId))
+            && existsAfter(tentativaProvaPath(tentativaId))
+            && getAfter(tentativaProvaPath(tentativaId)).data.uid == request.auth.uid
+            && getAfter(tentativaProvaPath(tentativaId)).data.versao == request.resource.data.versao
+            && respostasOk(request.resource.data.respostas, get(provaPath(getAfter(tentativaProvaPath(tentativaId)).data.cursoId)).data.totalPerguntas)
+          ) : false;
+        allow update, delete: if false;
+      }
     }
 
     // Reestudo do manual depois de reprovar nas 3 chances: libera o próximo ciclo.

@@ -55,7 +55,6 @@ export interface TentativaProva {
   unidadeId: string
   unidadeNome: string
   versao: number
-  respostas: number[]
   aprovado: boolean | null
   criadoEm?: unknown
   corrigidoEm?: unknown
@@ -222,6 +221,7 @@ export interface ResultadoUnidade {
 export function resumirResultados(
   tentativas: TentativaProva[],
   gabaritos: Map<string, number[]> | null,
+  folhas: Map<string, number[]> | null = null,
 ): ResultadoUnidade[] {
   const pessoas = new Map<string, ResultadoPessoa>()
   const porPessoaCurso = new Map<string, TentativaProva[]>()
@@ -235,7 +235,9 @@ export function resumirResultados(
     const pessoa = pessoas.get(uid)!
     const aprovado = lista.some((t) => t.aprovado === true)
     const corretas = gabaritos?.get(cursoId)
-    const notas = corretas ? lista.map((t) => notaPercentual(contarAcertos(t.respostas, corretas), corretas.length)) : []
+    const notas = corretas && folhas
+      ? lista.filter((t) => folhas.has(t.id)).map((t) => notaPercentual(contarAcertos(folhas.get(t.id)!, corretas), corretas.length))
+      : []
     const ultimoCiclo = Math.max(...lista.map((t) => t.ciclo))
     const doUltimo = lista.filter((t) => t.ciclo === ultimoCiclo)
     pessoa.cursos.push({
@@ -281,7 +283,10 @@ export function fazUniversidade(usuario: { papel: string } | null | undefined): 
 }
 
 /** Texto que o aluno vê depois da correção. Nunca inclui a resposta certa. */
-export function mensagemResultado(aprovado: boolean, restantes: number): string {
+export function mensagemResultado(aprovado: boolean, restantes: number, provaAtualizada = false): string {
+  if (!aprovado && provaAtualizada) {
+    return `A franqueadora atualizou esta prova enquanto você respondia, então esta tentativa não pôde ser corrigida e contou como não aprovada. ${restantes > 0 ? (restantes === 1 ? 'Resta 1 chance' : `Restam ${restantes} chances`) + ' neste ciclo, já na versão nova.' : 'Conclua o reestudo do manual para liberar novas tentativas.'}`
+  }
   if (aprovado) return 'Aprovado. Parabéns, você atingiu a nota mínima e o certificado já está liberado.'
   if (restantes > 0) return `Você não atingiu a nota mínima. ${restantes === 1 ? 'Resta 1 chance' : `Restam ${restantes} chances`} neste ciclo. Revise as aulas antes de tentar de novo.`
   return 'Você não atingiu a nota mínima nas 3 chances. Volte ao manual indicado e conclua o reestudo para liberar novas tentativas.'

@@ -19,7 +19,7 @@ export function ProvaPage() {
   const [respostas, setRespostas] = useState<Record<string, number>>({})
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
-  const [resultado, setResultado] = useState<{ aprovado: boolean; restantes: number } | null>(null)
+  const [resultado, setResultado] = useState<{ aprovado: boolean; restantes: number; provaAtualizada: boolean } | null>(null)
   const { key } = useLocation()
 
   // Abrir a prova de novo (mesma rota) começa uma folha em branco.
@@ -49,7 +49,7 @@ export function ProvaPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <h1 className="text-2xl font-extrabold">{prova.titulo}</h1>
-        <Aviso tom={resultado.aprovado ? 'ok' : 'erro'}>{mensagemResultado(resultado.aprovado, resultado.restantes)}</Aviso>
+        <Aviso tom={resultado.aprovado ? 'ok' : 'erro'}>{mensagemResultado(resultado.aprovado, resultado.restantes, resultado.provaAtualizada)}</Aviso>
         <p className="text-sm text-ink/60">Por segurança, a prova não mostra quais respostas estavam certas.</p>
         {voltar}
       </div>
@@ -92,8 +92,8 @@ export function ProvaPage() {
     setErro('')
     try {
       const lista = prova.perguntas.map((p) => respostas[p.id])
-      const { aprovado } = await enviarTentativa(user, prova, estado.ciclo, estado.numero, lista)
-      setResultado({ aprovado, restantes: aprovado ? 0 : MAX_TENTATIVAS - estado.numero })
+      const { aprovado, provaAtualizada } = await enviarTentativa(user, prova, estado.ciclo, estado.numero, lista)
+      setResultado({ aprovado, restantes: aprovado ? 0 : MAX_TENTATIVAS - estado.numero, provaAtualizada })
       dados.recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))

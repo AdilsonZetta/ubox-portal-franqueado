@@ -89,7 +89,6 @@ export function mapTentativa(id: string, data: DocumentData): TentativaProva {
     unidadeId: texto(data.unidadeId),
     unidadeNome: texto(data.unidadeNome),
     versao: inteiro(data.versao, 1),
-    respostas: listaNumero(data.respostas),
     aprovado: typeof data.aprovado === 'boolean' ? data.aprovado : null,
     criadoEm: data.criadoEm,
     corrigidoEm: data.corrigidoEm,
@@ -148,12 +147,32 @@ export async function listarMeusReestudos(uid: string): Promise<Reestudo[]> {
   return snap.docs.map((d) => mapReestudo(d.id, d.data()))
 }
 
-/** Franqueadora: toda a rede. Franqueado: só a própria unidade. */
+/**
+ * Franqueadora: toda a rede. Franqueado: só a própria unidade.
+ * O doc da tentativa não tem respostas; a folha (subdocumento) só a franqueadora e o dono leem.
+ */
 export async function listarResultados(usuario: Usuario, gestor: boolean): Promise<TentativaProva[]> {
   const base = collection(requireDb(), 'tentativasProva')
   if (!gestor && (usuario.papel !== 'franqueado' || !usuario.unidadeId)) return []
   const snap = await getDocs(gestor ? base : query(base, where('unidadeId', '==', usuario.unidadeId)))
   return snap.docs.map((d) => mapTentativa(d.id, d.data()))
+}
+
+/** Só a franqueadora: folhas de respostas das tentativas, para calcular a nota. */
+export async function listarFolhas(tentativas: TentativaProva[]): Promise<Map<string, number[]>> {
+  const banco = requireDb()
+  const pares = await Promise.all(
+    tentativas.map(async (t) => {
+      const snap = await getDoc(doc(banco, 'tentativasProva', t.id, 'folha', 'atual')).catch(() => null)
+      return [t.id, snap?.exists() ? listaNumero(snap.data().respostas) : null] as const
+    }),
+  )
+  return new Map(pares.filter((par): par is readonly [string, number[]] => par[1] !== null))
+}
+
+/** Só a franqueadora: fecha como reprovada uma tentativa que ficou sem correção. */
+export async function fecharTentativaPendente(id: string): Promise<void> {
+  await updateDoc(doc(requireDb(), 'tentativasProva', id), { aprovado: false, corrigidoEm: serverTimestamp() })
 }
 
 export interface CursoEdicao {
@@ -222,6 +241,8 @@ export async function salvarProva(autor: Usuario, prova: ProvaEdicao, versaoAtua
 /**
  * Corrige pelas rules: tenta gravar "aprovado"; se as rules recusarem, grava "reprovado".
  * As rules só aceitam o resultado que bate com o gabarito, que o aparelho nunca lê.
+ * Se a prova ganhou versão nova depois do envio, as rules só aceitam "reprovado" (a chance é perdida)
+ * e o fluxo acima resolve isso sozinho, sem deixar a tentativa presa.
  */
 export async function corrigirTentativa(id: string): Promise<boolean> {
   const ref = doc(requireDb(), 'tentativasProva', id)
@@ -234,16 +255,27 @@ export async function corrigirTentativa(id: string): Promise<boolean> {
   }
 }
 
-/** Envia as respostas (ocupa a chance) e em seguida pede a correção. */
+export class ProvaAtualizadaError extends Error {
+  constructor() {
+    super('A franqueadora acabou de atualizar esta prova. Recarregue a página para responder a versão nova; esta chance não foi usada.')
+  }
+}
+
+/**
+ * Envia as respostas (ocupa a chance) e em seguida pede a correção.
+ * A tentativa (sem respostas) e a folha de respostas vão no mesmo lote.
+ */
 export async function enviarTentativa(
   usuario: Usuario,
   prova: Prova,
   ciclo: number,
   numero: number,
   respostas: number[],
-): Promise<{ id: string; aprovado: boolean }> {
+): Promise<{ id: string; aprovado: boolean; provaAtualizada: boolean }> {
+  const banco = requireDb()
   const id = idTentativa(usuario.uid, prova.cursoId, ciclo, numero)
-  await setDoc(doc(requireDb(), 'tentativasProva', id), {
+  const lote = writeBatch(banco)
+  lote.set(doc(banco, 'tentativasProva', id), {
     uid: usuario.uid,
     cursoId: prova.cursoId,
     ciclo,
@@ -252,13 +284,25 @@ export async function enviarTentativa(
     unidadeId: usuario.unidadeId ?? '',
     unidadeNome: usuario.unidade ?? '',
     versao: prova.versao,
-    respostas,
     aprovado: null,
     criadoEm: serverTimestamp(),
     corrigidoEm: null,
   })
+  lote.set(doc(banco, 'tentativasProva', id, 'folha', 'atual'), { uid: usuario.uid, versao: prova.versao, respostas })
+  try {
+    await lote.commit()
+  } catch (falha) {
+    const atual = await obterProva(prova.cursoId)
+    if (atual && atual.versao !== prova.versao) throw new ProvaAtualizadaError()
+    throw falha
+  }
   const aprovado = await corrigirTentativa(id)
-  return { id, aprovado }
+  let provaAtualizada = false
+  if (!aprovado) {
+    const atual = await obterProva(prova.cursoId)
+    provaAtualizada = Boolean(atual && atual.versao !== prova.versao)
+  }
+  return { id, aprovado, provaAtualizada }
 }
 
 /**
