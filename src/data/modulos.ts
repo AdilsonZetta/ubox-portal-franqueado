@@ -72,8 +72,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: Megaphone,
-    descricao: 'Artes, campanhas e o calendário da rede.',
+    descricao: 'Artes, logos e templates aprovados, o calendário de campanhas e os pedidos de peça.',
     recursos: ['Artes aprovadas', 'Calendário', 'Pedido de peça', 'Regras de publicação'],
+    ativo: true,
+    para: '/marketing',
   },
   {
     slug: 'universidade',

@@ -71,6 +71,12 @@ exigir(rules.includes('d.numero is int && d.numero >= 1 && d.numero <= 3'), 'ten
 exigir(rules.includes('o[5] is string'), 'alternativas da prova sem checagem de texto')
 exigir(rules.includes(': depois.aprovado == false'), 'tentativa presa quando a versão do gabarito muda')
 
+exigir(rules.includes('match /marketingMateriais/{materialId}'), 'coleção marketingMateriais ausente')
+exigir(rules.includes('match /marketingCampanhas/{campanhaId}'), 'coleção marketingCampanhas ausente')
+exigir(rules.includes('match /marketingSolicitacoes/{solicitacaoId}'), 'coleção marketingSolicitacoes ausente')
+exigir(rules.includes("v.matches('^https://"), 'links de marketing sem exigir https')
+exigir(rules.includes('data.geradoPorIA == false || data.iaModelo.size() >= 2'), 'conteúdo com IA sem registrar o modelo')
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)
