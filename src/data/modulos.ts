@@ -40,6 +40,8 @@ export const MODULOS: Modulo[] = [
     audiencia: 'franqueado',
     icon: KeyRound,
     descricao: 'Acessos oficiais da unidade, com pedido e troca de senha.',
+    ativo: true,
+    para: '/senhas',
     recursos: ['Cofre dos sistemas', 'Quem pode ver', 'Pedido de acesso', 'Troca de senha'],
   },
   {

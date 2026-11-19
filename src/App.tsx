@@ -9,6 +9,7 @@ import { PortalProvider } from './lib/portal'
 import { AguardandoPage, CadastroPage, CompletarPage, ConfigPendentePage, EntrarPage, RecuperarPage } from './pages/AuthPages'
 import { FranqueadoraPage, GestaoUsuariosPage, MinhaEquipePage } from './pages/GestaoAcessos'
 import { ChamadosPage } from './pages/Chamados'
+import { SenhasPage, SenhasPermissoesPage, SenhasSolicitacoesPage } from './pages/senhas'
 import { BibliotecaPage } from './pages/Biblioteca'
 import { BuscaPage } from './pages/Busca'
 import { CertificadoPage } from './pages/Certificado'
@@ -90,6 +91,9 @@ function Area() {
           <Route path="/gestao-usuarios" element={<Admin><GestaoUsuariosPage /></Admin>} />
           <Route path="/minha-equipe" element={<MinhaEquipePage />} />
           <Route path="/chamados" element={<ChamadosPage />} />
+          <Route path="/senhas" element={<SenhasPage />} />
+          <Route path="/senhas/solicitacoes" element={<SenhasSolicitacoesPage />} />
+          <Route path="/senhas/permissoes" element={<SenhasPermissoesPage />} />
           <Route path="/admin" element={<Admin><PainelPage /></Admin>} />
           <Route path="/admin/usuarios" element={<Admin><UsuariosPage /></Admin>} />
           <Route path="/admin/conformidade" element={<Admin><ConformidadePage /></Admin>} />
