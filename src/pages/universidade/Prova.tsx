@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, useLocation, useParams } from 'react-router-dom'
 import { Aviso, Button, Carregando } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
@@ -20,6 +20,14 @@ export function ProvaPage() {
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
   const [resultado, setResultado] = useState<{ aprovado: boolean; restantes: number } | null>(null)
+  const { key } = useLocation()
+
+  // Abrir a prova de novo (mesma rota) começa uma folha em branco.
+  useEffect(() => {
+    setResultado(null)
+    setRespostas({})
+    setErro('')
+  }, [key, cursoId])
 
   if (!user) return null
   if (dados.carregando && !resultado) return <Carregando texto="Abrindo a prova…" />

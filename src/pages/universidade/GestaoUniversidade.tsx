@@ -130,6 +130,7 @@ export function GestaoUniversidadePage() {
       setOk('Curso salvo.')
       setSelecionado(id)
       setCurso({ ...curso, id })
+      setProva((p) => (p && !p.titulo.trim() ? { ...p, titulo: `Prova: ${curso.titulo.trim()}`.slice(0, 120), manualRetornoId: p.manualRetornoId || curso.aulas[0] || '' } : p))
       setTique((t) => t + 1)
     } catch (falha) {
       setErro(mensagemErro(falha))

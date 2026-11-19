@@ -12,7 +12,7 @@ import {
   type DocumentData,
 } from 'firebase/firestore'
 import { requireDb } from './firebase'
-import { emitirCertificado } from './api'
+import { idCertificado } from './ids'
 import { codigoCertificado } from './format'
 import {
   idReestudo,
@@ -261,15 +261,22 @@ export async function enviarTentativa(
   return { id, aprovado }
 }
 
+/**
+ * Emite o certificado do curso direto (sem ler antes: o documento ainda não existe e as rules
+ * não deixam ler o que não é seu). Se já existir, a criação é recusada e nada muda.
+ */
 export async function emitirCertificadoCurso(usuario: Usuario, curso: Curso, tentativaId: string): Promise<string> {
-  return emitirCertificado({
+  const id = idCertificado(usuario.uid, curso.id)
+  await setDoc(doc(requireDb(), 'certificados', id), {
     uid: usuario.uid,
     trilhaId: curso.id,
     nome: usuario.nome,
     trilhaTitulo: curso.titulo.slice(0, 120),
     codigo: codigoCertificado(curso.id),
     tentativaId,
+    emitidoEm: serverTimestamp(),
   })
+  return id
 }
 
 /** Entrar (ou voltar) no reestudo: cria o registro ou reinicia o cronômetro do servidor. */
