@@ -6,7 +6,7 @@ import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData, formatarDia } from '../../lib/format'
 import { linkHttpsValido } from '../../lib/marketing'
-import { ROTULO_RESULTADO, porSecao, type ExecucaoChecklist } from '../../lib/checklist'
+import { ROTULO_RESULTADO, porSecao, totaisConferem, type ExecucaoChecklist } from '../../lib/checklist'
 import { lerExecucao } from '../../lib/checklistApi'
 import {
   ROTULO_MODALIDADE,
@@ -39,6 +39,7 @@ export function AuditoriaPage() {
   const [auditoria, setAuditoria] = useState<Auditoria | null>(null)
   const [acoes, setAcoes] = useState<AcaoAuditoria[]>([])
   const [execucao, setExecucao] = useState<ExecucaoChecklist | null>(null)
+  const [execFalhou, setExecFalhou] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
@@ -74,6 +75,8 @@ export function AuditoriaPage() {
         if (!ativo) return
         setAcoes(lista)
         setExecucao(exec)
+        // Sem leitura (permissão ou documento ausente), não dá para conferir o score gravado.
+        setExecFalhou(Boolean(a.checklistExecucaoId) && !exec)
       })
       .catch((falha) => ativo && setErro(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
@@ -211,11 +214,22 @@ export function AuditoriaPage() {
                 <AlertTriangle className="h-4 w-4" aria-hidden="true" /> Recalculando pelas respostas, o checklist de referência dá {scoreCkRecalc}% (gravado na auditoria: {a.checklistScore}%).
               </p>
             ) : null}
+            {execFalhou ? (
+              <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-800">
+                <AlertTriangle className="h-4 w-4" aria-hidden="true" /> Não foi possível conferir o checklist de referência: vale o score gravado na auditoria ({a.checklistScore}%).
+              </p>
+            ) : null}
             {!resultadoConfere ? <p className="mt-2 text-xs font-semibold text-red-700">O resultado gravado não confere com a pontuação.</p> : null}
             {a.status === 'rascunho' && gestor ? (
               <p className="mt-3 text-sm"><Link to={`/auditoria/editar/${a.id}`} className="font-semibold text-brand-dark hover:underline">Continuar o rascunho</Link></p>
             ) : null}
           </header>
+
+          {!totaisConferem(a) ? (
+            <Aviso tom="erro">
+              <span className="inline-flex items-center gap-1.5"><AlertTriangle className="h-4 w-4" aria-hidden="true" /> Os totais gravados não conferem com as respostas item a item. Considere as respostas abaixo.</span>
+            </Aviso>
+          ) : null}
 
           {porSecao(a.respostas).map((g) => (
             <section key={g.secao || 'geral'} className="space-y-2">

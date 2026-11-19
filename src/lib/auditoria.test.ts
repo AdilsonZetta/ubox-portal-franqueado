@@ -15,7 +15,7 @@ import {
   versaoMudaAud,
   type ModeloAuditoriaForm,
 } from './auditoria'
-import { calcularTotais, type Resposta } from './checklist'
+import { calcularTotais, totaisConferem, type Resposta } from './checklist'
 
 const r = (itemId: string, resultado: Resposta['resultado'], peso = 1, extra: Partial<Resposta> = {}): Resposta => ({
   itemId, texto: `Item ${itemId}`, secao: '', peso, resultado, obs: '', evidenciaUrl: '', ...extra,
@@ -104,5 +104,15 @@ describe('Auditoria: plano de ação e acesso', () => {
     expect(podeGerirAuditoria({ papel: 'franqueado', modulosLiberados: ['auditoria'] }, false)).toBe(false)
     expect(daUnidade({ papel: 'equipe_franqueado' })).toBe(true)
     expect(daUnidade({ papel: 'equipe_franqueadora' })).toBe(false)
+  })
+})
+
+describe('Auditoria: totais gravados', () => {
+  it('detecta score ou contagens que não conferem com as respostas', () => {
+    const respostas = [r('a', 'ok', 3), r('b', 'nao_ok', 1)]
+    const certo = { respostas, ...calcularTotais(respostas) }
+    expect(totaisConferem(certo)).toBe(true)
+    expect(totaisConferem({ ...certo, score: 100 })).toBe(false)
+    expect(totaisConferem({ ...certo, qtdNaoOk: 0, qtdOk: 2 })).toBe(false)
   })
 })
