@@ -20,6 +20,7 @@ import {
   totaisConferem,
   validarExecucao,
   validarModelo,
+  versaoMuda,
   type ExecucaoChecklist,
   type ItemModelo,
   type ModeloForm,
@@ -66,6 +67,8 @@ describe('pontuação', () => {
     const t = calcularTotais(r)
     expect(totaisConferem({ respostas: r, ...t })).toBe(true)
     expect(totaisConferem({ respostas: r, ...t, qtdNaoOk: 0, qtdOk: 3, score: 100 })).toBe(false)
+    expect(totaisConferem({ respostas: r, ...t, pontosObtidos: 5 })).toBe(false)
+    expect(totaisConferem({ respostas: r, ...t, pontosPossiveis: 7 })).toBe(false)
   })
 
   it('faixas de score', () => {
@@ -109,6 +112,12 @@ describe('modelos', () => {
     expect(itensMudaram(itens, itens.map((i) => ({ ...i })))).toBe(false)
     expect(itensMudaram(itens, [itens[1], itens[0], itens[2]])).toBe(true)
     expect(itensMudaram(itens, itens.map((i) => (i.id === 'i1' ? { ...i, peso: 5 } : i)))).toBe(true)
+    const m = { itens, titulo: 'A', tipo: 'abertura' as const, frequencia: 'diaria' as const, pesoTotal: 6 }
+    expect(versaoMuda(m, { ...m, itens: itens.map((i) => ({ ...i })) })).toBe(false)
+    expect(versaoMuda(m, { ...m, titulo: 'B' })).toBe(true)
+    expect(versaoMuda(m, { ...m, tipo: 'limpeza' })).toBe(true)
+    expect(versaoMuda(m, { ...m, frequencia: 'mensal' })).toBe(true)
+    expect(versaoMuda(m, { ...m, pesoTotal: 7 })).toBe(true)
     expect(novoItemId(itens)).toBe('i4')
     expect(novoItemId([{ id: 'i2' }])).toBe('i3')
   })

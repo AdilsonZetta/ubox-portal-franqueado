@@ -127,9 +127,32 @@ export function pesoValido(peso: unknown): number {
 }
 
 /** Recalcula pelas respostas e compara com o que foi gravado (detecta total adulterado). */
-export function totaisConferem(e: Pick<ExecucaoChecklist, 'respostas' | 'score' | 'qtdNaoOk' | 'qtdOk' | 'qtdNa'>): boolean {
+export function totaisConferem(
+  e: Pick<ExecucaoChecklist, 'respostas' | 'score' | 'qtdNaoOk' | 'qtdOk' | 'qtdNa' | 'pontosObtidos' | 'pontosPossiveis'>,
+): boolean {
   const t = calcularTotais(e.respostas)
-  return t.score === e.score && t.qtdNaoOk === e.qtdNaoOk && t.qtdOk === e.qtdOk && t.qtdNa === e.qtdNa
+  return (
+    t.score === e.score &&
+    t.qtdNaoOk === e.qtdNaoOk &&
+    t.qtdOk === e.qtdOk &&
+    t.qtdNa === e.qtdNa &&
+    t.pontosObtidos === e.pontosObtidos &&
+    t.pontosPossiveis === e.pontosPossiveis
+  )
+}
+
+/** Mudanças que sobem a versão do modelo (mesma regra das rules). */
+export function versaoMuda(
+  antes: Pick<ModeloChecklist, 'itens' | 'titulo' | 'tipo' | 'frequencia' | 'pesoTotal'>,
+  depois: Pick<ModeloChecklist, 'itens' | 'titulo' | 'tipo' | 'frequencia' | 'pesoTotal'>,
+): boolean {
+  return (
+    itensMudaram(antes.itens, depois.itens) ||
+    antes.titulo !== depois.titulo ||
+    antes.tipo !== depois.tipo ||
+    antes.frequencia !== depois.frequencia ||
+    antes.pesoTotal !== depois.pesoTotal
+  )
 }
 
 export function respostasIniciais(modelo: Pick<ModeloChecklist, 'itens'>): Resposta[] {

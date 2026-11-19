@@ -20,10 +20,10 @@ import {
   RESULTADOS,
   TIPOS_CHECKLIST,
   calcularTotais,
-  itensMudaram,
   normalizarItem,
   pesoTotalDe,
   pesoValido,
+  versaoMuda,
   type ExecucaoChecklist,
   type ItemModelo,
   type ModeloChecklist,
@@ -158,7 +158,7 @@ export async function salvarModelo(autor: Usuario, existente: ModeloChecklist | 
     atualizadoEm: serverTimestamp(),
   }
   if (existente) {
-    const versao = itensMudaram(existente.itens, itens) ? existente.versao + 1 : existente.versao
+    const versao = versaoMuda(existente, { itens, titulo: dados.titulo, tipo: dados.tipo, frequencia: dados.frequencia, pesoTotal: dados.pesoTotal }) ? existente.versao + 1 : existente.versao
     await updateDoc(ref, { ...dados, versao })
   } else {
     await setDoc(ref, { ...dados, versao: 1, criadoEm: serverTimestamp() })

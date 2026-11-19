@@ -2169,7 +2169,7 @@ service cloud.firestore {
     function iaOk(data) {
       return data.geradoPorIA is bool
         && data.iaModelo is string && data.iaModelo.size() <= 80
-        && (data.geradoPorIA == false || data.iaModelo.size() >= 2);
+        && (data.geradoPorIA == false || (data.iaModelo.size() >= 2 && data.iaModelo.matches('.*\\S.*')));
     }
 
     function autoriaMarketing(data, dados) {
@@ -2433,14 +2433,20 @@ service cloud.firestore {
           && request.resource.data.versao == 1
           && request.resource.data.criadoEm == request.time
         ) : false;
-      // Edição: itens novos sobem a versão (execuções antigas guardam a versão que usaram).
+      // Edição: itens, título, tipo, frequência ou peso total novos sobem a versão (execuções antigas guardam a versão que usaram).
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
           signedIn() && exists(userPath())
           && gereChecklist(userData())
           && isValidModeloChecklist(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
           && request.resource.data.criadoEm == resource.data.criadoEm
-          && request.resource.data.versao == (request.resource.data.itens == resource.data.itens ? resource.data.versao : resource.data.versao + 1)
+          && request.resource.data.versao == (
+            request.resource.data.itens == resource.data.itens
+              && request.resource.data.titulo == resource.data.titulo
+              && request.resource.data.tipo == resource.data.tipo
+              && request.resource.data.frequencia == resource.data.frequencia
+              && request.resource.data.pesoTotal == resource.data.pesoTotal
+              ? resource.data.versao : resource.data.versao + 1)
         ) : false;
       allow delete: if false;
     }
