@@ -8,6 +8,7 @@ import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
 import { useVisao } from '../lib/visao'
 import { filhosDe } from '../lib/trilha'
+import { CartaoUniversidade } from './universidade/Universidade'
 
 export function HomePage() {
   const { user } = useAuth()
@@ -84,6 +85,8 @@ export function HomePage() {
         </span>
         <span className="text-sm font-semibold text-brand">Abrir</span>
       </Link>
+
+      <CartaoUniversidade />
 
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/45">Áreas</h2>

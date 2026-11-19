@@ -14,8 +14,8 @@ export function CertificadoPage() {
     return (
       <p className="text-sm">
         O certificado ainda não foi emitido.{' '}
-        <Link to={`/trilhas/${trilhaId}`} className="font-semibold text-brand">
-          Voltar à trilha
+        <Link to={`/universidade/curso/${trilhaId}`} className="font-semibold text-brand">
+          Voltar ao curso
         </Link>
       </p>
     )
@@ -30,7 +30,7 @@ export function CertificadoPage() {
         <h1 className="mt-4 text-3xl font-extrabold">Certificado de conclusão</h1>
         <p className="mt-6 text-sm text-ink/60">Certificamos que</p>
         <p className="mt-2 text-2xl font-bold">{certificado.nome}</p>
-        <p className="mt-6 text-sm text-ink/70">concluiu a trilha</p>
+        <p className="mt-6 text-sm text-ink/70">concluiu o curso</p>
         <p className="mt-2 text-xl font-semibold">{certificado.trilhaTitulo || trilha?.titulo}</p>
         <p className="mt-6 text-sm">em {formatarDia(certificado.emitidoEm)}</p>
         <p className="mt-8 text-xs tracking-wide text-ink/50">Código {certificado.codigo}</p>

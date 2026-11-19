@@ -9,6 +9,8 @@ import { formatarData, rotuloExibicao, tipoExibicao } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
 import { useVisao } from '../lib/visao'
+import { useAcessoTrilha } from '../lib/useAcessoTrilha'
+import { Lock } from 'lucide-react'
 import { aplicarSumario } from '../lib/text'
 import { cadeiaCategoria } from '../lib/trilha'
 import type { VersaoDocumento } from '../types'
@@ -23,23 +25,26 @@ export function DocumentoPage() {
   const [erro, setErro] = useState('')
   const [versoes, setVersoes] = useState<VersaoDocumento[]>([])
   const [ocupado, setOcupado] = useState(false)
+  const trilhaAcesso = useAcessoTrilha()
+  const bloqueado = !trilhaAcesso.carregando && !trilhaAcesso.acesso(id).liberado
+  const liberadoPelaTrilha = !trilhaAcesso.carregando && trilhaAcesso.acesso(id).liberado
 
   useEffect(() => {
-    if (!documento || !user) return
+    if (!documento || !user || !liberadoPelaTrilha) return
     document.title = `${documento.titulo} · Portal Ubox`
     if (documento.status !== 'publicado') return
     if (leituraDaVersao(portal.leituras, user.uid, documento.id, documento.versao)) return
     void registrarLeitura(user, documento)
       .then(() => portal.atualizar())
       .catch(() => undefined)
-  }, [documento?.id, documento?.versao, user?.uid])
+  }, [documento?.id, documento?.versao, user?.uid, liberadoPelaTrilha])
 
   useEffect(() => {
-    if (imprimir) {
+    if (imprimir && liberadoPelaTrilha) {
       const timer = window.setTimeout(() => window.print(), 400)
       return () => window.clearTimeout(timer)
     }
-  }, [imprimir])
+  }, [imprimir, liberadoPelaTrilha])
 
   useEffect(() => {
     if (!ehAdmin || !documento) return
@@ -49,6 +54,21 @@ export function DocumentoPage() {
   if (!user) return null
   if (portal.carregando && !documento) return <p>Carregando documento…</p>
   if (!documento) return <Aviso tom="erro">Documento indisponível para o seu usuário.</Aviso>
+  if (trilhaAcesso.carregando) return <p>Carregando documento…</p>
+  if (bloqueado) {
+    return (
+      <div className="mx-auto max-w-3xl space-y-3">
+        <div className="flex items-start gap-3 rounded-2xl border border-line bg-white p-5">
+          <Lock className="mt-0.5 h-5 w-5 shrink-0 text-ink/45" aria-hidden="true" />
+          <div>
+            <h1 className="font-bold">{documento.titulo}</h1>
+            <p className="mt-1 text-sm text-ink/65">Este manual faz parte da trilha e abre quando você concluir o manual anterior.</p>
+            <Link to="/manuais/trilha" className="mt-3 inline-block text-sm font-semibold text-brand-dark hover:underline">Ir para a trilha de manuais</Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   const trilha = cadeiaCategoria(portal.categorias, documento.categoriaId)
   const aceito = portal.aceites.some((aceite) => aceite.uid === user.uid && aceite.documentoId === documento.id && aceite.versao === documento.versao)

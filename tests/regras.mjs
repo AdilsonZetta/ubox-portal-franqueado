@@ -447,7 +447,9 @@ await caso('admin não libera módulo fora da unidade', assertFails(updateDoc(do
   modulosLiberados: ['manuais', 'universidade', 'crm'],
   atualizadoEm: serverTimestamp(),
 })))
-await caso('quem tem universidade lê o gabarito', assertSucceeds(getDoc(doc(dono, 'gabarito', 'g1'))))
+await caso('aluno com universidade não lê mais o gabarito legado', assertFails(getDoc(doc(dono, 'gabarito', 'g1'))))
+await caso('aluno com universidade não lê o gabarito legado do quiz', assertFails(getDoc(doc(dono, 'quizzes', 'q1', 'gabarito', 'item'))))
+await caso('admin lê o gabarito legado', assertSucceeds(getDoc(doc(admin, 'gabarito', 'g1'))))
 await caso('quem não tem universidade não lê o gabarito', assertFails(getDoc(doc(frCh, 'gabarito', 'g1'))))
 await caso('equipe só de manuais não lê o gabarito do quiz', assertFails(getDoc(doc(equipeRede, 'quizzes', 'q1', 'gabarito', 'item'))))
 await caso('franqueado com universidade lê a própria tentativa', assertSucceeds(getDoc(doc(dono, 'tentativas', 't-fr1'))))
@@ -860,6 +862,247 @@ await caso('trilha recusa tempo mínimo abaixo de 30 s', assertFails(setDoc(doc(
 await caso('trilha recusa item de documento que não existe', assertFails(setDoc(doc(adminM, 'manuaisTrilha', 'nao-existe'), itemTrilha('admin-1', 'Admin Rede', { documentoId: 'nao-existe' }))))
 await caso('trilha recusa nome do autor forjado', assertFails(setDoc(doc(eqRedeM, 'manuaisTrilha', 'man-3'), itemTrilha('eq-rede-m', 'Outro Nome'))))
 await caso('ninguém apaga item da trilha', assertFails(deleteDoc(doc(adminM, 'manuaisTrilha', 'man-3'))))
+
+
+// ===================== Módulo 5: Universidade =====================
+const perguntasU = [
+  { id: 'p1', enunciado: 'Pergunta 1', opcoes: ['a', 'b', 'c'] },
+  { id: 'p2', enunciado: 'Pergunta 2', opcoes: ['a', 'b'] },
+  { id: 'p3', enunciado: 'Pergunta 3', opcoes: ['a', 'b', 'c', 'd'] },
+  { id: 'p4', enunciado: 'Pergunta 4', opcoes: ['a', 'b'] },
+]
+const corretasU = [1, 0, 3, 1]
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  await setDoc(doc(banco, 'unidades', 'un-u'), {
+    nome: 'Unidade Uni', cidade: 'Uberaba', responsavel: 'Dono Uni', email: 'fr-u@ubox.test', uid: 'fr-u',
+    modulosLiberados: ['manuais', 'universidade'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'usuarios', 'fr-u'), usuario('fr-u', { unidadeId: 'un-u', unidade: 'Unidade Uni', modulos: ['manuais', 'universidade'], nome: 'Dono Uni' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-u'), usuario('eq-u', { papel: 'equipe_franqueado', unidadeId: 'un-u', unidade: 'Unidade Uni', modulos: ['manuais', 'universidade'], criadoPor: 'fr-u', nome: 'Aluno Uni' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-u2'), usuario('eq-u2', { papel: 'equipe_franqueado', unidadeId: 'un-u', unidade: 'Unidade Uni', modulos: ['manuais', 'universidade'], criadoPor: 'fr-u', nome: 'Aluno Dois' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-u3'), usuario('eq-u3', { papel: 'equipe_franqueado', unidadeId: 'un-u', unidade: 'Unidade Uni', modulos: ['manuais', 'universidade'], criadoPor: 'fr-u', nome: 'Aluno Tres' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-u-sem'), usuario('eq-u-sem', { papel: 'equipe_franqueado', unidadeId: 'un-u', unidade: 'Unidade Uni', modulos: ['manuais'], criadoPor: 'fr-u', nome: 'Sem Uni' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-u'), usuario('eq-rede-u', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['universidade'], nome: 'Rede Uni' }))
+  await setDoc(doc(banco, 'cursos', 'curso-a'), {
+    titulo: 'Curso A', descricao: 'Abertura', ordem: 1, aulas: ['man-1'], publicado: true,
+    atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'cursos', 'curso-rascunho'), {
+    titulo: 'Rascunho', descricao: 'x', ordem: 2, aulas: [], publicado: false,
+    atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'provas', 'curso-a'), {
+    cursoId: 'curso-a', titulo: 'Prova A', notaMinima: 75, perguntas: perguntasU, totalPerguntas: 4,
+    manualRetornoId: 'man-1', tempoReestudoSeg: 60, versao: 1, publicado: true,
+    atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'provasGabarito', 'curso-a'), { cursoId: 'curso-a', corretas: corretasU, versao: 1, atualizadoPor: 'admin-1', atualizadoEm: criado })
+  // Aluno Dois já reprovou 3 vezes no ciclo 1 e tem um reestudo antigo em andamento.
+  for (const numero of [1, 2, 3]) {
+    await setDoc(doc(banco, 'tentativasProva', `eq-u2_curso-a_1_${numero}`), {
+      uid: 'eq-u2', cursoId: 'curso-a', ciclo: 1, numero, nome: 'Aluno Dois', unidadeId: 'un-u', unidadeNome: 'Unidade Uni',
+      versao: 1, aprovado: false, criadoEm: passado, corrigidoEm: passado,
+    })
+  }
+  await setDoc(doc(banco, 'reestudos', 'eq-u2_curso-a_1'), {
+    uid: 'eq-u2', cursoId: 'curso-a', ciclo: 1, documentoId: 'man-1', status: 'em_andamento', iniciadoEm: passado,
+    reinicios: 0, concluidoEm: null, atualizadoEm: passado,
+  })
+})
+
+const frU = ambiente.authenticatedContext('fr-u', { email: 'fr-u@ubox.test' }).firestore()
+const eqU = ambiente.authenticatedContext('eq-u', { email: 'eq-u@ubox.test' }).firestore()
+const eqU2 = ambiente.authenticatedContext('eq-u2', { email: 'eq-u2@ubox.test' }).firestore()
+const eqU3 = ambiente.authenticatedContext('eq-u3', { email: 'eq-u3@ubox.test' }).firestore()
+const eqUSem = ambiente.authenticatedContext('eq-u-sem', { email: 'eq-u-sem@ubox.test' }).firestore()
+const eqRedeU = ambiente.authenticatedContext('eq-rede-u', { email: 'eq-rede-u@ubox.test' }).firestore()
+
+function tentativaU(uid, nome, ciclo, numero, respostas, extra = {}) {
+  return {
+    uid, cursoId: 'curso-a', ciclo, numero, nome, unidadeId: 'un-u', unidadeNome: 'Unidade Uni', versao: 1,
+    aprovado: null, criadoEm: serverTimestamp(), corrigidoEm: null, ...extra,
+  }
+}
+// Envio real: tentativa (sem respostas) + folha de respostas no mesmo lote.
+function enviarU(db, id, uid, nome, ciclo, numero, respostas, extra = {}, folhaExtra = {}) {
+  const lote = writeBatch(db)
+  lote.set(doc(db, 'tentativasProva', id), tentativaU(uid, nome, ciclo, numero, respostas, extra))
+  lote.set(doc(db, 'tentativasProva', id, 'folha', 'atual'), { uid, versao: extra.versao ?? 1, respostas, ...folhaExtra })
+  return lote.commit()
+}
+const corrigir = (aprovado) => ({ aprovado, corrigidoEm: serverTimestamp() })
+const errado = [0, 1, 0, 0]
+
+await caso('aluno lê curso publicado', assertSucceeds(getDoc(doc(eqU, 'cursos', 'curso-a'))))
+await caso('aluno lista cursos publicados', assertSucceeds(getDocs(query(collection(eqU, 'cursos'), where('publicado', '==', true)))))
+await caso('aluno não lê curso em rascunho', assertFails(getDoc(doc(eqU, 'cursos', 'curso-rascunho'))))
+await caso('sem universidade não lê cursos', assertFails(getDoc(doc(eqUSem, 'cursos', 'curso-a'))))
+await caso('aluno lê a prova publicada (sem respostas)', assertSucceeds(getDoc(doc(eqU, 'provas', 'curso-a'))))
+await caso('aluno NUNCA lê o gabarito', assertFails(getDoc(doc(eqU, 'provasGabarito', 'curso-a'))))
+await caso('franqueado NUNCA lê o gabarito', assertFails(getDoc(doc(frU, 'provasGabarito', 'curso-a'))))
+await caso('aluno não lista gabaritos', assertFails(getDocs(collection(eqU, 'provasGabarito'))))
+await caso('franqueadora com universidade lê o gabarito', assertSucceeds(getDoc(doc(eqRedeU, 'provasGabarito', 'curso-a'))))
+await caso('franqueadora sem universidade não lê o gabarito', assertFails(getDoc(doc(eqRedeSem, 'provasGabarito', 'curso-a'))))
+
+await caso('aluno lê a própria tentativa que ainda não existe', assertSucceeds(getDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_1'))))
+await caso('aluno não pula para a 2ª tentativa', assertFails(enviarU(eqU, 'eq-u_curso-a_1_2', 'eq-u', 'Aluno Uni', 1, 2, errado)))
+await caso('aluno não cria tentativa já aprovada', assertFails(enviarU(eqU, 'eq-u_curso-a_1_1', 'eq-u', 'Aluno Uni', 1, 1, corretasU, { aprovado: true })))
+await caso('aluno não cria tentativa com número de respostas errado', assertFails(enviarU(eqU, 'eq-u_curso-a_1_1', 'eq-u', 'Aluno Uni', 1, 1, [0, 1])))
+await caso('aluno não cria tentativa em nome de outro', assertFails(enviarU(eqU, 'eq-u2_curso-a_1_1', 'eq-u2', 'Aluno Dois', 1, 1, errado)))
+await caso('sem universidade não envia prova', assertFails(enviarU(eqUSem, 'eq-u-sem_curso-a_1_1', 'eq-u-sem', 'Sem Uni', 1, 1, errado)))
+await caso('aluno envia a 1ª tentativa', assertSucceeds(enviarU(eqU, 'eq-u_curso-a_1_1', 'eq-u', 'Aluno Uni', 1, 1, errado)))
+await caso('aluno não reenvia a mesma tentativa', assertFails(enviarU(eqU, 'eq-u_curso-a_1_1', 'eq-u', 'Aluno Uni', 1, 1, corretasU)))
+await caso('2ª tentativa só depois de corrigir a 1ª', assertFails(enviarU(eqU, 'eq-u_curso-a_1_2', 'eq-u', 'Aluno Uni', 1, 2, errado)))
+await caso('rules recusam aprovar resposta errada', assertFails(updateDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_1'), corrigir(true))))
+await caso('aluno não troca as respostas na correção', assertFails(setDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_1', 'folha', 'atual'), { uid: 'eq-u', versao: 1, respostas: corretasU })))
+await caso('rules aceitam a reprovação correta', assertSucceeds(updateDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_1'), corrigir(false))))
+await caso('tentativa corrigida é imutável', assertFails(updateDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_1'), corrigir(true))))
+await caso('ninguém apaga tentativa', assertFails(deleteDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_1'))))
+await caso('aluno envia a 2ª tentativa (3 de 4 certas)', assertSucceeds(enviarU(eqU, 'eq-u_curso-a_1_2', 'eq-u', 'Aluno Uni', 1, 2, [1, 0, 3, 0])))
+await caso('rules recusam reprovar quem atingiu a nota', assertFails(updateDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_2'), corrigir(false))))
+await caso('rules aprovam quem atingiu a nota mínima', assertSucceeds(updateDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_2'), corrigir(true))))
+await caso('depois de aprovado não abre a 3ª', assertFails(enviarU(eqU, 'eq-u_curso-a_1_3', 'eq-u', 'Aluno Uni', 1, 3, errado)))
+await caso('não existe 4ª tentativa no ciclo', assertFails(enviarU(eqU2, 'eq-u2_curso-a_1_4', 'eq-u2', 'Aluno Dois', 1, 4, errado)))
+await caso('reprovado 3x não abre ciclo novo sem reestudar', assertFails(enviarU(eqU2, 'eq-u2_curso-a_2_1', 'eq-u2', 'Aluno Dois', 2, 1, errado)))
+await caso('reestudo só depois de reprovar 3x', assertFails(setDoc(doc(eqU, 'reestudos', 'eq-u_curso-a_1'), {
+  uid: 'eq-u', cursoId: 'curso-a', ciclo: 1, documentoId: 'man-1', status: 'em_andamento', iniciadoEm: serverTimestamp(),
+  reinicios: 0, concluidoEm: null, atualizadoEm: serverTimestamp(),
+})))
+await caso('reestudo precisa ser do manual de retorno', assertFails(setDoc(doc(eqU2, 'reestudos', 'eq-u2_curso-a_9'), {
+  uid: 'eq-u2', cursoId: 'curso-a', ciclo: 9, documentoId: 'man-2', status: 'em_andamento', iniciadoEm: serverTimestamp(),
+  reinicios: 0, concluidoEm: null, atualizadoEm: serverTimestamp(),
+})))
+await caso('reestudo não conclui sem o tempo (reinício recente)', assertSucceeds(updateDoc(doc(eqU2, 'reestudos', 'eq-u2_curso-a_1'), {
+  iniciadoEm: serverTimestamp(), reinicios: 1, atualizadoEm: serverTimestamp(),
+})))
+await caso('reestudo recusa conclusão antes do tempo', assertFails(updateDoc(doc(eqU2, 'reestudos', 'eq-u2_curso-a_1'), {
+  status: 'concluido', concluidoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+})))
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  await updateDoc(doc(contexto.firestore(), 'reestudos', 'eq-u2_curso-a_1'), { iniciadoEm: passado })
+})
+await caso('reestudo conclui depois do tempo', assertSucceeds(updateDoc(doc(eqU2, 'reestudos', 'eq-u2_curso-a_1'), {
+  status: 'concluido', concluidoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+})))
+await caso('depois do reestudo abre o ciclo 2', assertSucceeds(enviarU(eqU2, 'eq-u2_curso-a_2_1', 'eq-u2', 'Aluno Dois', 2, 1, corretasU)))
+await caso('ciclo 2 aprova com tudo certo', assertSucceeds(updateDoc(doc(eqU2, 'tentativasProva', 'eq-u2_curso-a_2_1'), corrigir(true))))
+
+await caso('franqueado vê resultados da própria equipe', assertSucceeds(getDocs(query(collection(frU, 'tentativasProva'), where('unidadeId', '==', 'un-u')))))
+await caso('franqueado de outra unidade não vê resultados', assertFails(getDocs(query(collection(dono, 'tentativasProva'), where('unidadeId', '==', 'un-u')))))
+await caso('equipe não vê resultados da unidade inteira', assertFails(getDocs(query(collection(eqU, 'tentativasProva'), where('unidadeId', '==', 'un-u')))))
+await caso('aluno lista as próprias tentativas', assertSucceeds(getDocs(query(collection(eqU, 'tentativasProva'), where('uid', '==', 'eq-u')))))
+await caso('franqueadora vê resultados da rede', assertSucceeds(getDocs(collection(eqRedeU, 'tentativasProva'))))
+
+const autoriaU = (uid, nome) => ({ atualizadoPor: uid, atualizadoPorNome: nome, atualizadoEm: serverTimestamp() })
+await caso('franqueadora cria curso', assertSucceeds(setDoc(doc(eqRedeU, 'cursos', 'curso-b'), {
+  titulo: 'Curso B', descricao: 'Novo', ordem: 3, aulas: ['man-2'], publicado: true, ...autoriaU('eq-rede-u', 'Rede Uni'),
+})))
+await caso('franqueado não cria curso', assertFails(setDoc(doc(frU, 'cursos', 'curso-c'), {
+  titulo: 'Curso C', descricao: 'Novo', ordem: 3, aulas: [], publicado: true, ...autoriaU('fr-u', 'Dono Uni'),
+})))
+const provaB = (versao, extra = {}) => ({
+  cursoId: 'curso-b', titulo: 'Prova B', notaMinima: 70, perguntas: perguntasU.slice(0, 2), totalPerguntas: 2,
+  manualRetornoId: 'man-2', tempoReestudoSeg: 120, versao, publicado: true, ...autoriaU('eq-rede-u', 'Rede Uni'), ...extra,
+})
+const gabB = (versao, corretas = [0, 1]) => ({ cursoId: 'curso-b', corretas, versao, atualizadoPor: 'eq-rede-u', atualizadoEm: serverTimestamp() })
+{
+  const lote = writeBatch(eqRedeU)
+  lote.set(doc(eqRedeU, 'provas', 'curso-b'), provaB(1))
+  lote.set(doc(eqRedeU, 'provasGabarito', 'curso-b'), gabB(1))
+  await caso('franqueadora publica prova + gabarito no mesmo lote', assertSucceeds(lote.commit()))
+}
+await caso('prova sozinha (sem gabarito na mesma versão) é recusada', assertFails(setDoc(doc(eqRedeU, 'provas', 'curso-b'), provaB(2))))
+await caso('prova recusa pergunta com resposta embutida', assertFails((async () => {
+  const lote = writeBatch(eqRedeU)
+  lote.set(doc(eqRedeU, 'provas', 'curso-b'), provaB(2, { perguntas: [{ ...perguntasU[0], correta: 1 }, perguntasU[1]] }))
+  lote.set(doc(eqRedeU, 'provasGabarito', 'curso-b'), gabB(2))
+  await lote.commit()
+})()))
+await caso('gabarito precisa ter o mesmo número de questões', assertFails((async () => {
+  const lote = writeBatch(eqRedeU)
+  lote.set(doc(eqRedeU, 'provas', 'curso-b'), provaB(2))
+  lote.set(doc(eqRedeU, 'provasGabarito', 'curso-b'), gabB(2, [0, 1, 1]))
+  await lote.commit()
+})()))
+{
+  const lote = writeBatch(frU)
+  lote.set(doc(frU, 'provas', 'curso-b'), provaB(2, autoriaU('fr-u', 'Dono Uni')))
+  lote.set(doc(frU, 'provasGabarito', 'curso-b'), { ...gabB(2), atualizadoPor: 'fr-u' })
+  await caso('franqueado não publica prova', assertFails(lote.commit()))
+}
+await caso('nota mínima acima de 100 é recusada', assertFails((async () => {
+  const lote = writeBatch(eqRedeU)
+  lote.set(doc(eqRedeU, 'provas', 'curso-b'), provaB(2, { notaMinima: 120 }))
+  lote.set(doc(eqRedeU, 'provasGabarito', 'curso-b'), gabB(2))
+  await lote.commit()
+})()))
+
+
+// --- Revisão do PR #10 ---
+await caso('tentativa sem folha de respostas é recusada', assertFails(setDoc(doc(eqU3, 'tentativasProva', 'eq-u3_curso-a_1_1'), tentativaU('eq-u3', 'Aluno Tres', 1, 1, errado))))
+await caso('folha não pode ser criada depois da tentativa', assertFails(setDoc(doc(eqU2, 'tentativasProva', 'eq-u2_curso-a_1_1', 'folha', 'atual'), { uid: 'eq-u2', versao: 1, respostas: corretasU })))
+await caso('folha com campo extra é recusada', assertFails(enviarU(eqU3, 'eq-u3_curso-a_1_1', 'eq-u3', 'Aluno Tres', 1, 1, errado, {}, { correta: 1 })))
+await caso('folha com versão diferente da tentativa é recusada', assertFails(enviarU(eqU3, 'eq-u3_curso-a_1_1', 'eq-u3', 'Aluno Tres', 1, 1, errado, {}, { versao: 9 })))
+await caso('franqueado da unidade lê a tentativa (pai) da equipe', assertSucceeds(getDoc(doc(frU, 'tentativasProva', 'eq-u_curso-a_1_1'))))
+await caso('franqueado da unidade NÃO lê a folha de respostas da equipe', assertFails(getDoc(doc(frU, 'tentativasProva', 'eq-u_curso-a_1_1', 'folha', 'atual'))))
+await caso('outro aluno da unidade não lê a folha alheia', assertFails(getDoc(doc(eqU2, 'tentativasProva', 'eq-u_curso-a_1_1', 'folha', 'atual'))))
+await caso('dono lê a própria folha', assertSucceeds(getDoc(doc(eqU, 'tentativasProva', 'eq-u_curso-a_1_1', 'folha', 'atual'))))
+await caso('franqueadora lê a folha', assertSucceeds(getDoc(doc(eqRedeU, 'tentativasProva', 'eq-u_curso-a_1_1', 'folha', 'atual'))))
+await caso('consulta da equipe não traz respostas', (async () => {
+  const snap = await getDocs(query(collection(frU, 'tentativasProva'), where('unidadeId', '==', 'un-u')))
+  if (!snap.size) throw new Error('consulta vazia')
+  if (snap.docs.some((d) => 'respostas' in d.data())) throw new Error('respostas vazaram no doc pai')
+})())
+await caso('tentativa não aceita respostas no doc pai', assertFails(enviarU(eqU3, 'eq-u3_curso-a_1_1', 'eq-u3', 'Aluno Tres', 1, 1, errado, { respostas: errado })))
+
+// Gabarito muda entre o envio e a correção.
+await caso('aluno 3 envia a 1ª tentativa (certa)', assertSucceeds(enviarU(eqU3, 'eq-u3_curso-a_1_1', 'eq-u3', 'Aluno Tres', 1, 1, corretasU)))
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  await updateDoc(doc(banco, 'provas', 'curso-a'), { versao: 2 })
+  await updateDoc(doc(banco, 'provasGabarito', 'curso-a'), { versao: 2 })
+})
+await caso('versão mudou: rules não aprovam mesmo com tudo certo', assertFails(updateDoc(doc(eqU3, 'tentativasProva', 'eq-u3_curso-a_1_1'), corrigir(true))))
+await caso('versão mudou: dono fecha como reprovada (perde a chance)', assertSucceeds(updateDoc(doc(eqU3, 'tentativasProva', 'eq-u3_curso-a_1_1'), corrigir(false))))
+await caso('envio com versão antiga da prova é recusado', assertFails(enviarU(eqU3, 'eq-u3_curso-a_1_2', 'eq-u3', 'Aluno Tres', 1, 2, corretasU)))
+await caso('envio na versão nova é aceito', assertSucceeds(enviarU(eqU3, 'eq-u3_curso-a_1_2', 'eq-u3', 'Aluno Tres', 1, 2, corretasU, { versao: 2 })))
+await caso('franqueado não fecha tentativa pendente', assertFails(updateDoc(doc(frU, 'tentativasProva', 'eq-u3_curso-a_1_2'), corrigir(false))))
+await caso('franqueadora não aprova tentativa pendente', assertFails(updateDoc(doc(eqRedeU, 'tentativasProva', 'eq-u3_curso-a_1_2'), corrigir(true))))
+await caso('franqueadora fecha tentativa pendente como reprovada', assertSucceeds(updateDoc(doc(eqRedeU, 'tentativasProva', 'eq-u3_curso-a_1_2'), corrigir(false))))
+await caso('franqueadora não reabre tentativa corrigida', assertFails(updateDoc(doc(eqRedeU, 'tentativasProva', 'eq-u3_curso-a_1_2'), corrigir(false))))
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  await updateDoc(doc(banco, 'provas', 'curso-a'), { versao: 1 })
+  await updateDoc(doc(banco, 'provasGabarito', 'curso-a'), { versao: 1 })
+})
+
+// Alternativas precisam ser texto curto.
+for (const [nome, opcoes] of [['alternativa não-texto', ['a', 7]], ['alternativa vazia', ['a', '']], ['alternativa gigante', ['a', 'x'.repeat(301)]], ['alternativa em mapa', ['a', { correta: true }]]]) {
+  await caso(`prova recusa ${nome}`, assertFails((async () => {
+    const lote = writeBatch(eqRedeU)
+    lote.set(doc(eqRedeU, 'provas', 'curso-b'), provaB(2, { perguntas: [{ id: 'p1', enunciado: 'Q', opcoes }, perguntasU[1]] }))
+    lote.set(doc(eqRedeU, 'provasGabarito', 'curso-b'), gabB(2))
+    await lote.commit()
+  })()))
+}
+await caso('prova com alternativas válidas na versão 2', assertSucceeds((async () => {
+  const lote = writeBatch(eqRedeU)
+  lote.set(doc(eqRedeU, 'provas', 'curso-b'), provaB(2))
+  lote.set(doc(eqRedeU, 'provasGabarito', 'curso-b'), gabB(2))
+  await lote.commit()
+})()))
+
+await caso('aluno emite certificado do curso aprovado', assertSucceeds(setDoc(doc(eqU, 'certificados', 'eq-u_curso-a'), {
+  uid: 'eq-u', trilhaId: 'curso-a', nome: 'Aluno Uni', trilhaTitulo: 'Curso A', emitidoEm: serverTimestamp(), codigo: 'UBOX-ABC123', tentativaId: 'eq-u_curso-a_1_2',
+})))
+await caso('não emite certificado com tentativa reprovada', assertFails(setDoc(doc(eqU2, 'certificados', 'eq-u2_curso-a'), {
+  uid: 'eq-u2', trilhaId: 'curso-a', nome: 'Aluno Dois', trilhaTitulo: 'Curso A', emitidoEm: serverTimestamp(), codigo: 'UBOX-ABC124', tentativaId: 'eq-u2_curso-a_1_3',
+})))
+await caso('não emite certificado com tentativa alheia', assertFails(setDoc(doc(eqU2, 'certificados', 'eq-u2_curso-a'), {
+  uid: 'eq-u2', trilhaId: 'curso-a', nome: 'Aluno Dois', trilhaTitulo: 'Curso A', emitidoEm: serverTimestamp(), codigo: 'UBOX-ABC125', tentativaId: 'eq-u_curso-a_1_2',
+})))
+await caso('aluno não cria tentativa legada (nota do aparelho)', assertFails(setDoc(doc(eqU, 'tentativas', 't-novo'), { uid: 'eq-u', quizId: 'q1', nota: 100, aprovado: true })))
 
 void manual
 await ambiente.cleanup()

@@ -4,6 +4,7 @@ import { useAuth } from '../lib/auth'
 import { primeiroNome } from '../lib/format'
 import { podeModulo } from '../lib/modulosAcesso'
 import { useVisao } from '../lib/visao'
+import { CartaoUniversidade } from './universidade/Universidade'
 
 export function ModulosPage() {
   const { user } = useAuth()
@@ -17,6 +18,11 @@ export function ModulosPage() {
         <p className="mt-2 max-w-2xl text-sm text-ink/60">
           Cada frente da rede tem o seu lugar. Manuais e a Universidade já estão abertos. Os demais módulos mostram o que vem por aí.
         </p>
+        {podeModulo(pessoa, 'universidade', comoFranqueado) ? (
+          <div className="mt-6 max-w-2xl">
+            <CartaoUniversidade />
+          </div>
+        ) : null}
         <div className="mt-8 space-y-8">
           {GRUPOS.map((grupo) => {
             const itens = MODULOS.filter((modulo) => modulo.grupo === grupo && (ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado)))

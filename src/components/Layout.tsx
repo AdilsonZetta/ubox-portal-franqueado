@@ -6,6 +6,7 @@ import { useAuth } from '../lib/auth'
 import { observarPendentes } from '../lib/chamados'
 import { podeModulo } from '../lib/modulosAcesso'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
+import { podeGerirUniversidade } from '../lib/universidade'
 import { observarSolicitacoesAbertas } from '../lib/senhas'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
@@ -28,7 +29,7 @@ const itensManuais = [
 
 function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/modulos/')) return pathname.split('/')[2] || null
-  if (pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
+  if (pathname.startsWith('/universidade') || pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
   if (pathname.startsWith('/chamados')) return 'chamados'
   if (pathname.startsWith('/senhas')) return 'senhas'
   if (pathname.startsWith('/franqueadora')) return 'gestao-franqueadora'
@@ -198,9 +199,14 @@ export function Layout() {
                           : null}
                         {modulo.slug === 'universidade' ? (
                           <>
-                            <NavLink to="/trilhas" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
-                              Trilhas
+                            <NavLink to="/universidade" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Cursos
                             </NavLink>
+                            {podeGerirUniversidade(user, ehAdmin) && !comoFranqueado ? (
+                              <NavLink to="/universidade/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                Gestão da Universidade
+                              </NavLink>
+                            ) : null}
                             <NavLink to="/meus-certificados" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                               Meus certificados
                             </NavLink>

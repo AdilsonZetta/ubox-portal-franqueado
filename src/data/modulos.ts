@@ -81,9 +81,9 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: GraduationCap,
-    descricao: 'Trilhas, quizzes e certificados da formação.',
+    descricao: 'Cursos, provas e certificados da formação.',
     ativo: true,
-    para: '/trilhas',
+    para: '/universidade',
     recursos: [],
   },
   {
