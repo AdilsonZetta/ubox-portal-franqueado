@@ -76,6 +76,8 @@ exigir(rules.includes('match /marketingCampanhas/{campanhaId}'), 'coleção mark
 exigir(rules.includes('match /marketingSolicitacoes/{solicitacaoId}'), 'coleção marketingSolicitacoes ausente')
 exigir(rules.includes("v.matches('^https://"), 'links de marketing sem exigir https')
 exigir(rules.includes('data.geradoPorIA == false || data.iaModelo.size() >= 2'), 'conteúdo com IA sem registrar o modelo')
+exigir(rules.includes('data.publico == true ? data.unidades.size() == 0 : data.unidades.size() > 0'), 'material de marketing sem coerência entre público e unidades')
+exigir(rules.includes('request.resource.data.complemento != resource.data.complemento'), 'resposta da unidade ao pedido de marketing sem exigir texto novo')
 
 if (erros.length) {
   console.error(erros.join('\n'))

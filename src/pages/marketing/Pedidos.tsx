@@ -115,8 +115,12 @@ export function PedidosMarketingPage() {
         setOk('Pedido cancelado.')
       } else {
         const texto = (respostas[pedido.id] ?? '').trim()
-        if (!texto) {
+        if (texto.length < 2) {
           setErro('Escreva a resposta para a franqueadora.')
+          return
+        }
+        if (texto === pedido.complemento) {
+          setErro('A resposta é igual à anterior. Escreva o que mudou.')
           return
         }
         await responderPedido(pedido.id, texto)

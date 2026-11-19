@@ -2194,6 +2194,7 @@ service cloud.firestore {
         && dataOpcional(data.validoAte)
         && data.publico is bool
         && listaUnidadesOk(data.unidades)
+        && (data.publico == true ? data.unidades.size() == 0 : data.unidades.size() > 0)
         && data.ativo is bool
         && iaOk(data)
         && data.criadoEm is timestamp;
@@ -2324,6 +2325,8 @@ service cloud.firestore {
           && daUnidadeMkt(userData(), resource.data.unidadeId)
           && (resource.data.uid == request.auth.uid || userData().papel == 'franqueado')
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'complemento', 'atualizadoEm'])
+          && (request.resource.data.status == 'cancelada'
+            || (request.resource.data.complemento.size() >= 2 && request.resource.data.complemento != resource.data.complemento))
           && isValidSolicitacaoMkt(request.resource.data)
         ) : false;
       allow delete: if false;
