@@ -2101,5 +2101,235 @@ service cloud.firestore {
         ) : false;
       allow delete: if false;
     }
+
+    // ===============================================================
+    // Central de Marketing (Módulo 6)
+    // ===============================================================
+    // Materiais ficam fora do Firebase (Drive ou outro link https): Spark, sem Cloud Storage.
+
+    function gereMarketing(dados) {
+      return contaAtiva(dados)
+        && (
+          dados.papel == 'admin'
+          || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'marketing'))
+        );
+    }
+
+    function unidadeMarketing(dados) {
+      return contaAtiva(dados)
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && temLista(dados, 'marketing')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados);
+    }
+
+    function linkHttps(v, opcional) {
+      return v is string && v.size() <= 600
+        && ((opcional && v == '') || v.matches('^https://[^\\s]+$'));
+    }
+
+    function listaUnidadesOk(l) {
+      return l is list && l.size() <= 30
+        && (l.size() <= 0 || (l[0] is string && l[0].size() > 0 && l[0].size() <= 64))
+        && (l.size() <= 1 || (l[1] is string && l[1].size() > 0 && l[1].size() <= 64))
+        && (l.size() <= 2 || (l[2] is string && l[2].size() > 0 && l[2].size() <= 64))
+        && (l.size() <= 3 || (l[3] is string && l[3].size() > 0 && l[3].size() <= 64))
+        && (l.size() <= 4 || (l[4] is string && l[4].size() > 0 && l[4].size() <= 64))
+        && (l.size() <= 5 || (l[5] is string && l[5].size() > 0 && l[5].size() <= 64))
+        && (l.size() <= 6 || (l[6] is string && l[6].size() > 0 && l[6].size() <= 64))
+        && (l.size() <= 7 || (l[7] is string && l[7].size() > 0 && l[7].size() <= 64))
+        && (l.size() <= 8 || (l[8] is string && l[8].size() > 0 && l[8].size() <= 64))
+        && (l.size() <= 9 || (l[9] is string && l[9].size() > 0 && l[9].size() <= 64))
+        && (l.size() <= 10 || (l[10] is string && l[10].size() > 0 && l[10].size() <= 64))
+        && (l.size() <= 11 || (l[11] is string && l[11].size() > 0 && l[11].size() <= 64))
+        && (l.size() <= 12 || (l[12] is string && l[12].size() > 0 && l[12].size() <= 64))
+        && (l.size() <= 13 || (l[13] is string && l[13].size() > 0 && l[13].size() <= 64))
+        && (l.size() <= 14 || (l[14] is string && l[14].size() > 0 && l[14].size() <= 64))
+        && (l.size() <= 15 || (l[15] is string && l[15].size() > 0 && l[15].size() <= 64))
+        && (l.size() <= 16 || (l[16] is string && l[16].size() > 0 && l[16].size() <= 64))
+        && (l.size() <= 17 || (l[17] is string && l[17].size() > 0 && l[17].size() <= 64))
+        && (l.size() <= 18 || (l[18] is string && l[18].size() > 0 && l[18].size() <= 64))
+        && (l.size() <= 19 || (l[19] is string && l[19].size() > 0 && l[19].size() <= 64))
+        && (l.size() <= 20 || (l[20] is string && l[20].size() > 0 && l[20].size() <= 64))
+        && (l.size() <= 21 || (l[21] is string && l[21].size() > 0 && l[21].size() <= 64))
+        && (l.size() <= 22 || (l[22] is string && l[22].size() > 0 && l[22].size() <= 64))
+        && (l.size() <= 23 || (l[23] is string && l[23].size() > 0 && l[23].size() <= 64))
+        && (l.size() <= 24 || (l[24] is string && l[24].size() > 0 && l[24].size() <= 64))
+        && (l.size() <= 25 || (l[25] is string && l[25].size() > 0 && l[25].size() <= 64))
+        && (l.size() <= 26 || (l[26] is string && l[26].size() > 0 && l[26].size() <= 64))
+        && (l.size() <= 27 || (l[27] is string && l[27].size() > 0 && l[27].size() <= 64))
+        && (l.size() <= 28 || (l[28] is string && l[28].size() > 0 && l[28].size() <= 64))
+        && (l.size() <= 29 || (l[29] is string && l[29].size() > 0 && l[29].size() <= 64));
+    }
+
+    function dataOpcional(v) {
+      return v == null || v is timestamp;
+    }
+
+    function iaOk(data) {
+      return data.geradoPorIA is bool
+        && data.iaModelo is string && data.iaModelo.size() <= 80
+        && (data.geradoPorIA == false || data.iaModelo.size() >= 2);
+    }
+
+    function autoriaMarketing(data, dados) {
+      return data.atualizadoPor == request.auth.uid
+        && data.atualizadoPorNome == dados.nome
+        && data.atualizadoEm == request.time;
+    }
+
+    function isValidMaterial(data) {
+      return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'categoria', 'campanhaId', 'url', 'previaUrl', 'formato', 'regrasUso', 'validoDe', 'validoAte', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'categoria', 'campanhaId', 'url', 'previaUrl', 'formato', 'regrasUso', 'validoDe', 'validoAte', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && validName(data.titulo)
+        && validShort(data.descricao, 1000)
+        && data.tipo in ['arte', 'campanha', 'logo', 'marca', 'template', 'video', 'outro']
+        && validShort(data.categoria, 60)
+        && validShort(data.campanhaId, 64)
+        && linkHttps(data.url, false)
+        && linkHttps(data.previaUrl, true)
+        && validShort(data.formato, 40)
+        && validShort(data.regrasUso, 1000)
+        && dataOpcional(data.validoDe)
+        && dataOpcional(data.validoAte)
+        && data.publico is bool
+        && listaUnidadesOk(data.unidades)
+        && (data.publico == true ? data.unidades.size() == 0 : data.unidades.size() > 0)
+        && data.ativo is bool
+        && iaOk(data)
+        && data.criadoEm is timestamp;
+    }
+
+    function isValidCampanhaMkt(data) {
+      return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'inicio', 'fim', 'ativo', 'geradoPorIA', 'iaModelo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'inicio', 'fim', 'ativo', 'geradoPorIA', 'iaModelo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && validName(data.titulo)
+        && validShort(data.descricao, 1000)
+        && data.tipo in ['campanha', 'data_comemorativa', 'lancamento']
+        && data.inicio is timestamp
+        && data.fim is timestamp
+        && data.fim >= data.inicio
+        && data.ativo is bool
+        && iaOk(data);
+    }
+
+    match /marketingMateriais/{materialId} {
+      allow read: if signedIn() && exists(userPath()) && gereMarketing(userData());
+      // Unidade: só materiais ativos, para a rede toda ou para a própria unidade.
+      allow read: if resource.data.ativo == true && resource.data.publico == true ? (
+          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+        ) : false;
+      allow read: if resource.data.ativo == true ? (
+          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+          && userData().unidadeId in resource.data.unidades
+        ) : false;
+      allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereMarketing(userData())
+          && isValidMaterial(request.resource.data)
+          && autoriaMarketing(request.resource.data, userData())
+          && (resource == null || request.resource.data.criadoEm == resource.data.criadoEm)
+          && (resource != null || request.resource.data.criadoEm == request.time)
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /marketingCampanhas/{campanhaId} {
+      allow read: if signedIn() && exists(userPath()) && gereMarketing(userData());
+      allow read: if resource.data.ativo == true ? (
+          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+        ) : false;
+      allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereMarketing(userData())
+          && isValidCampanhaMkt(request.resource.data)
+          && autoriaMarketing(request.resource.data, userData())
+        ) : false;
+      allow delete: if false;
+    }
+
+    // Pedido de peça da unidade para a franqueadora.
+    function isValidSolicitacaoMkt(data) {
+      return data.keys().hasOnly(['uid', 'nome', 'unidadeId', 'unidadeNome', 'titulo', 'tipoPeca', 'descricao', 'medidas', 'prazoDesejado', 'referenciaUrl', 'campanhaId', 'status', 'complemento', 'resposta', 'entregaUrl', 'geradoPorIA', 'iaModelo', 'responsavelNome', 'criadoEm', 'atualizadoEm', 'entregueEm'])
+        && data.keys().hasAll(['uid', 'nome', 'unidadeId', 'unidadeNome', 'titulo', 'tipoPeca', 'descricao', 'medidas', 'prazoDesejado', 'referenciaUrl', 'campanhaId', 'status', 'complemento', 'resposta', 'entregaUrl', 'geradoPorIA', 'iaModelo', 'responsavelNome', 'criadoEm', 'atualizadoEm', 'entregueEm'])
+        && data.status in ['aberta', 'em_producao', 'aguardando_unidade', 'entregue', 'cancelada']
+        && validShort(data.complemento, 2000)
+        && validShort(data.resposta, 2000)
+        && linkHttps(data.entregaUrl, true)
+        && iaOk(data)
+        && validShort(data.responsavelNome, 120)
+        && data.atualizadoEm == request.time;
+    }
+
+    function solicitacaoNovaOk(data, dados) {
+      return data.uid == request.auth.uid
+        && data.nome == dados.nome
+        && data.unidadeId == dados.unidadeId
+        && data.unidadeNome == dados.get('unidade', '')
+        && validName(data.titulo)
+        && data.tipoPeca in ['post', 'story', 'banner', 'panfleto', 'fachada', 'video', 'outro']
+        && data.descricao is string && data.descricao.size() >= 10 && data.descricao.size() <= 2000
+        && validShort(data.medidas, 120)
+        && dataOpcional(data.prazoDesejado)
+        && linkHttps(data.referenciaUrl, true)
+        && validShort(data.campanhaId, 64)
+        && data.complemento == ''
+        && data.resposta == ''
+        && data.entregaUrl == ''
+        && data.geradoPorIA == false
+        && data.iaModelo == ''
+        && data.responsavelNome == ''
+        && data.criadoEm == request.time
+        && data.entregueEm == null;
+    }
+
+    function daUnidadeMkt(dados, unidadeId) {
+      return unidadeMarketing(dados) && dados.unidadeId == unidadeId;
+    }
+
+    match /marketingSolicitacoes/{solicitacaoId} {
+      allow read: if signedIn() && exists(userPath()) && gereMarketing(userData());
+      // Quem pediu lê o próprio pedido; o franqueado lê os pedidos da unidade.
+      allow read: if resource.data.uid == request.auth.uid ? (
+          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+        ) : false;
+      allow read: if signedIn() && exists(userPath())
+        && userData().papel == 'franqueado'
+        && daUnidadeMkt(userData(), resource.data.unidadeId);
+
+      allow create: if request.resource.data.uid == request.auth.uid && request.resource.data.status == 'aberta' ? (
+          signedIn() && exists(userPath())
+          && unidadeMarketing(userData())
+          && isValidSolicitacaoMkt(request.resource.data)
+          && solicitacaoNovaOk(request.resource.data, userData())
+        ) : false;
+
+      // Franqueadora: andamento, resposta e entrega (com link e registro de IA).
+      allow update: if request.resource.data.status != resource.data.status || request.resource.data.resposta != resource.data.resposta ? (
+          signedIn() && exists(userPath())
+          && gereMarketing(userData())
+          && resource.data.status in ['aberta', 'em_producao', 'aguardando_unidade']
+          && request.resource.data.status in ['em_producao', 'aguardando_unidade', 'entregue', 'cancelada']
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'resposta', 'entregaUrl', 'geradoPorIA', 'iaModelo', 'responsavelNome', 'atualizadoEm', 'entregueEm'])
+          && isValidSolicitacaoMkt(request.resource.data)
+          && request.resource.data.responsavelNome == userData().nome
+          && (request.resource.data.status == 'entregue'
+            ? (request.resource.data.entregaUrl.size() > 0 && request.resource.data.entregueEm == request.time)
+            : request.resource.data.entregueEm == null)
+        ) : false;
+
+      // Unidade: cancela enquanto não começou, ou responde quando a franqueadora pediu informação.
+      allow update: if (request.resource.data.status == 'cancelada' && resource.data.status == 'aberta')
+          || (request.resource.data.status == 'aberta' && resource.data.status == 'aguardando_unidade') ? (
+          signedIn() && exists(userPath())
+          && daUnidadeMkt(userData(), resource.data.unidadeId)
+          && (resource.data.uid == request.auth.uid || userData().papel == 'franqueado')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'complemento', 'atualizadoEm'])
+          && (request.resource.data.status == 'cancelada'
+            || (request.resource.data.complemento.size() >= 2 && request.resource.data.complemento != resource.data.complemento))
+          && isValidSolicitacaoMkt(request.resource.data)
+        ) : false;
+      allow delete: if false;
+    }
   }
 }

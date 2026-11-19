@@ -30,6 +30,10 @@ import { CursoPage } from './pages/universidade/Curso'
 import { ProvaPage } from './pages/universidade/Prova'
 import { ReestudoPage } from './pages/universidade/Reestudo'
 import { GestaoUniversidadePage } from './pages/universidade/GestaoUniversidade'
+import { MarketingPage } from './pages/marketing/Marketing'
+import { CalendarioMarketingPage } from './pages/marketing/Calendario'
+import { PedidosMarketingPage } from './pages/marketing/Pedidos'
+import { GestaoMarketingPage } from './pages/marketing/GestaoMarketing'
 
 const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ default: mod.PainelPage })))
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
@@ -94,6 +98,10 @@ function Area() {
           <Route path="/universidade/curso/:cursoId/prova" element={<ProvaPage />} />
           <Route path="/universidade/curso/:cursoId/reestudo" element={<ReestudoPage />} />
           <Route path="/universidade/gestao" element={<GestaoUniversidadePage />} />
+          <Route path="/marketing" element={<MarketingPage />} />
+          <Route path="/marketing/calendario" element={<CalendarioMarketingPage />} />
+          <Route path="/marketing/pedidos" element={<PedidosMarketingPage />} />
+          <Route path="/marketing/gestao" element={<GestaoMarketingPage />} />
           {/* Trilhas e quizzes antigos corrigiam a nota no aparelho: agora tudo passa pela Universidade. */}
           <Route path="/trilhas/*" element={<Navigate to="/universidade" replace />} />
           <Route path="/certificado/:trilhaId" element={<CertificadoPage />} />

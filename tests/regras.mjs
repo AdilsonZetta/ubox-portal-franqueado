@@ -1104,6 +1104,143 @@ await caso('não emite certificado com tentativa alheia', assertFails(setDoc(doc
 })))
 await caso('aluno não cria tentativa legada (nota do aparelho)', assertFails(setDoc(doc(eqU, 'tentativas', 't-novo'), { uid: 'eq-u', quizId: 'q1', nota: 100, aprovado: true })))
 
+// ===================== Módulo 6: Central de Marketing =====================
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  for (const [id, nome, mods] of [['un-mk', 'Unidade Mkt', ['marketing']], ['un-mk2', 'Outra Mkt', ['marketing']]]) {
+    await setDoc(doc(banco, 'unidades', id), {
+      nome, cidade: 'Uberaba', responsavel: 'Dono', email: `${id}@ubox.test`, uid: null,
+      modulosLiberados: mods, ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+    })
+  }
+  await setDoc(doc(banco, 'usuarios', 'fr-mk'), usuario('fr-mk', { unidadeId: 'un-mk', unidade: 'Unidade Mkt', modulos: ['marketing'], nome: 'Dono Mkt' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-mk'), usuario('eq-mk', { papel: 'equipe_franqueado', unidadeId: 'un-mk', unidade: 'Unidade Mkt', modulos: ['marketing'], criadoPor: 'fr-mk', nome: 'Equipe Mkt' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-mk-b'), usuario('eq-mk-b', { papel: 'equipe_franqueado', unidadeId: 'un-mk', unidade: 'Unidade Mkt', modulos: ['marketing'], criadoPor: 'fr-mk', nome: 'Equipe Mkt B' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-mk2'), usuario('fr-mk2', { unidadeId: 'un-mk2', unidade: 'Outra Mkt', modulos: ['marketing'], nome: 'Dono Outra' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-mk-sem'), usuario('fr-mk-sem', { unidadeId: 'un-mk', unidade: 'Unidade Mkt', modulos: ['manuais'], nome: 'Sem Mkt' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-mk'), usuario('eq-rede-mk', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['marketing'], nome: 'Rede Mkt' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-nomk'), usuario('eq-rede-nomk', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['manuais'], nome: 'Rede Sem Mkt' }))
+  const mat = (extra) => ({
+    titulo: 'Arte', descricao: '', tipo: 'arte', categoria: 'Redes sociais', campanhaId: '', url: 'https://drive.google.com/x', previaUrl: '',
+    formato: 'PNG', regrasUso: '', validoDe: null, validoAte: null, publico: true, unidades: [], ativo: true, geradoPorIA: false, iaModelo: '',
+    criadoEm: criado, atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado, ...extra,
+  })
+  await setDoc(doc(banco, 'marketingMateriais', 'mat-rede'), mat({}))
+  await setDoc(doc(banco, 'marketingMateriais', 'mat-un'), mat({ publico: false, unidades: ['un-mk'] }))
+  await setDoc(doc(banco, 'marketingMateriais', 'mat-outra'), mat({ publico: false, unidades: ['un-mk2'] }))
+  await setDoc(doc(banco, 'marketingMateriais', 'mat-off'), mat({ ativo: false }))
+  await setDoc(doc(banco, 'marketingCampanhas', 'camp-on'), { titulo: 'Black Friday', descricao: '', tipo: 'campanha', inicio: criado, fim: criado, ativo: true, geradoPorIA: false, iaModelo: '', atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado })
+  await setDoc(doc(banco, 'marketingCampanhas', 'camp-off'), { titulo: 'Rascunho', descricao: '', tipo: 'campanha', inicio: criado, fim: criado, ativo: false, geradoPorIA: false, iaModelo: '', atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado })
+})
+const frMk = ambiente.authenticatedContext('fr-mk', { email: 'fr-mk@ubox.test' }).firestore()
+const eqMk = ambiente.authenticatedContext('eq-mk', { email: 'eq-mk@ubox.test' }).firestore()
+const eqMkB = ambiente.authenticatedContext('eq-mk-b', { email: 'eq-mk-b@ubox.test' }).firestore()
+const frMk2 = ambiente.authenticatedContext('fr-mk2', { email: 'fr-mk2@ubox.test' }).firestore()
+const frMkSem = ambiente.authenticatedContext('fr-mk-sem', { email: 'fr-mk-sem@ubox.test' }).firestore()
+const redeMk = ambiente.authenticatedContext('eq-rede-mk', { email: 'eq-rede-mk@ubox.test' }).firestore()
+const redeNoMk = ambiente.authenticatedContext('eq-rede-nomk', { email: 'eq-rede-nomk@ubox.test' }).firestore()
+const adminMk = ambiente.authenticatedContext('admin-1', { email: 'admin@ubox.test' }).firestore()
+
+function materialNovo(autor, nome, extra = {}) {
+  return {
+    titulo: 'Post Dia das Mães', descricao: 'Arte para feed', tipo: 'arte', categoria: 'Redes sociais', campanhaId: 'camp-on',
+    url: 'https://drive.google.com/file/d/abc/view', previaUrl: '', formato: 'PNG 1080x1080', regrasUso: 'Não alterar o logo.',
+    validoDe: null, validoAte: null, publico: true, unidades: [], ativo: true, geradoPorIA: false, iaModelo: '',
+    criadoEm: serverTimestamp(), atualizadoPor: autor, atualizadoPorNome: nome, atualizadoEm: serverTimestamp(), ...extra,
+  }
+}
+function pedido(uid, nome, extra = {}) {
+  return {
+    uid, nome, unidadeId: 'un-mk', unidadeNome: 'Unidade Mkt', titulo: 'Panfleto inauguração', tipoPeca: 'panfleto',
+    descricao: 'Panfleto A5 com o endereço da unidade.', medidas: 'A5', prazoDesejado: null, referenciaUrl: '', campanhaId: '',
+    status: 'aberta', complemento: '', resposta: '', entregaUrl: '', geradoPorIA: false, iaModelo: '', responsavelNome: '',
+    criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), entregueEm: null, ...extra,
+  }
+}
+
+const listaRede = (db) => getDocs(query(collection(db, 'marketingMateriais'), where('ativo', '==', true), where('publico', '==', true)))
+const listaUnidade = (db, un) => getDocs(query(collection(db, 'marketingMateriais'), where('ativo', '==', true), where('unidades', 'array-contains', un)))
+await caso('mkt: unidade lista materiais da rede', assertSucceeds(listaRede(eqMk)))
+await caso('mkt: unidade lista materiais da própria unidade', assertSucceeds(listaUnidade(frMk, 'un-mk')))
+await caso('mkt: unidade não lista materiais de outra unidade', assertFails(listaUnidade(frMk, 'un-mk2')))
+await caso('mkt: unidade não lê material de outra unidade', assertFails(getDoc(doc(frMk, 'marketingMateriais', 'mat-outra'))))
+await caso('mkt: unidade lê material direcionado a ela', assertSucceeds(getDoc(doc(eqMk, 'marketingMateriais', 'mat-un'))))
+await caso('mkt: unidade não lê material inativo', assertFails(getDoc(doc(frMk, 'marketingMateriais', 'mat-off'))))
+await caso('mkt: unidade não lista sem filtrar ativos', assertFails(getDocs(collection(frMk, 'marketingMateriais'))))
+await caso('mkt: sem o módulo não lê materiais', assertFails(listaRede(frMkSem)))
+await caso('mkt: franqueadora com módulo lista tudo', assertSucceeds(getDocs(collection(redeMk, 'marketingMateriais'))))
+await caso('mkt: franqueadora sem módulo não lista', assertFails(getDocs(collection(redeNoMk, 'marketingMateriais'))))
+await caso('mkt: franqueadora cria material', assertSucceeds(setDoc(doc(redeMk, 'marketingMateriais', 'mat-novo'), materialNovo('eq-rede-mk', 'Rede Mkt'))))
+await caso('mkt: material com IA exige o modelo', assertFails(setDoc(doc(redeMk, 'marketingMateriais', 'mat-ia'), materialNovo('eq-rede-mk', 'Rede Mkt', { geradoPorIA: true, iaModelo: '' }))))
+await caso('mkt: material com IA registrada é aceito', assertSucceeds(setDoc(doc(redeMk, 'marketingMateriais', 'mat-ia'), materialNovo('eq-rede-mk', 'Rede Mkt', { geradoPorIA: true, iaModelo: 'Grok Imagine' }))))
+await caso('mkt: material exige link https', assertFails(setDoc(doc(redeMk, 'marketingMateriais', 'mat-http'), materialNovo('eq-rede-mk', 'Rede Mkt', { url: 'http://exemplo.com/a' }))))
+await caso('mkt: material recusa javascript: no link', assertFails(setDoc(doc(redeMk, 'marketingMateriais', 'mat-js'), materialNovo('eq-rede-mk', 'Rede Mkt', { url: 'javascript:alert(1)' }))))
+await caso('mkt: material recusa tipo desconhecido', assertFails(setDoc(doc(adminMk, 'marketingMateriais', 'mat-x'), materialNovo('admin-1', 'Admin Rede', { tipo: 'exe' }))))
+await caso('mkt: material recusa campo extra', assertFails(setDoc(doc(adminMk, 'marketingMateriais', 'mat-x'), materialNovo('admin-1', 'Admin Rede', { senha: 'x' }))))
+await caso('mkt: autor forjado é recusado', assertFails(setDoc(doc(redeMk, 'marketingMateriais', 'mat-x'), materialNovo('eq-rede-mk', 'Outro Nome'))))
+await caso('mkt: material da rede toda não lista unidades', assertFails(setDoc(doc(redeMk, 'marketingMateriais', 'mat-x'), materialNovo('eq-rede-mk', 'Rede Mkt', { publico: true, unidades: ['un-mk'] }))))
+await caso('mkt: material direcionado exige ao menos uma unidade', assertFails(setDoc(doc(redeMk, 'marketingMateriais', 'mat-x'), materialNovo('eq-rede-mk', 'Rede Mkt', { publico: false, unidades: [] }))))
+await caso('mkt: material direcionado com unidade é aceito', assertSucceeds(setDoc(doc(redeMk, 'marketingMateriais', 'mat-dir'), materialNovo('eq-rede-mk', 'Rede Mkt', { publico: false, unidades: ['un-mk'] }))))
+await caso('mkt: franqueado não cria material', assertFails(setDoc(doc(frMk, 'marketingMateriais', 'mat-x'), materialNovo('fr-mk', 'Dono Mkt'))))
+await caso('mkt: franqueadora sem módulo não cria material', assertFails(setDoc(doc(redeNoMk, 'marketingMateriais', 'mat-x'), materialNovo('eq-rede-nomk', 'Rede Sem Mkt'))))
+await caso('mkt: edição mantém criadoEm', assertFails(updateDoc(doc(redeMk, 'marketingMateriais', 'mat-novo'), { criadoEm: serverTimestamp(), atualizadoPor: 'eq-rede-mk', atualizadoPorNome: 'Rede Mkt', atualizadoEm: serverTimestamp() })))
+await caso('mkt: franqueadora edita material', assertSucceeds(updateDoc(doc(redeMk, 'marketingMateriais', 'mat-novo'), { ativo: false, atualizadoPor: 'eq-rede-mk', atualizadoPorNome: 'Rede Mkt', atualizadoEm: serverTimestamp() })))
+await caso('mkt: ninguém apaga material', assertFails(deleteDoc(doc(adminMk, 'marketingMateriais', 'mat-rede'))))
+
+await caso('mkt: unidade lista campanhas ativas', assertSucceeds(getDocs(query(collection(eqMk, 'marketingCampanhas'), where('ativo', '==', true)))))
+await caso('mkt: unidade não lê campanha inativa', assertFails(getDoc(doc(eqMk, 'marketingCampanhas', 'camp-off'))))
+await caso('mkt: franqueadora cria campanha', assertSucceeds(setDoc(doc(redeMk, 'marketingCampanhas', 'camp-nova'), {
+  titulo: 'Natal', descricao: 'Campanha de fim de ano', tipo: 'data_comemorativa', inicio: new Date('2026-12-01'), fim: new Date('2026-12-25'), ativo: true,
+  geradoPorIA: false, iaModelo: '', atualizadoPor: 'eq-rede-mk', atualizadoPorNome: 'Rede Mkt', atualizadoEm: serverTimestamp(),
+})))
+await caso('mkt: campanha com fim antes do início é recusada', assertFails(setDoc(doc(redeMk, 'marketingCampanhas', 'camp-x'), {
+  titulo: 'Errada', descricao: '', tipo: 'campanha', inicio: new Date('2026-12-25'), fim: new Date('2026-12-01'), ativo: true,
+  geradoPorIA: false, iaModelo: '', atualizadoPor: 'eq-rede-mk', atualizadoPorNome: 'Rede Mkt', atualizadoEm: serverTimestamp(),
+})))
+await caso('mkt: franqueado não cria campanha', assertFails(setDoc(doc(frMk, 'marketingCampanhas', 'camp-x'), {
+  titulo: 'Minha', descricao: '', tipo: 'campanha', inicio: new Date('2026-12-01'), fim: new Date('2026-12-02'), ativo: true,
+  geradoPorIA: false, iaModelo: '', atualizadoPor: 'fr-mk', atualizadoPorNome: 'Dono Mkt', atualizadoEm: serverTimestamp(),
+})))
+
+await caso('mkt: equipe abre pedido de peça', assertSucceeds(setDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), pedido('eq-mk', 'Equipe Mkt'))))
+await caso('mkt: pedido não nasce entregue', assertFails(setDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-x'), pedido('eq-mk', 'Equipe Mkt', { status: 'entregue' }))))
+await caso('mkt: pedido não nasce com resposta', assertFails(setDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-x'), pedido('eq-mk', 'Equipe Mkt', { resposta: 'ok' }))))
+await caso('mkt: pedido em nome de outra unidade é recusado', assertFails(setDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-x'), pedido('eq-mk', 'Equipe Mkt', { unidadeId: 'un-mk2', unidadeNome: 'Outra Mkt' }))))
+await caso('mkt: pedido em nome de outra pessoa é recusado', assertFails(setDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-x'), pedido('eq-mk-b', 'Equipe Mkt B'))))
+await caso('mkt: sem o módulo não pede peça', assertFails(setDoc(doc(frMkSem, 'marketingSolicitacoes', 'sol-x'), pedido('fr-mk-sem', 'Sem Mkt'))))
+await caso('mkt: pedido com referência não-https é recusado', assertFails(setDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-x'), pedido('eq-mk', 'Equipe Mkt', { referenciaUrl: 'ftp://x' }))))
+await caso('mkt: quem pediu lê o próprio pedido', assertSucceeds(getDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'))))
+await caso('mkt: quem pediu lista os próprios pedidos', assertSucceeds(getDocs(query(collection(eqMk, 'marketingSolicitacoes'), where('uid', '==', 'eq-mk')))))
+await caso('mkt: colega da equipe não lê o pedido', assertFails(getDoc(doc(eqMkB, 'marketingSolicitacoes', 'sol-1'))))
+await caso('mkt: franqueado lista pedidos da unidade', assertSucceeds(getDocs(query(collection(frMk, 'marketingSolicitacoes'), where('unidadeId', '==', 'un-mk')))))
+await caso('mkt: franqueado de outra unidade não lista', assertFails(getDocs(query(collection(frMk2, 'marketingSolicitacoes'), where('unidadeId', '==', 'un-mk')))))
+await caso('mkt: franqueadora lista todos os pedidos', assertSucceeds(getDocs(collection(redeMk, 'marketingSolicitacoes'))))
+await caso('mkt: unidade não muda status para em produção', assertFails(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'em_producao', atualizadoEm: serverTimestamp() })))
+await caso('mkt: franqueadora coloca em produção', assertSucceeds(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'em_producao', responsavelNome: 'Rede Mkt', atualizadoEm: serverTimestamp() })))
+await caso('mkt: unidade não cancela pedido em produção', assertFails(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'cancelada', atualizadoEm: serverTimestamp() })))
+await caso('mkt: franqueadora pede informação', assertSucceeds(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aguardando_unidade', resposta: 'Qual o endereço?', responsavelNome: 'Rede Mkt', atualizadoEm: serverTimestamp() })))
+await caso('mkt: unidade não mexe na resposta da franqueadora', assertFails(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aberta', resposta: '', complemento: 'Rua X', atualizadoEm: serverTimestamp() })))
+await caso('mkt: unidade não responde em branco', assertFails(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aberta', atualizadoEm: serverTimestamp() })))
+await caso('mkt: resposta da unidade exige 2 caracteres', assertFails(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aberta', complemento: 'x', atualizadoEm: serverTimestamp() })))
+await caso('mkt: unidade responde e o pedido volta para a fila', assertSucceeds(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aberta', complemento: 'Rua X, 100', atualizadoEm: serverTimestamp() })))
+await caso('mkt: franqueadora pede informação de novo', assertSucceeds(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aguardando_unidade', resposta: 'Qual o bairro?', responsavelNome: 'Rede Mkt', atualizadoEm: serverTimestamp() })))
+await caso('mkt: unidade não repete a mesma resposta', assertFails(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aberta', complemento: 'Rua X, 100', atualizadoEm: serverTimestamp() })))
+await caso('mkt: unidade responde de novo com texto novo', assertSucceeds(updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-1'), { status: 'aberta', complemento: 'Rua X, 100 — Centro', atualizadoEm: serverTimestamp() })))
+await caso('mkt: entrega exige link', assertFails(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'entregue', responsavelNome: 'Rede Mkt', entregueEm: serverTimestamp(), atualizadoEm: serverTimestamp() })))
+await caso('mkt: entrega com IA exige o modelo', assertFails(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'entregue', entregaUrl: 'https://drive.google.com/y', geradoPorIA: true, iaModelo: '', responsavelNome: 'Rede Mkt', entregueEm: serverTimestamp(), atualizadoEm: serverTimestamp() })))
+await caso('mkt: responsável forjado é recusado', assertFails(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'em_producao', responsavelNome: 'Outra Pessoa', atualizadoEm: serverTimestamp() })))
+await caso('mkt: franqueadora entrega com link e IA registrada', assertSucceeds(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'entregue', entregaUrl: 'https://drive.google.com/y', geradoPorIA: true, iaModelo: 'Grok Imagine', resposta: 'Pronto!', responsavelNome: 'Rede Mkt', entregueEm: serverTimestamp(), atualizadoEm: serverTimestamp() })))
+await caso('mkt: pedido entregue não reabre', assertFails(updateDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'), { status: 'em_producao', responsavelNome: 'Rede Mkt', entregueEm: null, atualizadoEm: serverTimestamp() })))
+await caso('mkt: franqueado cancela pedido aberto da equipe', assertSucceeds((async () => {
+  await setDoc(doc(eqMkB, 'marketingSolicitacoes', 'sol-2'), pedido('eq-mk-b', 'Equipe Mkt B'))
+  await updateDoc(doc(frMk, 'marketingSolicitacoes', 'sol-2'), { status: 'cancelada', atualizadoEm: serverTimestamp() })
+})()))
+await caso('mkt: colega não cancela pedido de outro', assertFails((async () => {
+  await setDoc(doc(eqMkB, 'marketingSolicitacoes', 'sol-3'), pedido('eq-mk-b', 'Equipe Mkt B'))
+  await updateDoc(doc(eqMk, 'marketingSolicitacoes', 'sol-3'), { status: 'cancelada', atualizadoEm: serverTimestamp() })
+})()))
+await caso('mkt: ninguém apaga pedido', assertFails(deleteDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'))))
+
 void manual
 await ambiente.cleanup()
 

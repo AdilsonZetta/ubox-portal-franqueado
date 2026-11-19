@@ -7,6 +7,7 @@ import { observarPendentes } from '../lib/chamados'
 import { podeModulo } from '../lib/modulosAcesso'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { podeGerirUniversidade } from '../lib/universidade'
+import { podeGerirMarketing } from '../lib/marketing'
 import { observarSolicitacoesAbertas } from '../lib/senhas'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
@@ -29,6 +30,7 @@ const itensManuais = [
 
 function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/modulos/')) return pathname.split('/')[2] || null
+  if (pathname.startsWith('/marketing')) return 'marketing'
   if (pathname.startsWith('/universidade') || pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
   if (pathname.startsWith('/chamados')) return 'chamados'
   if (pathname.startsWith('/senhas')) return 'senhas'
@@ -212,6 +214,24 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
+                        {modulo.slug === 'marketing' ? (
+                          <>
+                            <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Materiais
+                            </NavLink>
+                            <NavLink to="/marketing/calendario" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Calendário
+                            </NavLink>
+                            <NavLink to="/marketing/pedidos" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Pedidos de peça
+                            </NavLink>
+                            {podeGerirMarketing(user, ehAdmin) && !comoFranqueado ? (
+                              <NavLink to="/marketing/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                Gestão do marketing
+                              </NavLink>
+                            ) : null}
+                          </>
+                        ) : null}
                         {modulo.slug === 'senhas' ? (
                           <>
                             <NavLink
@@ -241,7 +261,7 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
-                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' ? (
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' ? (
                           <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                             Abrir
                           </NavLink>
