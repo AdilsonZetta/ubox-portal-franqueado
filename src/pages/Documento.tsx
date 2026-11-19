@@ -5,7 +5,7 @@ import { Aviso, Button, Selo } from '../components/ui'
 import { listarVersoes, registrarAceite, registrarLeitura } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
-import { formatarData, rotuloTipo } from '../lib/format'
+import { formatarData, rotuloExibicao, tipoExibicao } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
 import { useVisao } from '../lib/visao'
@@ -85,7 +85,7 @@ export function DocumentoPage() {
       </p>
       <header className="mt-3">
         <div className="flex flex-wrap gap-2">
-          <Selo>{rotuloTipo(documento.tipo)}</Selo>
+          <Selo>{rotuloExibicao(tipoExibicao(documento))}</Selo>
           <Selo tom="neutro">Versão {documento.versao}</Selo>
           {documento.leituraObrigatoria ? <Selo tom="marca">Leitura obrigatória</Selo> : null}
           {lido ? <Selo tom="lima">Lido</Selo> : null}

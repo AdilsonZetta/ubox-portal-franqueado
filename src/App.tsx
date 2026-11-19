@@ -24,6 +24,9 @@ import { PerfilPage } from './pages/Perfil'
 import { PerguntePage } from './pages/Pergunte'
 import { QuizPage } from './pages/Quiz'
 import { TrilhaPage, TrilhasPage } from './pages/Trilhas'
+import { TrilhaManuaisPage } from './pages/manuais/TrilhaManuais'
+import { EstudoManualPage } from './pages/manuais/EstudoManual'
+import { GestaoTrilhaPage } from './pages/manuais/GestaoTrilha'
 
 const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ default: mod.PainelPage })))
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
@@ -72,6 +75,9 @@ function Area() {
           <Route path="/" element={<ModulosPage />} />
           <Route path="/modulos/:slug" element={<ModuloEmBrevePage />} />
           <Route path="/manuais" element={<HomePage />} />
+          <Route path="/manuais/trilha" element={<TrilhaManuaisPage />} />
+          <Route path="/manuais/estudo/:documentoId" element={<EstudoManualPage />} />
+          <Route path="/manuais/gestao" element={<GestaoTrilhaPage />} />
           <Route path="/atribuicoes" element={<AtribuicoesPage />} />
           <Route path="/modelos" element={<ModelosPage />} />
           <Route path="/biblioteca" element={<BibliotecaPage />} />
