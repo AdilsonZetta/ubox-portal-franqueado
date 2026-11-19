@@ -1241,6 +1241,127 @@ await caso('mkt: colega não cancela pedido de outro', assertFails((async () => 
 })()))
 await caso('mkt: ninguém apaga pedido', assertFails(deleteDoc(doc(redeMk, 'marketingSolicitacoes', 'sol-1'))))
 
+// ===================== Módulo 7: Checklist Operacional =====================
+const itensCk = [
+  { id: 'i1', texto: 'Luzes', secao: 'Loja', peso: 1, exigeEvidencia: false, exigeObs: false },
+  { id: 'i2', texto: 'Caixa', secao: 'Loja', peso: 2, exigeEvidencia: true, exigeObs: false },
+  { id: 'i3', texto: 'Limpeza', secao: 'Corredor', peso: 3, exigeEvidencia: false, exigeObs: true },
+]
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  for (const id of ['un-ck', 'un-ck2']) {
+    await setDoc(doc(banco, 'unidades', id), {
+      nome: id === 'un-ck' ? 'Unidade Ck' : 'Outra Ck', cidade: 'Uberaba', responsavel: 'Dono', email: `${id}@ubox.test`, uid: null,
+      modulosLiberados: ['checklist'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+    })
+  }
+  await setDoc(doc(banco, 'usuarios', 'fr-ck'), usuario('fr-ck', { unidadeId: 'un-ck', unidade: 'Unidade Ck', modulos: ['checklist'], nome: 'Dono Ck' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-ck'), usuario('eq-ck', { papel: 'equipe_franqueado', unidadeId: 'un-ck', unidade: 'Unidade Ck', modulos: ['checklist'], criadoPor: 'fr-ck', nome: 'Equipe Ck' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-ck2'), usuario('fr-ck2', { unidadeId: 'un-ck2', unidade: 'Outra Ck', modulos: ['checklist'], nome: 'Dono Outra Ck' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-ck-sem'), usuario('fr-ck-sem', { unidadeId: 'un-ck', unidade: 'Unidade Ck', modulos: ['manuais'], nome: 'Sem Ck' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-ck'), usuario('eq-rede-ck', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['checklist'], nome: 'Rede Ck' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-nock'), usuario('eq-rede-nock', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['manuais'], nome: 'Rede Sem Ck' }))
+  const mod = (extra) => ({
+    titulo: 'Abertura da loja', descricao: '', tipo: 'abertura', frequencia: 'diaria', itens: itensCk, totalItens: 3, pesoTotal: 6, versao: 2,
+    publico: true, unidades: [], ativo: true, geradoPorIA: false, iaModelo: '', criadoEm: criado, atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado, ...extra,
+  })
+  await setDoc(doc(banco, 'checklistModelos', 'ck-rede'), mod({}))
+  await setDoc(doc(banco, 'checklistModelos', 'ck-un'), mod({ publico: false, unidades: ['un-ck'] }))
+  await setDoc(doc(banco, 'checklistModelos', 'ck-outra'), mod({ publico: false, unidades: ['un-ck2'] }))
+  await setDoc(doc(banco, 'checklistModelos', 'ck-off'), mod({ ativo: false }))
+  await setDoc(doc(banco, 'checklistExecucoes', 'ex-outra'), { ...execucaoCk('fr-ck2', 'Dono Outra Ck', {}), unidadeId: 'un-ck2', unidadeNome: 'Outra Ck', criadoEm: criado })
+})
+const frCk = ambiente.authenticatedContext('fr-ck', { email: 'fr-ck@ubox.test' }).firestore()
+const eqCk = ambiente.authenticatedContext('eq-ck', { email: 'eq-ck@ubox.test' }).firestore()
+const frCk2 = ambiente.authenticatedContext('fr-ck2', { email: 'fr-ck2@ubox.test' }).firestore()
+const frCkSem = ambiente.authenticatedContext('fr-ck-sem', { email: 'fr-ck-sem@ubox.test' }).firestore()
+const redeCk = ambiente.authenticatedContext('eq-rede-ck', { email: 'eq-rede-ck@ubox.test' }).firestore()
+const redeNoCk = ambiente.authenticatedContext('eq-rede-nock', { email: 'eq-rede-nock@ubox.test' }).firestore()
+const adminCk = ambiente.authenticatedContext('admin-1', { email: 'admin@ubox.test' }).firestore()
+
+function modeloCk(autor, nome, extra = {}) {
+  return {
+    titulo: 'Fechamento', descricao: 'Rotina de fechamento', tipo: 'fechamento', frequencia: 'diaria', itens: itensCk, totalItens: 3, pesoTotal: 6, versao: 1,
+    publico: true, unidades: [], ativo: true, geradoPorIA: false, iaModelo: '', criadoEm: serverTimestamp(), atualizadoPor: autor, atualizadoPorNome: nome, atualizadoEm: serverTimestamp(), ...extra,
+  }
+}
+// Execução do modelo ck-rede (3 itens, pesos 1, 2, 3): ok, não ok, ok => 4 de 6 = 66%.
+function execucaoCk(uid, nome, extra = {}) {
+  return {
+    modeloId: 'ck-rede', modeloTitulo: 'Abertura da loja', modeloVersao: 2, tipo: 'abertura', frequencia: 'diaria',
+    unidadeId: 'un-ck', unidadeNome: 'Unidade Ck', uid, nome,
+    respostas: [
+      { itemId: 'i1', texto: 'Luzes', peso: 1, resultado: 'ok', obs: '', evidenciaUrl: '' },
+      { itemId: 'i2', texto: 'Caixa', peso: 2, resultado: 'nao_ok', obs: 'Faltou troco', evidenciaUrl: 'https://drive.google.com/f' },
+      { itemId: 'i3', texto: 'Limpeza', peso: 3, resultado: 'ok', obs: '', evidenciaUrl: '' },
+    ],
+    totalItens: 3, qtdOk: 2, qtdNaoOk: 1, qtdNa: 0, pontosObtidos: 4, pontosPossiveis: 6, score: 66,
+    obsGeral: '', obsProprietario: '', obsProprietarioPor: '', obsProprietarioNome: '', obsProprietarioEm: null, criadoEm: serverTimestamp(), ...extra,
+  }
+}
+const listaModelosRede = (db) => getDocs(query(collection(db, 'checklistModelos'), where('ativo', '==', true), where('publico', '==', true)))
+const listaModelosUn = (db, un) => getDocs(query(collection(db, 'checklistModelos'), where('ativo', '==', true), where('unidades', 'array-contains', un)))
+
+await caso('ck: unidade lista modelos da rede', assertSucceeds(listaModelosRede(eqCk)))
+await caso('ck: unidade lista modelos da própria unidade', assertSucceeds(listaModelosUn(frCk, 'un-ck')))
+await caso('ck: unidade não lista modelos de outra unidade', assertFails(listaModelosUn(frCk, 'un-ck2')))
+await caso('ck: unidade não lê modelo inativo', assertFails(getDoc(doc(frCk, 'checklistModelos', 'ck-off'))))
+await caso('ck: unidade não lê modelo de outra unidade', assertFails(getDoc(doc(frCk, 'checklistModelos', 'ck-outra'))))
+await caso('ck: sem o módulo não lê modelos', assertFails(listaModelosRede(frCkSem)))
+await caso('ck: franqueadora com módulo lista tudo', assertSucceeds(getDocs(collection(redeCk, 'checklistModelos'))))
+await caso('ck: franqueadora sem módulo não lista', assertFails(getDocs(collection(redeNoCk, 'checklistModelos'))))
+await caso('ck: franqueadora cria modelo', assertSucceeds(setDoc(doc(redeCk, 'checklistModelos', 'ck-novo'), modeloCk('eq-rede-ck', 'Rede Ck'))))
+await caso('ck: modelo nasce na versão 1', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { versao: 3 }))))
+await caso('ck: modelo exige itens', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { itens: [], totalItens: 0, pesoTotal: 0 }))))
+await caso('ck: total de itens precisa bater', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { totalItens: 2 }))))
+await caso('ck: peso total fora da faixa é recusado', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { pesoTotal: 31 }))))
+await caso('ck: frequência desconhecida é recusada', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { frequencia: 'anual' }))))
+await caso('ck: modelo com IA exige o modelo de IA', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { geradoPorIA: true, iaModelo: '' }))))
+await caso('ck: modelo com IA registrada é aceito', assertSucceeds(setDoc(doc(redeCk, 'checklistModelos', 'ck-ia'), modeloCk('eq-rede-ck', 'Rede Ck', { geradoPorIA: true, iaModelo: 'Gemini' }))))
+await caso('ck: modelo direcionado exige unidade', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { publico: false, unidades: [] }))))
+await caso('ck: modelo da rede toda não lista unidades', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Rede Ck', { unidades: ['un-ck'] }))))
+await caso('ck: autor forjado é recusado', assertFails(setDoc(doc(redeCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-ck', 'Outro Nome'))))
+await caso('ck: franqueado não cria modelo', assertFails(setDoc(doc(frCk, 'checklistModelos', 'ck-x'), modeloCk('fr-ck', 'Dono Ck'))))
+await caso('ck: sem módulo não cria modelo', assertFails(setDoc(doc(redeNoCk, 'checklistModelos', 'ck-x'), modeloCk('eq-rede-nock', 'Rede Sem Ck'))))
+await caso('ck: mudar itens sem subir a versão é recusado', assertFails(updateDoc(doc(redeCk, 'checklistModelos', 'ck-novo'), { itens: [...itensCk, { id: 'i4', texto: 'Alarme', secao: '', peso: 1, exigeEvidencia: false, exigeObs: false }], totalItens: 4, pesoTotal: 7, atualizadoPor: 'eq-rede-ck', atualizadoPorNome: 'Rede Ck', atualizadoEm: serverTimestamp() })))
+await caso('ck: mudar itens sobe a versão', assertSucceeds(updateDoc(doc(redeCk, 'checklistModelos', 'ck-novo'), { itens: [...itensCk, { id: 'i4', texto: 'Alarme', secao: '', peso: 1, exigeEvidencia: false, exigeObs: false }], totalItens: 4, pesoTotal: 7, versao: 2, atualizadoPor: 'eq-rede-ck', atualizadoPorNome: 'Rede Ck', atualizadoEm: serverTimestamp() })))
+await caso('ck: desativar mantém a versão', assertSucceeds(updateDoc(doc(redeCk, 'checklistModelos', 'ck-novo'), { ativo: false, atualizadoPor: 'eq-rede-ck', atualizadoPorNome: 'Rede Ck', atualizadoEm: serverTimestamp() })))
+await caso('ck: versão não sobe sem mudar itens', assertFails(updateDoc(doc(redeCk, 'checklistModelos', 'ck-novo'), { versao: 3, atualizadoPor: 'eq-rede-ck', atualizadoPorNome: 'Rede Ck', atualizadoEm: serverTimestamp() })))
+await caso('ck: edição mantém criadoEm', assertFails(updateDoc(doc(redeCk, 'checklistModelos', 'ck-novo'), { criadoEm: serverTimestamp(), atualizadoPor: 'eq-rede-ck', atualizadoPorNome: 'Rede Ck', atualizadoEm: serverTimestamp() })))
+await caso('ck: ninguém apaga modelo', assertFails(deleteDoc(doc(adminCk, 'checklistModelos', 'ck-rede'))))
+
+await caso('ck: equipe envia checklist com totais coerentes', assertSucceeds(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-1'), execucaoCk('eq-ck', 'Equipe Ck'))))
+await caso('ck: score inflado é recusado', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { score: 100 }))))
+await caso('ck: pontos sem não conformidade precisam fechar 100%', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { qtdOk: 3, qtdNaoOk: 0, pontosObtidos: 4, score: 66 }))))
+await caso('ck: não conformidade sem perder pontos é recusada', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { pontosObtidos: 6, score: 100 }))))
+await caso('ck: contagem que não fecha com os itens é recusada', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { qtdNa: 1 }))))
+await caso('ck: pontos acima do peso total são recusados', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { pontosObtidos: 8, pontosPossiveis: 12, score: 66 }))))
+await caso('ck: tudo N/A vale 100%', assertSucceeds(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-na'), execucaoCk('eq-ck', 'Equipe Ck', { qtdOk: 0, qtdNaoOk: 0, qtdNa: 3, pontosObtidos: 0, pontosPossiveis: 0, score: 100 }))))
+await caso('ck: versão antiga do modelo é recusada', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { modeloVersao: 1 }))))
+await caso('ck: respostas a menos que os itens são recusadas', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { respostas: [{ itemId: 'i1' }] }))))
+await caso('ck: modelo inativo não aceita execução', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { modeloId: 'ck-off' }))))
+await caso('ck: modelo de outra unidade não aceita execução', assertFails(setDoc(doc(frCk, 'checklistExecucoes', 'ex-x'), execucaoCk('fr-ck', 'Dono Ck', { modeloId: 'ck-outra' }))))
+await caso('ck: modelo inexistente é recusado', assertFails(setDoc(doc(frCk, 'checklistExecucoes', 'ex-x'), execucaoCk('fr-ck', 'Dono Ck', { modeloId: 'nao-existe' }))))
+await caso('ck: execução em nome de outra unidade é recusada', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { unidadeId: 'un-ck2', unidadeNome: 'Outra Ck' }))))
+await caso('ck: execução em nome de outra pessoa é recusada', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('fr-ck', 'Dono Ck'))))
+await caso('ck: execução não nasce com observação do proprietário', assertFails(setDoc(doc(frCk, 'checklistExecucoes', 'ex-x'), execucaoCk('fr-ck', 'Dono Ck', { obsProprietario: 'Ok' }))))
+await caso('ck: execução com data do aparelho é recusada', assertFails(setDoc(doc(eqCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-ck', 'Equipe Ck', { criadoEm: criado }))))
+await caso('ck: sem o módulo não envia checklist', assertFails(setDoc(doc(frCkSem, 'checklistExecucoes', 'ex-x'), execucaoCk('fr-ck-sem', 'Sem Ck'))))
+await caso('ck: franqueadora não preenche pela unidade', assertFails(setDoc(doc(redeCk, 'checklistExecucoes', 'ex-x'), execucaoCk('eq-rede-ck', 'Rede Ck'))))
+await caso('ck: unidade lista o próprio histórico', assertSucceeds(getDocs(query(collection(eqCk, 'checklistExecucoes'), where('unidadeId', '==', 'un-ck')))))
+await caso('ck: unidade não lista histórico de outra', assertFails(getDocs(query(collection(frCk, 'checklistExecucoes'), where('unidadeId', '==', 'un-ck2')))))
+await caso('ck: unidade não lê execução de outra', assertFails(getDoc(doc(frCk, 'checklistExecucoes', 'ex-outra'))))
+await caso('ck: unidade não lista sem filtrar a unidade', assertFails(getDocs(collection(frCk, 'checklistExecucoes'))))
+await caso('ck: franqueadora lista todas as execuções', assertSucceeds(getDocs(collection(redeCk, 'checklistExecucoes'))))
+await caso('ck: franqueadora sem módulo não lista execuções', assertFails(getDocs(collection(redeNoCk, 'checklistExecucoes'))))
+await caso('ck: franqueado registra observação do proprietário', assertSucceeds(updateDoc(doc(frCk, 'checklistExecucoes', 'ex-1'), { obsProprietario: 'Conferi o caixa com a equipe.', obsProprietarioPor: 'fr-ck', obsProprietarioNome: 'Dono Ck', obsProprietarioEm: serverTimestamp() })))
+await caso('ck: equipe não escreve observação do proprietário', assertFails(updateDoc(doc(eqCk, 'checklistExecucoes', 'ex-1'), { obsProprietario: 'Tudo certo', obsProprietarioPor: 'eq-ck', obsProprietarioNome: 'Equipe Ck', obsProprietarioEm: serverTimestamp() })))
+await caso('ck: franqueado de outra unidade não comenta', assertFails(updateDoc(doc(frCk2, 'checklistExecucoes', 'ex-1'), { obsProprietario: 'Oi', obsProprietarioPor: 'fr-ck2', obsProprietarioNome: 'Dono Outra Ck', obsProprietarioEm: serverTimestamp() })))
+await caso('ck: observação não altera o score', assertFails(updateDoc(doc(frCk, 'checklistExecucoes', 'ex-1'), { score: 100, obsProprietario: 'Corrigido', obsProprietarioPor: 'fr-ck', obsProprietarioNome: 'Dono Ck', obsProprietarioEm: serverTimestamp() })))
+await caso('ck: observação com nome forjado é recusada', assertFails(updateDoc(doc(frCk, 'checklistExecucoes', 'ex-1'), { obsProprietario: 'Conferido', obsProprietarioPor: 'fr-ck', obsProprietarioNome: 'Outro', obsProprietarioEm: serverTimestamp() })))
+await caso('ck: franqueadora não edita execução', assertFails(updateDoc(doc(redeCk, 'checklistExecucoes', 'ex-1'), { score: 100 })))
+await caso('ck: ninguém apaga execução', assertFails(deleteDoc(doc(adminCk, 'checklistExecucoes', 'ex-1'))))
+
 void manual
 await ambiente.cleanup()
 

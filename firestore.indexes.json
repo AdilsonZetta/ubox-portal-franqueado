@@ -1,6 +1,30 @@
 {
   "indexes": [
     {
+      "collectionGroup": "checklistModelos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ativo", "order": "ASCENDING" },
+        { "fieldPath": "publico", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "checklistModelos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "ativo", "order": "ASCENDING" },
+        { "fieldPath": "unidades", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "checklistExecucoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadeId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "documentos",
       "queryScope": "COLLECTION",
       "fields": [
