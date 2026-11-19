@@ -1370,6 +1370,160 @@ await caso('ck: observação com nome forjado é recusada', assertFails(updateDo
 await caso('ck: franqueadora não edita execução', assertFails(updateDoc(doc(redeCk, 'checklistExecucoes', 'ex-1'), { score: 100 })))
 await caso('ck: ninguém apaga execução', assertFails(deleteDoc(doc(adminCk, 'checklistExecucoes', 'ex-1'))))
 
+// ===================== Módulo 8: Auditoria e Qualidade =====================
+const itensAu = [
+  { id: 'a1', texto: 'Fachada conforme manual', secao: 'Loja', peso: 1 },
+  { id: 'a2', texto: 'Atendimento padrão', secao: 'Equipe', peso: 2 },
+  { id: 'a3', texto: 'Estoque organizado', secao: 'Estoque', peso: 3 },
+]
+const respostasAu = (r) => itensAu.map((i, k) => ({ itemId: i.id, texto: i.texto, secao: i.secao, peso: i.peso, resultado: r[k], obs: '', evidenciaUrl: '' }))
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  for (const [id, nome] of [['un-au', 'Unidade Au'], ['un-au2', 'Outra Au']]) {
+    await setDoc(doc(banco, 'unidades', id), {
+      nome, cidade: 'Uberaba', responsavel: 'Dono', email: `${id}@ubox.test`, uid: null,
+      modulosLiberados: ['checklist'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+    })
+  }
+  await setDoc(doc(banco, 'usuarios', 'fr-au'), usuario('fr-au', { unidadeId: 'un-au', unidade: 'Unidade Au', modulos: [], nome: 'Dono Au' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-au'), usuario('eq-au', { papel: 'equipe_franqueado', unidadeId: 'un-au', unidade: 'Unidade Au', modulos: [], criadoPor: 'fr-au', nome: 'Equipe Au' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-au2'), usuario('fr-au2', { unidadeId: 'un-au2', unidade: 'Outra Au', modulos: [], nome: 'Dono Outra Au' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-au'), usuario('eq-rede-au', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['auditoria'], nome: 'Auditora Rede' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-au2'), usuario('eq-rede-au2', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['auditoria'], nome: 'Outro Auditor' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-noau'), usuario('eq-rede-noau', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['checklist'], nome: 'Rede Sem Au' }))
+  await setDoc(doc(banco, 'auditoriaModelos', 'au-mod'), {
+    titulo: 'Auditoria de padrão', descricao: '', itens: itensAu, totalItens: 3, pesoTotal: 6, notaMinima: 70, versao: 1, ativo: true,
+    geradoPorIA: false, iaModelo: '', criadoEm: criado, atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'auditoriaModelos', 'au-off'), {
+    titulo: 'Antigo', descricao: '', itens: itensAu, totalItens: 3, pesoTotal: 6, notaMinima: 70, versao: 1, ativo: false,
+    geradoPorIA: false, iaModelo: '', criadoEm: criado, atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado,
+  })
+  const ex = (unidadeId) => ({ ...execucaoCk('x', 'X'), unidadeId, criadoEm: criado })
+  await setDoc(doc(banco, 'checklistExecucoes', 'ck-ref'), ex('un-au'))
+  await setDoc(doc(banco, 'checklistExecucoes', 'ck-ref-outra'), ex('un-au2'))
+  const base = auditoriaBase('eq-rede-au', 'Auditora Rede')
+  await setDoc(doc(banco, 'auditorias', 'au-rasc'), { ...base, criadoEm: criado, atualizadoEm: criado })
+  await setDoc(doc(banco, 'auditorias', 'au-ass'), { ...base, status: 'aguardando_ciencia', assinaturaAuditorUid: 'eq-rede-au', assinaturaAuditorNome: 'Auditora Rede', assinaturaAuditorEm: criado, criadoEm: criado, atualizadoEm: criado })
+  await setDoc(doc(banco, 'auditorias', 'au-ass2'), { ...base, status: 'aguardando_ciencia', assinaturaAuditorUid: 'eq-rede-au', assinaturaAuditorNome: 'Auditora Rede', assinaturaAuditorEm: criado, criadoEm: criado, atualizadoEm: criado })
+  await setDoc(doc(banco, 'auditorias', 'au-outra'), { ...base, unidadeId: 'un-au2', unidadeNome: 'Outra Au', status: 'aguardando_ciencia', assinaturaAuditorUid: 'eq-rede-au', assinaturaAuditorNome: 'Auditora Rede', assinaturaAuditorEm: criado, criadoEm: criado, atualizadoEm: criado })
+})
+function auditoriaBase(uid, nome, extra = {}) {
+  return {
+    unidadeId: 'un-au', unidadeNome: 'Unidade Au', modeloId: 'au-mod', modeloTitulo: 'Auditoria de padrão', modeloVersao: 1, modalidade: 'visita',
+    dataVisita: criado, auditorUid: uid, auditorNome: nome, respostas: respostasAu(['ok', 'nao_ok', 'ok']), totalItens: 3, pesoTotal: 6,
+    qtdOk: 2, qtdNaoOk: 1, qtdNa: 0, pontosObtidos: 4, pontosPossiveis: 6, score: 66, notaMinima: 70, checklistExecucaoId: '', checklistScore: null,
+    resultado: 'reprovada', obsGeral: '', geradoPorIA: false, iaModelo: '', status: 'rascunho', assinaturaAuditorUid: '', assinaturaAuditorNome: '',
+    assinaturaAuditorEm: null, cienciaUid: '', cienciaNome: '', cienciaEm: null, contestacao: '', criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), ...extra,
+  }
+}
+const tudoOk = { respostas: respostasAu(['ok', 'ok', 'ok']), qtdOk: 3, qtdNaoOk: 0, pontosObtidos: 6, score: 100 }
+const frAu = ambiente.authenticatedContext('fr-au', { email: 'fr-au@ubox.test' }).firestore()
+const eqAu = ambiente.authenticatedContext('eq-au', { email: 'eq-au@ubox.test' }).firestore()
+const frAu2 = ambiente.authenticatedContext('fr-au2', { email: 'fr-au2@ubox.test' }).firestore()
+const redeAu = ambiente.authenticatedContext('eq-rede-au', { email: 'eq-rede-au@ubox.test' }).firestore()
+const redeAu2 = ambiente.authenticatedContext('eq-rede-au2', { email: 'eq-rede-au2@ubox.test' }).firestore()
+const redeNoAu = ambiente.authenticatedContext('eq-rede-noau', { email: 'eq-rede-noau@ubox.test' }).firestore()
+const adminAu = ambiente.authenticatedContext('admin-1', { email: 'admin@ubox.test' }).firestore()
+const novaA = (db, id, uid, nome, extra) => setDoc(doc(db, 'auditorias', id), auditoriaBase(uid, nome, extra))
+
+// Modelos
+const modeloAu = (extra = {}) => ({ titulo: 'Visita trimestral', descricao: '', itens: itensAu, totalItens: 3, pesoTotal: 6, notaMinima: 80, versao: 1, ativo: true, geradoPorIA: false, iaModelo: '', criadoEm: serverTimestamp(), atualizadoPor: 'eq-rede-au', atualizadoPorNome: 'Auditora Rede', atualizadoEm: serverTimestamp(), ...extra })
+await caso('au: auditor cria modelo', assertSucceeds(setDoc(doc(redeAu, 'auditoriaModelos', 'au-novo'), modeloAu())))
+await caso('au: modelo com nota mínima acima de 100 é recusado', assertFails(setDoc(doc(redeAu, 'auditoriaModelos', 'au-x'), modeloAu({ notaMinima: 120 }))))
+await caso('au: modelo de IA só com espaços é recusado', assertFails(setDoc(doc(redeAu, 'auditoriaModelos', 'au-x'), modeloAu({ geradoPorIA: true, iaModelo: '   ' }))))
+await caso('au: modelo com IA registrada é aceito', assertSucceeds(setDoc(doc(redeAu, 'auditoriaModelos', 'au-ia'), modeloAu({ geradoPorIA: true, iaModelo: 'Grok' }))))
+await caso('au: sem o módulo não cria modelo', assertFails(setDoc(doc(redeNoAu, 'auditoriaModelos', 'au-x'), modeloAu({ atualizadoPor: 'eq-rede-noau', atualizadoPorNome: 'Rede Sem Au' }))))
+await caso('au: franqueado não lê modelos', assertFails(getDocs(collection(frAu, 'auditoriaModelos'))))
+await caso('au: mudar itens sem subir a versão é recusado', assertFails(updateDoc(doc(redeAu, 'auditoriaModelos', 'au-novo'), { itens: itensAu.slice(0, 2), totalItens: 2, pesoTotal: 3, atualizadoPor: 'eq-rede-au', atualizadoPorNome: 'Auditora Rede', atualizadoEm: serverTimestamp() })))
+await caso('au: mudar itens sobe a versão', assertSucceeds(updateDoc(doc(redeAu, 'auditoriaModelos', 'au-novo'), { itens: itensAu.slice(0, 2), totalItens: 2, pesoTotal: 3, versao: 2, atualizadoPor: 'eq-rede-au', atualizadoPorNome: 'Auditora Rede', atualizadoEm: serverTimestamp() })))
+await caso('au: mudar só a nota mínima mantém a versão', assertSucceeds(updateDoc(doc(redeAu, 'auditoriaModelos', 'au-novo'), { notaMinima: 75, atualizadoPor: 'eq-rede-au', atualizadoPorNome: 'Auditora Rede', atualizadoEm: serverTimestamp() })))
+await caso('au: ninguém apaga modelo', assertFails(deleteDoc(doc(adminAu, 'auditoriaModelos', 'au-mod'))))
+
+// Criação
+await caso('au: auditor cria rascunho', assertSucceeds(novaA(redeAu, 'au-1', 'eq-rede-au', 'Auditora Rede')))
+await caso('au: resultado tem que seguir a nota mínima', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { resultado: 'aprovada' })))
+await caso('au: score inflado é recusado', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { score: 100 })))
+await caso('au: tudo OK e acima da nota sai aprovada', assertSucceeds(novaA(redeAu, 'au-2', 'eq-rede-au', 'Auditora Rede', { ...tudoOk, resultado: 'aprovada' })))
+await caso('au: checklist abaixo da nota reprova mesmo com auditoria 100%', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { ...tudoOk, checklistExecucaoId: 'ck-ref', checklistScore: 50, resultado: 'aprovada' })))
+await caso('au: checklist de referência da unidade é aceito', assertSucceeds(novaA(redeAu, 'au-3', 'eq-rede-au', 'Auditora Rede', { ...tudoOk, checklistExecucaoId: 'ck-ref', checklistScore: 50, resultado: 'reprovada' })))
+await caso('au: checklist de outra unidade é recusado', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { checklistExecucaoId: 'ck-ref-outra', checklistScore: 66 })))
+await caso('au: checklist inexistente é recusado', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { checklistExecucaoId: 'nao-existe', checklistScore: 66 })))
+await caso('au: referência sem score é recusada', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { checklistExecucaoId: 'ck-ref' })))
+await caso('au: unidade inexistente é recusada', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { unidadeId: 'un-fantasma' })))
+await caso('au: modelo inativo é recusado', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { modeloId: 'au-off', modeloTitulo: 'Antigo' })))
+await caso('au: versão antiga do modelo é recusada', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { modeloVersao: 0 })))
+await caso('au: auditoria não nasce assinada', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { assinaturaAuditorUid: 'eq-rede-au', assinaturaAuditorNome: 'Auditora Rede', assinaturaAuditorEm: serverTimestamp() })))
+await caso('au: auditoria não nasce aguardando ciência', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { status: 'aguardando_ciencia' })))
+await caso('au: auditor forjado é recusado', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au2', 'Outro Auditor')))
+await caso('au: sem o módulo não audita', assertFails(novaA(redeNoAu, 'au-x', 'eq-rede-noau', 'Rede Sem Au')))
+await caso('au: franqueado não cria auditoria', assertFails(novaA(frAu, 'au-x', 'fr-au', 'Dono Au')))
+await caso('au: data do aparelho é recusada', assertFails(novaA(redeAu, 'au-x', 'eq-rede-au', 'Auditora Rede', { criadoEm: criado })))
+
+// Leitura
+await caso('au: unidade não lê rascunho', assertFails(getDoc(doc(frAu, 'auditorias', 'au-rasc'))))
+await caso('au: equipe da unidade lê auditoria assinada', assertSucceeds(getDoc(doc(eqAu, 'auditorias', 'au-ass'))))
+await caso('au: unidade lista as próprias auditorias assinadas', assertSucceeds(getDocs(query(collection(frAu, 'auditorias'), where('unidadeId', '==', 'un-au'), where('status', 'in', ['aguardando_ciencia', 'concluida'])))))
+await caso('au: unidade não lista sem filtrar o status', assertFails(getDocs(query(collection(frAu, 'auditorias'), where('unidadeId', '==', 'un-au')))))
+await caso('au: outra unidade não lê', assertFails(getDoc(doc(frAu2, 'auditorias', 'au-ass'))))
+await caso('au: auditor lê todas', assertSucceeds(getDocs(collection(redeAu, 'auditorias'))))
+await caso('au: franqueadora sem módulo não lê', assertFails(getDocs(collection(redeNoAu, 'auditorias'))))
+await caso('au: auditor lê execuções de checklist para referenciar', assertSucceeds(getDocs(query(collection(redeAu, 'checklistExecucoes'), where('unidadeId', '==', 'un-au')))))
+await caso('au: auditor não escreve execução de checklist', assertFails(updateDoc(doc(redeAu, 'checklistExecucoes', 'ck-ref'), { score: 100 })))
+
+// Rascunho e assinatura do auditor
+await caso('au: auditor edita o próprio rascunho', assertSucceeds(updateDoc(doc(redeAu, 'auditorias', 'au-1'), { obsGeral: 'Loja limpa, estoque desorganizado.', atualizadoEm: serverTimestamp() })))
+await caso('au: outro auditor não edita o rascunho', assertFails(updateDoc(doc(redeAu2, 'auditorias', 'au-1'), { obsGeral: 'x', atualizadoEm: serverTimestamp() })))
+await caso('au: rascunho não troca de unidade', assertFails(updateDoc(doc(redeAu, 'auditorias', 'au-1'), { unidadeId: 'un-au2', unidadeNome: 'Outra Au', atualizadoEm: serverTimestamp() })))
+await caso('au: assinatura com nome forjado é recusada', assertFails(updateDoc(doc(redeAu, 'auditorias', 'au-1'), { status: 'aguardando_ciencia', assinaturaAuditorUid: 'eq-rede-au', assinaturaAuditorNome: 'Outra Pessoa', assinaturaAuditorEm: serverTimestamp(), atualizadoEm: serverTimestamp() })))
+await caso('au: assinatura sem hora do servidor é recusada', assertFails(updateDoc(doc(redeAu, 'auditorias', 'au-1'), { status: 'aguardando_ciencia', assinaturaAuditorUid: 'eq-rede-au', assinaturaAuditorNome: 'Auditora Rede', assinaturaAuditorEm: criado, atualizadoEm: serverTimestamp() })))
+await caso('au: auditor assina', assertSucceeds(updateDoc(doc(redeAu, 'auditorias', 'au-1'), { status: 'aguardando_ciencia', assinaturaAuditorUid: 'eq-rede-au', assinaturaAuditorNome: 'Auditora Rede', assinaturaAuditorEm: serverTimestamp(), atualizadoEm: serverTimestamp() })))
+await caso('au: assinada, o auditor não muda o score', assertFails(updateDoc(doc(redeAu, 'auditorias', 'au-1'), { ...tudoOk, resultado: 'aprovada', atualizadoEm: serverTimestamp() })))
+await caso('au: assinada, o admin não muda o texto', assertFails(updateDoc(doc(adminAu, 'auditorias', 'au-1'), { obsGeral: 'mudado', atualizadoEm: serverTimestamp() })))
+
+// Ciência da unidade
+const ciencia = (uid, nome, extra = {}) => ({ status: 'concluida', cienciaUid: uid, cienciaNome: nome, cienciaEm: serverTimestamp(), contestacao: '', atualizadoEm: serverTimestamp(), ...extra })
+await caso('au: equipe não assina a ciência', assertFails(updateDoc(doc(eqAu, 'auditorias', 'au-ass'), ciencia('eq-au', 'Equipe Au'))))
+await caso('au: franqueado de outra unidade não assina', assertFails(updateDoc(doc(frAu2, 'auditorias', 'au-ass'), ciencia('fr-au2', 'Dono Outra Au'))))
+await caso('au: ciência com nome forjado é recusada', assertFails(updateDoc(doc(frAu, 'auditorias', 'au-ass'), ciencia('fr-au', 'Outro'))))
+await caso('au: ciência não altera o resultado', assertFails(updateDoc(doc(frAu, 'auditorias', 'au-ass'), ciencia('fr-au', 'Dono Au', { resultado: 'aprovada' }))))
+await caso('au: franqueado assina ciente com contestação', assertSucceeds(updateDoc(doc(frAu, 'auditorias', 'au-ass'), ciencia('fr-au', 'Dono Au', { contestacao: 'Discordo do item de estoque: reposição chegou no dia.' }))))
+await caso('au: concluída, a contestação não muda', assertFails(updateDoc(doc(frAu, 'auditorias', 'au-ass'), { contestacao: 'Outra', atualizadoEm: serverTimestamp() })))
+await caso('au: concluída, o auditor não muda nada', assertFails(updateDoc(doc(redeAu, 'auditorias', 'au-ass'), { obsGeral: 'x', atualizadoEm: serverTimestamp() })))
+await caso('au: rascunho não recebe ciência', assertFails(updateDoc(doc(frAu, 'auditorias', 'au-rasc'), ciencia('fr-au', 'Dono Au'))))
+await caso('au: ninguém apaga auditoria', assertFails(deleteDoc(doc(adminAu, 'auditorias', 'au-ass'))))
+
+// Plano de ação
+const acaoNova = (auditoriaId, extra = {}) => ({
+  auditoriaId, unidadeId: 'un-au', itemId: 'a2', itemTexto: 'Atendimento padrão', descricao: 'Treinar a equipe no roteiro de atendimento.', responsavel: 'Dono Au',
+  prazo: new Date('2026-12-15T12:00:00Z'), status: 'aberta', evidenciaUrl: '', comentarioUnidade: '', comentarioFranqueadora: '', criadoEm: serverTimestamp(),
+  atualizadoPor: 'eq-rede-au', atualizadoPorNome: 'Auditora Rede', atualizadoEm: serverTimestamp(), ...extra,
+})
+const acaoUn = (status, extra = {}) => ({ status, atualizadoPor: 'fr-au', atualizadoPorNome: 'Dono Au', atualizadoEm: serverTimestamp(), ...extra })
+const acaoRede = (extra = {}) => ({ atualizadoPor: 'eq-rede-au', atualizadoPorNome: 'Auditora Rede', atualizadoEm: serverTimestamp(), ...extra })
+await caso('au: plano para auditoria assinada', assertSucceeds(setDoc(doc(redeAu, 'auditoriaAcoes', 'ac-1'), acaoNova('au-ass2'))))
+await caso('au: plano para rascunho é recusado', assertFails(setDoc(doc(redeAu, 'auditoriaAcoes', 'ac-x'), acaoNova('au-rasc'))))
+await caso('au: plano com unidade trocada é recusado', assertFails(setDoc(doc(redeAu, 'auditoriaAcoes', 'ac-x'), acaoNova('au-outra'))))
+await caso('au: plano não nasce concluído', assertFails(setDoc(doc(redeAu, 'auditoriaAcoes', 'ac-x'), acaoNova('au-ass2', { status: 'validada' }))))
+await caso('au: franqueado não cria plano', assertFails(setDoc(doc(frAu, 'auditoriaAcoes', 'ac-x'), acaoNova('au-ass2', { atualizadoPor: 'fr-au', atualizadoPorNome: 'Dono Au' }))))
+await caso('au: unidade lista o próprio plano', assertSucceeds(getDocs(query(collection(eqAu, 'auditoriaAcoes'), where('unidadeId', '==', 'un-au')))))
+await caso('au: outra unidade não lista o plano', assertFails(getDocs(query(collection(frAu2, 'auditoriaAcoes'), where('unidadeId', '==', 'un-au')))))
+await caso('au: franqueado coloca em andamento', assertSucceeds(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('em_andamento', { comentarioUnidade: 'Treino marcado para sexta.' }))))
+await caso('au: equipe não atualiza o plano', assertFails(updateDoc(doc(eqAu, 'auditoriaAcoes', 'ac-1'), { status: 'concluida_unidade', evidenciaUrl: 'https://drive.google.com/x', atualizadoPor: 'eq-au', atualizadoPorNome: 'Equipe Au', atualizadoEm: serverTimestamp() })))
+await caso('au: concluir sem evidência é recusado', assertFails(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('concluida_unidade'))))
+await caso('au: evidência sem https é recusada', assertFails(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('concluida_unidade', { evidenciaUrl: 'http://drive.google.com/x' }))))
+await caso('au: unidade não valida o próprio plano', assertFails(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('validada', { evidenciaUrl: 'https://drive.google.com/x' }))))
+await caso('au: unidade não muda o prazo', assertFails(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('em_andamento', { prazo: new Date('2027-06-01T12:00:00Z') }))))
+await caso('au: franqueado conclui com evidência https', assertSucceeds(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('concluida_unidade', { evidenciaUrl: 'https://drive.google.com/file/d/treino' }))))
+await caso('au: franqueadora não troca a evidência', assertFails(updateDoc(doc(redeAu, 'auditoriaAcoes', 'ac-1'), acaoRede({ evidenciaUrl: '' }))))
+await caso('au: franqueadora reabre com comentário', assertSucceeds(updateDoc(doc(redeAu, 'auditoriaAcoes', 'ac-1'), acaoRede({ status: 'reaberta', comentarioFranqueadora: 'Falta a lista de presença.' }))))
+await caso('au: franqueadora não valida o que a unidade não concluiu', assertFails(updateDoc(doc(redeAu, 'auditoriaAcoes', 'ac-1'), acaoRede({ status: 'validada' }))))
+await caso('au: franqueado conclui de novo', assertSucceeds(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('concluida_unidade', { evidenciaUrl: 'https://drive.google.com/file/d/presenca' }))))
+await caso('au: franqueadora valida', assertSucceeds(updateDoc(doc(redeAu, 'auditoriaAcoes', 'ac-1'), acaoRede({ status: 'validada', comentarioFranqueadora: 'Ok, validado.' }))))
+await caso('au: plano validado não muda mais', assertFails(updateDoc(doc(redeAu, 'auditoriaAcoes', 'ac-1'), acaoRede({ comentarioFranqueadora: 'mudou' }))))
+await caso('au: unidade não reabre plano validado', assertFails(updateDoc(doc(frAu, 'auditoriaAcoes', 'ac-1'), acaoUn('em_andamento'))))
+await caso('au: ninguém apaga plano', assertFails(deleteDoc(doc(adminAu, 'auditoriaAcoes', 'ac-1'))))
+
 void manual
 await ambiente.cleanup()
 

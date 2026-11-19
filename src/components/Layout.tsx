@@ -33,6 +33,9 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/modulos/')) return pathname.split('/')[2] || null
   if (pathname.startsWith('/marketing')) return 'marketing'
   if (pathname.startsWith('/checklist')) return 'checklist'
+  // Auditorias da unidade: não dependem de módulo (a auditoria é da franqueadora; as rules limitam à própria unidade).
+  if (pathname.startsWith('/auditorias')) return null
+  if (pathname.startsWith('/auditoria')) return 'auditoria'
   if (pathname.startsWith('/universidade') || pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
   if (pathname.startsWith('/chamados')) return 'chamados'
   if (pathname.startsWith('/senhas')) return 'senhas'
@@ -237,6 +240,22 @@ export function Layout() {
                             )}
                           </>
                         ) : null}
+                        {modulo.slug === 'auditoria' ? (
+                          <>
+                            <NavLink to="/auditoria" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Auditorias da rede
+                            </NavLink>
+                            <NavLink to="/auditoria/nova" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Nova auditoria
+                            </NavLink>
+                            <Link to="/auditoria?aba=modelos" onClick={() => setMenuAberto(false)} className="block rounded-md px-2 py-1 text-[13px] text-ink/70 hover:bg-paper">
+                              Modelos
+                            </Link>
+                            <Link to="/auditoria?aba=acoes" onClick={() => setMenuAberto(false)} className="block rounded-md px-2 py-1 text-[13px] text-ink/70 hover:bg-paper">
+                              Planos de ação
+                            </Link>
+                          </>
+                        ) : null}
                         {modulo.slug === 'marketing' ? (
                           <>
                             <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
@@ -284,7 +303,7 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
-                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' ? (
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'auditoria' ? (
                           <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                             Abrir
                           </NavLink>
@@ -315,6 +334,11 @@ export function Layout() {
       {user?.papel === 'franqueado' && !comoFranqueado ? (
         <NavLink to="/minha-equipe" onClick={() => setMenuAberto(false)} className="mt-3 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
           Minha equipe
+        </NavLink>
+      ) : null}
+      {(user?.papel === 'franqueado' || user?.papel === 'equipe_franqueado') && !comoFranqueado ? (
+        <NavLink to="/auditorias" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
+          Auditorias da unidade
         </NavLink>
       ) : null}
       {user?.papel === 'admin' ? (
