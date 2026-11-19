@@ -46,6 +46,20 @@ exigir(rules.includes("duration.value(get(trilhaManualPath(resource.data.documen
 exigir(rules.includes("get(progressoManualPath(request.auth.uid + '_' + item.anteriorId)).data.status == 'concluido'"), 'trilha sem exigir o anterior concluído')
 exigir(rules.includes('getAfter(acessoPath(acessoId)).data.ultimaTrocaEm == request.time'), 'segredo sem registrar a troca no acesso')
 
+exigir(rules.includes('match /cursos/{cursoId}'), 'coleção cursos ausente')
+exigir(rules.includes('match /provas/{cursoId}'), 'coleção provas ausente')
+exigir(rules.includes('match /provasGabarito/{cursoId}'), 'coleção provasGabarito ausente')
+exigir(rules.includes('match /tentativasProva/{tentativaId}'), 'coleção tentativasProva ausente')
+exigir(rules.includes('match /reestudos/{reestudoId}'), 'coleção reestudos ausente')
+exigir(rules.includes("q.keys().hasOnly(['id', 'enunciado', 'opcoes'])"), 'pergunta pública pode carregar a resposta')
+exigir(rules.includes('get(gabaritoProvaPath(resource.data.cursoId)).data'), 'correção sem ler o gabarito nas rules')
+exigir(rules.includes('d.numero is int && d.numero >= 1 && d.numero <= 3'), 'tentativa sem limite de 3 chances')
+{
+  const bloco = rules.slice(rules.indexOf('match /provasGabarito/{cursoId}'), rules.indexOf('match /tentativasProva/{tentativaId}'))
+  const leituras = bloco.split('\n').filter((linha) => linha.includes('allow read'))
+  exigir(leituras.length === 1 && leituras[0].includes('gereUniversidade(userData())') && !leituras[0].includes('podeModulo'), 'gabarito da prova legível por quem não é da franqueadora')
+}
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)

@@ -22,11 +22,14 @@ import { ModelosPage } from './pages/Modelos'
 import { NotificacoesPage } from './pages/Notificacoes'
 import { PerfilPage } from './pages/Perfil'
 import { PerguntePage } from './pages/Pergunte'
-import { QuizPage } from './pages/Quiz'
-import { TrilhaPage, TrilhasPage } from './pages/Trilhas'
 import { TrilhaManuaisPage } from './pages/manuais/TrilhaManuais'
 import { EstudoManualPage } from './pages/manuais/EstudoManual'
 import { GestaoTrilhaPage } from './pages/manuais/GestaoTrilha'
+import { UniversidadePage } from './pages/universidade/Universidade'
+import { CursoPage } from './pages/universidade/Curso'
+import { ProvaPage } from './pages/universidade/Prova'
+import { ReestudoPage } from './pages/universidade/Reestudo'
+import { GestaoUniversidadePage } from './pages/universidade/GestaoUniversidade'
 
 const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ default: mod.PainelPage })))
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
@@ -86,9 +89,13 @@ function Area() {
           <Route path="/documento/:id/imprimir" element={<DocumentoPage />} />
           <Route path="/busca" element={<BuscaPage />} />
           <Route path="/meus-certificados" element={<MeusCertificadosPage />} />
-          <Route path="/trilhas" element={<TrilhasPage />} />
-          <Route path="/trilhas/:id" element={<TrilhaPage />} />
-          <Route path="/trilhas/:trilhaId/quiz/:quizId" element={<QuizPage />} />
+          <Route path="/universidade" element={<UniversidadePage />} />
+          <Route path="/universidade/curso/:cursoId" element={<CursoPage />} />
+          <Route path="/universidade/curso/:cursoId/prova" element={<ProvaPage />} />
+          <Route path="/universidade/curso/:cursoId/reestudo" element={<ReestudoPage />} />
+          <Route path="/universidade/gestao" element={<GestaoUniversidadePage />} />
+          {/* Trilhas e quizzes antigos corrigiam a nota no aparelho: agora tudo passa pela Universidade. */}
+          <Route path="/trilhas/*" element={<Navigate to="/universidade" replace />} />
           <Route path="/certificado/:trilhaId" element={<CertificadoPage />} />
           <Route path="/pergunte" element={<PerguntePage />} />
           <Route path="/notificacoes" element={<NotificacoesPage />} />

@@ -463,6 +463,21 @@ service cloud.firestore {
     }
 
     function certificadoLiberado(data) {
+      return certificadoDeCurso(data) || certificadoLegado(data);
+    }
+
+    function certificadoDeCurso(data) {
+      return data.tentativaId is string
+        && data.tentativaId.size() > 0
+        && data.tentativaId.size() <= 120
+        && exists(cursoPath(data.trilhaId))
+        && exists(tentativaProvaPath(data.tentativaId))
+        && get(tentativaProvaPath(data.tentativaId)).data.uid == request.auth.uid
+        && get(tentativaProvaPath(data.tentativaId)).data.cursoId == data.trilhaId
+        && get(tentativaProvaPath(data.tentativaId)).data.aprovado == true;
+    }
+
+    function certificadoLegado(data) {
       return exists(trilhaPath(data.trilhaId))
         && get(trilhaPath(data.trilhaId)).data.publicado == true
         && (
@@ -774,10 +789,9 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Legado: quizzes antigos podem trazer a resposta certa junto da pergunta; só o admin lê.
     match /quizzes/{id} {
       allow read: if isAdmin();
-      allow read: if isActive() && podeModulo('universidade') && legadoPublicado() && legadoPublico();
-      allow read: if isActive() && podeModulo('universidade') && legadoPublicado() && uidsContemUsuario();
 
       allow create: if isAdmin()
         && isValidQuiz(request.resource.data)
@@ -788,14 +802,15 @@ service cloud.firestore {
         && atualizacaoValida();
       allow delete: if isAdmin();
 
+      // Legado: o gabarito antigo não é mais legível pelo aluno (módulo 5 usa provasGabarito).
       match /gabarito/{gabaritoId} {
-        allow read: if isAdmin() || (isActive() && temModulo('universidade'));
+        allow read: if isAdmin();
         allow write: if isAdmin();
       }
     }
 
     match /gabarito/{id} {
-      allow read: if isAdmin() || (isActive() && temModulo('universidade'));
+      allow read: if isAdmin();
       allow write: if isAdmin();
     }
 
@@ -828,7 +843,8 @@ service cloud.firestore {
 
     match /tentativas/{id} {
       allow read: if isAdmin() || (isActive() && temModulo('universidade') && dono(resource.data));
-      allow create: if isActive() && temModulo('universidade') && isValidTentativa(request.resource.data);
+      // Legado: a nota vinha calculada no aparelho; novas tentativas vão para tentativasProva.
+      allow create: if false;
       allow update, delete: if false;
     }
 
@@ -1606,6 +1622,7 @@ service cloud.firestore {
     }
 
     match /progressoManuais/{progressoId} {
+
       // O próprio usuário lê o seu progresso, inclusive para saber que ainda não existe (id = uid_documento).
       allow get: if signedIn() && progressoId.size() > request.auth.uid.size() + 1 && progressoId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
         && (resource == null || resource.data.uid == request.auth.uid);
@@ -1648,6 +1665,396 @@ service cloud.firestore {
           && request.time >= resource.data.iniciadoEm + duration.value(get(trilhaManualPath(resource.data.documentoId)).data.tempoMinimoSeg, 's')
         ) : false;
 
+      allow delete: if false;
+    }
+
+    // ===============================================================
+    // Universidade UBOX — cursos, prova com gabarito protegido (Módulo 5)
+    // ===============================================================
+    // O gabarito (provasGabarito) só é lido pela franqueadora. As rules corrigem a
+    // tentativa lendo o gabarito com get(), que não depende da permissão de leitura do aluno.
+
+    function cursoPath(id) {
+      return /databases/$(database)/documents/cursos/$(id);
+    }
+
+    function provaPath(id) {
+      return /databases/$(database)/documents/provas/$(id);
+    }
+
+    function gabaritoProvaPath(id) {
+      return /databases/$(database)/documents/provasGabarito/$(id);
+    }
+
+    function tentativaProvaPath(id) {
+      return /databases/$(database)/documents/tentativasProva/$(id);
+    }
+
+    function reestudoPath(id) {
+      return /databases/$(database)/documents/reestudos/$(id);
+    }
+
+    function gereUniversidade(dados) {
+      return contaAtiva(dados)
+        && (
+          dados.papel == 'admin'
+          || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'universidade'))
+        );
+    }
+
+    function alunoUniversidade(dados) {
+      return contaAtiva(dados)
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && temLista(dados, 'universidade')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados);
+    }
+
+    function idCursoOk(id) {
+      return id is string && id.size() > 0 && id.size() <= 64 && id.matches('^[A-Za-z0-9-]+$');
+    }
+
+    function listaDocumentosOk(l) {
+      return l is list && l.size() <= 20
+        && (l.size() < 1 || (l[0] is string && l[0].size() > 0 && l[0].size() <= 128))
+        && (l.size() < 2 || (l[1] is string && l[1].size() > 0 && l[1].size() <= 128))
+        && (l.size() < 3 || (l[2] is string && l[2].size() > 0 && l[2].size() <= 128))
+        && (l.size() < 4 || (l[3] is string && l[3].size() > 0 && l[3].size() <= 128))
+        && (l.size() < 5 || (l[4] is string && l[4].size() > 0 && l[4].size() <= 128))
+        && (l.size() < 6 || (l[5] is string && l[5].size() > 0 && l[5].size() <= 128))
+        && (l.size() < 7 || (l[6] is string && l[6].size() > 0 && l[6].size() <= 128))
+        && (l.size() < 8 || (l[7] is string && l[7].size() > 0 && l[7].size() <= 128))
+        && (l.size() < 9 || (l[8] is string && l[8].size() > 0 && l[8].size() <= 128))
+        && (l.size() < 10 || (l[9] is string && l[9].size() > 0 && l[9].size() <= 128))
+        && (l.size() < 11 || (l[10] is string && l[10].size() > 0 && l[10].size() <= 128))
+        && (l.size() < 12 || (l[11] is string && l[11].size() > 0 && l[11].size() <= 128))
+        && (l.size() < 13 || (l[12] is string && l[12].size() > 0 && l[12].size() <= 128))
+        && (l.size() < 14 || (l[13] is string && l[13].size() > 0 && l[13].size() <= 128))
+        && (l.size() < 15 || (l[14] is string && l[14].size() > 0 && l[14].size() <= 128))
+        && (l.size() < 16 || (l[15] is string && l[15].size() > 0 && l[15].size() <= 128))
+        && (l.size() < 17 || (l[16] is string && l[16].size() > 0 && l[16].size() <= 128))
+        && (l.size() < 18 || (l[17] is string && l[17].size() > 0 && l[17].size() <= 128))
+        && (l.size() < 19 || (l[18] is string && l[18].size() > 0 && l[18].size() <= 128))
+        && (l.size() < 20 || (l[19] is string && l[19].size() > 0 && l[19].size() <= 128));
+    }
+
+    function isValidCurso(data, id) {
+      return data.keys().hasOnly(['titulo', 'descricao', 'ordem', 'aulas', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['titulo', 'descricao', 'ordem', 'aulas', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && idCursoOk(id)
+        && validName(data.titulo)
+        && validShort(data.descricao, 1000)
+        && data.ordem is int && data.ordem >= 1 && data.ordem <= 999
+        && listaDocumentosOk(data.aulas)
+        && data.publicado is bool
+        && data.atualizadoPor == request.auth.uid
+        && validName(data.atualizadoPorNome)
+        && data.atualizadoEm == request.time;
+    }
+
+    // Pergunta pública: sem nenhum campo de resposta.
+    function perguntaOk(q) {
+      return q is map
+        && q.keys().hasOnly(['id', 'enunciado', 'opcoes'])
+        && q.id is string && q.id.size() > 0 && q.id.size() <= 40
+        && q.enunciado is string && q.enunciado.size() > 0 && q.enunciado.size() <= 600
+        && q.opcoes is list && q.opcoes.size() >= 2 && q.opcoes.size() <= 6;
+    }
+
+    function perguntasOk(p) {
+      return p is list && p.size() >= 1 && p.size() <= 20
+        && (p.size() <= 0 || perguntaOk(p[0]))
+        && (p.size() <= 1 || perguntaOk(p[1]))
+        && (p.size() <= 2 || perguntaOk(p[2]))
+        && (p.size() <= 3 || perguntaOk(p[3]))
+        && (p.size() <= 4 || perguntaOk(p[4]))
+        && (p.size() <= 5 || perguntaOk(p[5]))
+        && (p.size() <= 6 || perguntaOk(p[6]))
+        && (p.size() <= 7 || perguntaOk(p[7]))
+        && (p.size() <= 8 || perguntaOk(p[8]))
+        && (p.size() <= 9 || perguntaOk(p[9]))
+        && (p.size() <= 10 || perguntaOk(p[10]))
+        && (p.size() <= 11 || perguntaOk(p[11]))
+        && (p.size() <= 12 || perguntaOk(p[12]))
+        && (p.size() <= 13 || perguntaOk(p[13]))
+        && (p.size() <= 14 || perguntaOk(p[14]))
+        && (p.size() <= 15 || perguntaOk(p[15]))
+        && (p.size() <= 16 || perguntaOk(p[16]))
+        && (p.size() <= 17 || perguntaOk(p[17]))
+        && (p.size() <= 18 || perguntaOk(p[18]))
+        && (p.size() <= 19 || perguntaOk(p[19]));
+    }
+
+    function isValidProva(data, id) {
+      return data.keys().hasOnly(['cursoId', 'titulo', 'notaMinima', 'perguntas', 'totalPerguntas', 'manualRetornoId', 'tempoReestudoSeg', 'versao', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['cursoId', 'titulo', 'notaMinima', 'perguntas', 'totalPerguntas', 'manualRetornoId', 'tempoReestudoSeg', 'versao', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.cursoId == id
+        && validName(data.titulo)
+        && data.notaMinima is int && data.notaMinima >= 1 && data.notaMinima <= 100
+        && perguntasOk(data.perguntas)
+        && data.totalPerguntas == data.perguntas.size()
+        && data.manualRetornoId is string && data.manualRetornoId.size() > 0 && data.manualRetornoId.size() <= 128
+        && data.tempoReestudoSeg is int && data.tempoReestudoSeg >= 30 && data.tempoReestudoSeg <= 14400
+        && data.versao is int && data.versao >= 1
+        && data.publicado is bool
+        && data.atualizadoPor == request.auth.uid
+        && validName(data.atualizadoPorNome)
+        && data.atualizadoEm == request.time;
+    }
+
+    function corretasOk(c) {
+      return c is list && c.size() >= 1 && c.size() <= 20
+        && (c.size() <= 0 || (c[0] is int && c[0] >= 0 && c[0] <= 5))
+        && (c.size() <= 1 || (c[1] is int && c[1] >= 0 && c[1] <= 5))
+        && (c.size() <= 2 || (c[2] is int && c[2] >= 0 && c[2] <= 5))
+        && (c.size() <= 3 || (c[3] is int && c[3] >= 0 && c[3] <= 5))
+        && (c.size() <= 4 || (c[4] is int && c[4] >= 0 && c[4] <= 5))
+        && (c.size() <= 5 || (c[5] is int && c[5] >= 0 && c[5] <= 5))
+        && (c.size() <= 6 || (c[6] is int && c[6] >= 0 && c[6] <= 5))
+        && (c.size() <= 7 || (c[7] is int && c[7] >= 0 && c[7] <= 5))
+        && (c.size() <= 8 || (c[8] is int && c[8] >= 0 && c[8] <= 5))
+        && (c.size() <= 9 || (c[9] is int && c[9] >= 0 && c[9] <= 5))
+        && (c.size() <= 10 || (c[10] is int && c[10] >= 0 && c[10] <= 5))
+        && (c.size() <= 11 || (c[11] is int && c[11] >= 0 && c[11] <= 5))
+        && (c.size() <= 12 || (c[12] is int && c[12] >= 0 && c[12] <= 5))
+        && (c.size() <= 13 || (c[13] is int && c[13] >= 0 && c[13] <= 5))
+        && (c.size() <= 14 || (c[14] is int && c[14] >= 0 && c[14] <= 5))
+        && (c.size() <= 15 || (c[15] is int && c[15] >= 0 && c[15] <= 5))
+        && (c.size() <= 16 || (c[16] is int && c[16] >= 0 && c[16] <= 5))
+        && (c.size() <= 17 || (c[17] is int && c[17] >= 0 && c[17] <= 5))
+        && (c.size() <= 18 || (c[18] is int && c[18] >= 0 && c[18] <= 5))
+        && (c.size() <= 19 || (c[19] is int && c[19] >= 0 && c[19] <= 5));
+    }
+
+    function isValidGabarito(data, id) {
+      return data.keys().hasOnly(['cursoId', 'corretas', 'versao', 'atualizadoPor', 'atualizadoEm'])
+        && data.keys().hasAll(['cursoId', 'corretas', 'versao', 'atualizadoPor', 'atualizadoEm'])
+        && data.cursoId == id
+        && corretasOk(data.corretas)
+        && data.versao is int && data.versao >= 1
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    function respostasOk(r, total) {
+      return r is list && r.size() == total && r.size() <= 20
+        && (r.size() <= 0 || (r[0] is int && r[0] >= 0 && r[0] <= 5))
+        && (r.size() <= 1 || (r[1] is int && r[1] >= 0 && r[1] <= 5))
+        && (r.size() <= 2 || (r[2] is int && r[2] >= 0 && r[2] <= 5))
+        && (r.size() <= 3 || (r[3] is int && r[3] >= 0 && r[3] <= 5))
+        && (r.size() <= 4 || (r[4] is int && r[4] >= 0 && r[4] <= 5))
+        && (r.size() <= 5 || (r[5] is int && r[5] >= 0 && r[5] <= 5))
+        && (r.size() <= 6 || (r[6] is int && r[6] >= 0 && r[6] <= 5))
+        && (r.size() <= 7 || (r[7] is int && r[7] >= 0 && r[7] <= 5))
+        && (r.size() <= 8 || (r[8] is int && r[8] >= 0 && r[8] <= 5))
+        && (r.size() <= 9 || (r[9] is int && r[9] >= 0 && r[9] <= 5))
+        && (r.size() <= 10 || (r[10] is int && r[10] >= 0 && r[10] <= 5))
+        && (r.size() <= 11 || (r[11] is int && r[11] >= 0 && r[11] <= 5))
+        && (r.size() <= 12 || (r[12] is int && r[12] >= 0 && r[12] <= 5))
+        && (r.size() <= 13 || (r[13] is int && r[13] >= 0 && r[13] <= 5))
+        && (r.size() <= 14 || (r[14] is int && r[14] >= 0 && r[14] <= 5))
+        && (r.size() <= 15 || (r[15] is int && r[15] >= 0 && r[15] <= 5))
+        && (r.size() <= 16 || (r[16] is int && r[16] >= 0 && r[16] <= 5))
+        && (r.size() <= 17 || (r[17] is int && r[17] >= 0 && r[17] <= 5))
+        && (r.size() <= 18 || (r[18] is int && r[18] >= 0 && r[18] <= 5))
+        && (r.size() <= 19 || (r[19] is int && r[19] >= 0 && r[19] <= 5));
+    }
+
+    // Quantas respostas batem com o gabarito (desenrolado até 20 questões).
+    function contarAcertos(r, c) {
+      return (c.size() > 0 && r[0] == c[0] ? 1 : 0)
+        + (c.size() > 1 && r[1] == c[1] ? 1 : 0)
+        + (c.size() > 2 && r[2] == c[2] ? 1 : 0)
+        + (c.size() > 3 && r[3] == c[3] ? 1 : 0)
+        + (c.size() > 4 && r[4] == c[4] ? 1 : 0)
+        + (c.size() > 5 && r[5] == c[5] ? 1 : 0)
+        + (c.size() > 6 && r[6] == c[6] ? 1 : 0)
+        + (c.size() > 7 && r[7] == c[7] ? 1 : 0)
+        + (c.size() > 8 && r[8] == c[8] ? 1 : 0)
+        + (c.size() > 9 && r[9] == c[9] ? 1 : 0)
+        + (c.size() > 10 && r[10] == c[10] ? 1 : 0)
+        + (c.size() > 11 && r[11] == c[11] ? 1 : 0)
+        + (c.size() > 12 && r[12] == c[12] ? 1 : 0)
+        + (c.size() > 13 && r[13] == c[13] ? 1 : 0)
+        + (c.size() > 14 && r[14] == c[14] ? 1 : 0)
+        + (c.size() > 15 && r[15] == c[15] ? 1 : 0)
+        + (c.size() > 16 && r[16] == c[16] ? 1 : 0)
+        + (c.size() > 17 && r[17] == c[17] ? 1 : 0)
+        + (c.size() > 18 && r[18] == c[18] ? 1 : 0)
+        + (c.size() > 19 && r[19] == c[19] ? 1 : 0);
+    }
+
+    function idTentativa(cursoId, ciclo, numero) {
+      return request.auth.uid + '_' + cursoId + '_' + string(ciclo) + '_' + string(numero);
+    }
+
+    function tentativaReprovada(id) {
+      return exists(tentativaProvaPath(id)) && get(tentativaProvaPath(id)).data.aprovado == false;
+    }
+
+    // Sequência: até 3 chances por ciclo; um ciclo novo só depois de reprovar a 3ª e reestudar o manual.
+    function tentativaNaVez(d) {
+      return (d.numero == 1 && d.ciclo == 1)
+        || (d.numero > 1 && tentativaReprovada(idTentativa(d.cursoId, d.ciclo, d.numero - 1)))
+        || (
+          d.numero == 1 && d.ciclo > 1
+          && tentativaReprovada(idTentativa(d.cursoId, d.ciclo - 1, 3))
+          && exists(reestudoPath(request.auth.uid + '_' + d.cursoId + '_' + string(d.ciclo - 1)))
+          && get(reestudoPath(request.auth.uid + '_' + d.cursoId + '_' + string(d.ciclo - 1))).data.status == 'concluido'
+        );
+    }
+
+    function isValidTentativaProva(d) {
+      return d.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'respostas', 'aprovado', 'criadoEm', 'corrigidoEm'])
+        && d.keys().hasAll(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'respostas', 'aprovado', 'criadoEm', 'corrigidoEm'])
+        && idCursoOk(d.cursoId)
+        && d.ciclo is int && d.ciclo >= 1 && d.ciclo <= 50
+        && d.numero is int && d.numero >= 1 && d.numero <= 3
+        && d.versao is int
+        && d.unidadeNome is string && d.unidadeNome.size() <= 120;
+    }
+
+    function alunoConfere(dados, d) {
+      return alunoUniversidade(dados)
+        && d.nome == dados.nome
+        && d.unidadeId == dados.unidadeId
+        && d.unidadeNome == dados.get('unidade', '');
+    }
+
+    function provaAceita(prova, d) {
+      return prova.publicado == true
+        && d.versao == prova.versao
+        && respostasOk(d.respostas, prova.totalPerguntas);
+    }
+
+    // Correção feita pelas rules: aprovado precisa bater com a conta sobre o gabarito.
+    function correcaoConfere(antes, depois, prova, gabarito) {
+      return gabarito.versao == antes.versao
+        && depois.aprovado == (contarAcertos(antes.respostas, gabarito.corretas) * 100 >= prova.notaMinima * prova.totalPerguntas);
+    }
+
+    function leResultadoUnidade(dados, unidadeId) {
+      return contaAtiva(dados)
+        && dados.papel == 'franqueado'
+        && temLista(dados, 'universidade')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados)
+        && dados.unidadeId == unidadeId;
+    }
+
+    match /cursos/{cursoId} {
+      allow read: if isActive() && podeModulo('universidade') && resource.data.publicado == true;
+      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereUniversidade(userData())
+          && isValidCurso(request.resource.data, cursoId)
+          && request.resource.data.atualizadoPorNome == userData().nome
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /provas/{cursoId} {
+      allow read: if isActive() && podeModulo('universidade') && resource.data.publicado == true;
+      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      // Prova e gabarito sobem juntos no mesmo lote, com a mesma versão.
+      allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereUniversidade(userData())
+          && isValidProva(request.resource.data, cursoId)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && (resource == null || request.resource.data.versao == resource.data.versao + 1)
+          && exists(cursoPath(cursoId))
+          && existsAfter(gabaritoProvaPath(cursoId))
+          && getAfter(gabaritoProvaPath(cursoId)).data.versao == request.resource.data.versao
+          && getAfter(gabaritoProvaPath(cursoId)).data.corretas.size() == request.resource.data.totalPerguntas
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /provasGabarito/{cursoId} {
+      // Nunca legível pelo aluno.
+      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereUniversidade(userData())
+          && isValidGabarito(request.resource.data, cursoId)
+          && existsAfter(provaPath(cursoId))
+          && getAfter(provaPath(cursoId)).data.versao == request.resource.data.versao
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /tentativasProva/{tentativaId} {
+      allow get: if signedIn() && tentativaId.size() > request.auth.uid.size() + 1
+        && tentativaId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
+        && (resource == null || resource.data.uid == request.auth.uid);
+      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      allow read: if signedIn() && exists(userPath()) && leResultadoUnidade(userData(), resource.data.unidadeId);
+
+      // Envio: grava as respostas e ocupa a chance. Sem resultado ainda, para que uma recusa não sirva de "oráculo".
+      allow create: if request.resource.data.uid == request.auth.uid && request.resource.data.aprovado == null ? (
+          signedIn() && exists(userPath())
+          && isValidTentativaProva(request.resource.data)
+          && tentativaId == idTentativa(request.resource.data.cursoId, request.resource.data.ciclo, request.resource.data.numero)
+          && request.resource.data.corrigidoEm == null
+          && request.resource.data.criadoEm == request.time
+          && alunoConfere(userData(), request.resource.data)
+          && exists(provaPath(request.resource.data.cursoId))
+          && provaAceita(get(provaPath(request.resource.data.cursoId)).data, request.resource.data)
+          && tentativaNaVez(request.resource.data)
+        ) : false;
+
+      // Correção: só o resultado muda, uma vez, e precisa bater com o gabarito.
+      allow update: if resource.data.uid == request.auth.uid && resource.data.aprovado == null && request.resource.data.aprovado is bool ? (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aprovado', 'corrigidoEm'])
+          && request.resource.data.corrigidoEm == request.time
+          && exists(gabaritoProvaPath(resource.data.cursoId))
+          && correcaoConfere(resource.data, request.resource.data, get(provaPath(resource.data.cursoId)).data, get(gabaritoProvaPath(resource.data.cursoId)).data)
+        ) : false;
+      allow delete: if false;
+    }
+
+    // Reestudo do manual depois de reprovar nas 3 chances: libera o próximo ciclo.
+    match /reestudos/{reestudoId} {
+      allow get: if signedIn() && reestudoId.size() > request.auth.uid.size() + 1
+        && reestudoId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
+        && (resource == null || resource.data.uid == request.auth.uid);
+      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+
+      allow create: if request.resource.data.uid == request.auth.uid && request.resource.data.status == 'em_andamento' ? (
+          signedIn() && exists(userPath())
+          && request.resource.data.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'documentoId', 'status', 'iniciadoEm', 'reinicios', 'concluidoEm', 'atualizadoEm'])
+          && request.resource.data.keys().hasAll(['uid', 'cursoId', 'ciclo', 'documentoId', 'status', 'iniciadoEm', 'reinicios', 'concluidoEm', 'atualizadoEm'])
+          && idCursoOk(request.resource.data.cursoId)
+          && request.resource.data.ciclo is int && request.resource.data.ciclo >= 1 && request.resource.data.ciclo <= 50
+          && reestudoId == request.auth.uid + '_' + request.resource.data.cursoId + '_' + string(request.resource.data.ciclo)
+          && request.resource.data.iniciadoEm == request.time
+          && request.resource.data.reinicios == 0
+          && request.resource.data.concluidoEm == null
+          && request.resource.data.atualizadoEm == request.time
+          && alunoUniversidade(userData())
+          && exists(provaPath(request.resource.data.cursoId))
+          && request.resource.data.documentoId == get(provaPath(request.resource.data.cursoId)).data.manualRetornoId
+          && tentativaReprovada(idTentativa(request.resource.data.cursoId, request.resource.data.ciclo, 3))
+        ) : false;
+
+      allow update: if resource.data.uid == request.auth.uid && resource.data.status == 'em_andamento' && request.resource.data.status == 'em_andamento' ? (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['iniciadoEm', 'reinicios', 'atualizadoEm'])
+          && request.resource.data.iniciadoEm == request.time
+          && request.resource.data.reinicios == resource.data.reinicios + 1
+          && request.resource.data.atualizadoEm == request.time
+        ) : false;
+
+      allow update: if resource.data.uid == request.auth.uid && resource.data.status == 'em_andamento' && request.resource.data.status == 'concluido' ? (
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'concluidoEm', 'atualizadoEm'])
+          && request.resource.data.concluidoEm == request.time
+          && request.resource.data.atualizadoEm == request.time
+          && exists(provaPath(resource.data.cursoId))
+          && request.time >= resource.data.iniciadoEm + duration.value(get(provaPath(resource.data.cursoId)).data.tempoReestudoSeg, 's')
+        ) : false;
       allow delete: if false;
     }
   }
