@@ -1,4 +1,6 @@
 import { Link, useSearchParams } from 'react-router-dom'
+import { Lock } from 'lucide-react'
+import { useAcessoTrilha } from '../lib/useAcessoTrilha'
 import { Vazio } from '../components/ui'
 import { cadeiaCategoria } from '../lib/trilha'
 import { pontuarBusca, trecho } from '../lib/text'
@@ -8,6 +10,7 @@ export function BuscaPage() {
   const [params] = useSearchParams()
   const q = params.get('q') ?? ''
   const { documentos, categorias } = usePortal()
+  const trilhaAcesso = useAcessoTrilha()
   const resultados = documentos
     .filter((documento) => documento.status === 'publicado')
     .map((documento) => ({ documento, pontos: pontuarBusca(q, documento.titulo, documento.conteudoTexto) }))
@@ -22,6 +25,18 @@ export function BuscaPage() {
       <ul className="space-y-3">
         {resultados.map(({ documento }) => {
           const categoria = cadeiaCategoria(categorias, documento.categoriaId).map((item) => item.nome).join(' / ')
+          if (!trilhaAcesso.acesso(documento.id).liberado) {
+            return (
+              <li key={documento.id} className="flex items-center gap-3 rounded-2xl border border-line bg-white p-4">
+                <Lock className="h-4 w-4 shrink-0 text-ink/45" aria-hidden="true" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold text-ink/60">{documento.titulo}</span>
+                  <span className="text-xs text-ink/45">Bloqueado: abre na trilha de manuais.</span>
+                </span>
+                <Link to="/manuais/trilha" className="text-xs font-semibold text-brand-dark hover:underline">Ver na trilha</Link>
+              </li>
+            )
+          }
           return (
             <li key={documento.id}>
               <Link to={`/documento/${documento.id}`} className="block rounded-2xl border border-line bg-white p-4 hover:border-brand">

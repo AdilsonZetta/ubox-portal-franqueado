@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { Lock } from 'lucide-react'
 import { Aviso, Carregando, Selo, Vazio } from '../components/ui'
 import { useVisao } from '../lib/visao'
 import { formatarData, rotuloExibicao, seloExibicao, tipoExibicao, tiposPresentes, type TipoExibicao } from '../lib/format'
 import { usePortal } from '../lib/portal'
 import { cadeiaCategoria, filhosDe } from '../lib/trilha'
 import { paraMillis } from '../lib/format'
+import { useAcessoTrilha } from '../lib/useAcessoTrilha'
 
 export function BibliotecaPage() {
   const { categoriaId } = useParams()
   const { ehAdmin } = useVisao()
   const { categorias, documentos, carregando, erro } = usePortal()
   const [filtro, setFiltro] = useState<TipoExibicao | 'todos'>('todos')
+  const trilhaAcesso = useAcessoTrilha()
   const atual = categorias.find((categoria) => categoria.id === categoriaId)
   const filhos = filhosDe(categorias, atual ? atual.id : null)
   const trilha = atual ? cadeiaCategoria(categorias, atual.id) : []
@@ -88,7 +91,21 @@ export function BibliotecaPage() {
       ) : null}
       {lista.length ? (
         <div className="overflow-hidden rounded-2xl border border-line bg-white">
-          {lista.map((documento) => (
+          {lista.map((documento) => {
+            const acesso = trilhaAcesso.acesso(documento.id)
+            if (!acesso.liberado) {
+              return (
+                <div key={documento.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0" aria-label={`${documento.titulo}: bloqueado pela trilha`}>
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-ink/45"><Lock className="h-4 w-4" aria-hidden="true" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium text-ink/55">{documento.titulo}</span>
+                    <span className="text-xs text-ink/40">Abre na trilha de manuais, depois do manual anterior.</span>
+                  </span>
+                  <Link to="/manuais/trilha" className="shrink-0 text-xs font-semibold text-brand-dark hover:underline">Ver na trilha</Link>
+                </div>
+              )
+            }
+            return (
             <Link key={documento.id} to={`/documento/${documento.id}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 hover:bg-paper">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-[10px] font-bold uppercase text-ink/70">{seloExibicao(tipoExibicao(documento))}</span>
               <span className="min-w-0 flex-1">
@@ -96,10 +113,12 @@ export function BibliotecaPage() {
                 <span className="text-xs text-ink/40">Atualizado {formatarData(documento.atualizadoEm)}</span>
               </span>
               <span className="hidden text-xs text-ink/40 sm:block">v{documento.versao}</span>
+              {acesso.estado === 'concluido' ? <Selo tom="lima">Trilha: concluído</Selo> : acesso.estado ? <Selo>Na trilha</Selo> : null}
               {documento.status === 'rascunho' ? <Selo tom="alerta">Rascunho</Selo> : null}
               {documento.leituraObrigatoria ? <Selo tom="marca">Aceite</Selo> : null}
             </Link>
-          ))}
+            )
+          })}
         </div>
       ) : (
         <Vazio titulo="Nenhum documento neste filtro" texto="A franqueadora publica os materiais oficiais nesta área." />

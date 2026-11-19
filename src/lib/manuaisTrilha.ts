@@ -222,3 +222,29 @@ export function podeGerirTrilha(
 export function fazTrilha(usuario: { papel: string } | null | undefined): boolean {
   return usuario?.papel === 'franqueado' || usuario?.papel === 'equipe_franqueado'
 }
+
+export type AcessoManual =
+  | { liberado: true; naTrilha: boolean; estado: EstadoManual | null }
+  | { liberado: false; naTrilha: true; estado: 'bloqueado' }
+
+/**
+ * A trilha é a única porta dos manuais que estão nela: biblioteca, busca e /documento usam o mesmo
+ * estadoDoManual. Fora da trilha (ou item inativo) abre normalmente; a franqueadora vê tudo.
+ */
+export function acessoAoManual(
+  documentoId: string,
+  itens: Pick<ItemTrilhaManual, 'documentoId' | 'anteriorId' | 'ativo'>[],
+  progressos: Pick<ProgressoManual, 'documentoId' | 'status'>[],
+  veTudo: boolean,
+): AcessoManual {
+  const item = itens.find((i) => i.ativo && i.documentoId === documentoId)
+  if (!item) return { liberado: true, naTrilha: false, estado: null }
+  if (veTudo) return { liberado: true, naTrilha: true, estado: null }
+  const estado = estadoDoManual(item, new Map(progressos.map((p) => [p.documentoId, p])))
+  return estado === 'bloqueado' ? { liberado: false, naTrilha: true, estado } : { liberado: true, naTrilha: true, estado }
+}
+
+/** Admin e equipe da franqueadora (fora da simulação) veem todos os manuais. */
+export function veTodosOsManuais(usuario: { papel: string } | null | undefined, simulando: boolean): boolean {
+  return !simulando && (usuario?.papel === 'admin' || usuario?.papel === 'equipe_franqueadora')
+}
