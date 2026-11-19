@@ -39,6 +39,12 @@ exigir(rules.includes('match /solicitacoesAcesso/{solicitacaoId}'), 'coleção s
 exigir(rules.includes("data.texto == 'Visualizou a senha.'"), 'evento de acesso sem frase oficial')
 exigir(rules.includes('allow delete: if false'), 'recusa de delete ausente')
 
+exigir(rules.includes('match /manuaisTrilha/{id}'), 'coleção manuaisTrilha ausente')
+exigir(rules.includes('match /progressoManuais/{progressoId}'), 'coleção progressoManuais ausente')
+exigir(rules.includes("progressoId == request.auth.uid + '_' + data.documentoId"), 'progresso sem id uid_documento')
+exigir(rules.includes("duration.value(get(trilhaManualPath(resource.data.documentoId)).data.tempoMinimoSeg, 's')"), 'conclusão sem tempo mínimo no servidor')
+exigir(rules.includes("get(progressoManualPath(request.auth.uid + '_' + item.anteriorId)).data.status == 'concluido'"), 'trilha sem exigir o anterior concluído')
+exigir(rules.includes('getAfter(acessoPath(acessoId)).data.ultimaTrocaEm == request.time'), 'segredo sem registrar a troca no acesso')
 
 if (erros.length) {
   console.error(erros.join('\n'))

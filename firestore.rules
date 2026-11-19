@@ -1505,5 +1505,150 @@ service cloud.firestore {
       allow update: if signedIn() && exists(userPath()) && resource != null && isValidSolicitacaoAcesso(request.resource.data) && podeDecidirSolicitacao();
       allow delete: if false;
     }
+
+    // ===============================================================
+    // Manuais e Processos — trilha sequencial com tempo mínimo (Módulo 4)
+    // ===============================================================
+
+    function trilhaManualPath(id) {
+      return /databases/$(database)/documents/manuaisTrilha/$(id);
+    }
+
+    function progressoManualPath(id) {
+      return /databases/$(database)/documents/progressoManuais/$(id);
+    }
+
+    function gereTrilhaManuais(dados) {
+      return contaAtiva(dados)
+        && (
+          (dados.papel == 'admin')
+          || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'manuais'))
+        );
+    }
+
+    function isValidItemTrilha(data, id) {
+      return data.keys().hasOnly(['documentoId', 'titulo', 'etapa', 'ordem', 'tempoMinimoSeg', 'videoMinutos', 'anteriorId', 'ativo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['documentoId', 'titulo', 'etapa', 'ordem', 'tempoMinimoSeg', 'videoMinutos', 'anteriorId', 'ativo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.documentoId == id
+        && data.titulo is string && data.titulo.size() > 0 && data.titulo.size() <= 200
+        && data.etapa is string && data.etapa.size() <= 80
+        && data.ordem is int && data.ordem >= 1 && data.ordem <= 999
+        && data.tempoMinimoSeg is int && data.tempoMinimoSeg >= 30 && data.tempoMinimoSeg <= 14400
+        && data.videoMinutos is int && data.videoMinutos >= 0 && data.videoMinutos <= 600
+        && data.anteriorId is string && data.anteriorId.size() <= 128 && data.anteriorId != id
+        && data.ativo is bool
+        && data.atualizadoPor == request.auth.uid
+        && validName(data.atualizadoPorNome)
+        && data.atualizadoEm == request.time;
+    }
+
+    function isValidProgressoManual(data) {
+      return data.keys().hasOnly(['uid', 'documentoId', 'nome', 'unidadeId', 'unidadeNome', 'status', 'iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'concluidoEm', 'atualizadoEm'])
+        && data.keys().hasAll(['uid', 'documentoId', 'nome', 'unidadeId', 'unidadeNome', 'status', 'iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'concluidoEm', 'atualizadoEm'])
+        && data.documentoId is string && data.documentoId.size() > 0 && data.documentoId.size() <= 128
+        && data.unidadeNome is string && data.unidadeNome.size() <= 120
+        && data.status in ['em_andamento', 'concluido']
+        && data.iniciadoEm is timestamp
+        && data.reinicios is int && data.reinicios >= 0 && data.reinicios <= 100000
+        && data.tempoMinimoSeg is int
+        && data.atualizadoEm == request.time;
+    }
+
+    // Quem grava é sempre o próprio usuário da unidade, com o módulo liberado.
+    function progressoDoProprio(dados, data, progressoId) {
+      return contaAtiva(dados)
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && temLista(dados, 'manuais')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados)
+        && data.uid == request.auth.uid
+        && progressoId == request.auth.uid + '_' + data.documentoId
+        && data.unidadeId == dados.unidadeId
+        && data.nome == dados.nome
+        && data.unidadeNome == dados.get('unidade', '');
+    }
+
+    function itemTrilhaLibera(item, tempoMinimoSeg) {
+      return item.ativo == true
+        && item.tempoMinimoSeg == tempoMinimoSeg
+        && (
+          item.anteriorId == ''
+          || (
+            exists(progressoManualPath(request.auth.uid + '_' + item.anteriorId))
+            && get(progressoManualPath(request.auth.uid + '_' + item.anteriorId)).data.status == 'concluido'
+          )
+        );
+    }
+
+    function leProgressoDaRede(dados) {
+      return gereTrilhaManuais(dados);
+    }
+
+    function leProgressoDaUnidade(dados, unidadeId) {
+      return contaAtiva(dados)
+        && dados.papel == 'franqueado'
+        && temLista(dados, 'manuais')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados)
+        && dados.unidadeId == unidadeId;
+    }
+
+    match /manuaisTrilha/{id} {
+      allow read: if isActive() && podeModulo('manuais');
+      allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereTrilhaManuais(userData())
+          && isValidItemTrilha(request.resource.data, id)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && exists(/databases/$(database)/documents/documentos/$(id))
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /progressoManuais/{progressoId} {
+      // O próprio usuário lê o seu progresso, inclusive para saber que ainda não existe (id = uid_documento).
+      allow get: if signedIn() && progressoId.size() > request.auth.uid.size() + 1 && progressoId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
+        && (resource == null || resource.data.uid == request.auth.uid);
+      allow list: if signedIn() && resource.data.uid == request.auth.uid;
+      allow read: if signedIn() && exists(userPath()) && leProgressoDaRede(userData());
+      allow read: if signedIn() && exists(userPath()) && leProgressoDaUnidade(userData(), resource.data.unidadeId);
+
+      // Início: em andamento, cronômetro começa agora no servidor, e só se o anterior foi concluído.
+      allow create: if request.resource.data.status == 'em_andamento' && request.resource.data.uid == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && isValidProgressoManual(request.resource.data)
+          && progressoDoProprio(userData(), request.resource.data, progressoId)
+          && request.resource.data.iniciadoEm == request.time
+          && request.resource.data.reinicios == 0
+          && request.resource.data.concluidoEm == null
+          && exists(trilhaManualPath(request.resource.data.documentoId))
+          && itemTrilhaLibera(get(trilhaManualPath(request.resource.data.documentoId)).data, request.resource.data.tempoMinimoSeg)
+        ) : false;
+
+      // Reinício (saiu da tela ou voltou ao manual): o cronômetro do servidor recomeça.
+      allow update: if resource.data.status == 'em_andamento' && request.resource.data.status == 'em_andamento' && resource.data.uid == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && isValidProgressoManual(request.resource.data)
+          && progressoDoProprio(userData(), request.resource.data, progressoId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'atualizadoEm'])
+          && request.resource.data.iniciadoEm == request.time
+          && request.resource.data.reinicios == resource.data.reinicios + 1
+          && exists(trilhaManualPath(resource.data.documentoId))
+          && request.resource.data.tempoMinimoSeg == get(trilhaManualPath(resource.data.documentoId)).data.tempoMinimoSeg
+        ) : false;
+
+      // Conclusão: só depois do tempo mínimo desde o último (re)início, medido pelo servidor.
+      allow update: if resource.data.status == 'em_andamento' && request.resource.data.status == 'concluido' && resource.data.uid == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && isValidProgressoManual(request.resource.data)
+          && progressoDoProprio(userData(), request.resource.data, progressoId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'concluidoEm', 'atualizadoEm'])
+          && request.resource.data.concluidoEm == request.time
+          && exists(trilhaManualPath(resource.data.documentoId))
+          && request.time >= resource.data.iniciadoEm + duration.value(get(trilhaManualPath(resource.data.documentoId)).data.tempoMinimoSeg, 's')
+        ) : false;
+
+      allow delete: if false;
+    }
   }
 }

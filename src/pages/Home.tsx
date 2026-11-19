@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { Route } from 'lucide-react'
 import { Aviso, Carregando, Selo } from '../components/ui'
 import { useAuth } from '../lib/auth'
-import { primeiroNome, rotuloTipo, paraMillis } from '../lib/format'
+import { primeiroNome, rotuloExibicao, seloExibicao, tipoExibicao, paraMillis } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
 import { useVisao } from '../lib/visao'
@@ -70,6 +71,20 @@ export function HomePage() {
         </section>
       ) : null}
 
+      <Link
+        to="/manuais/trilha"
+        className="flex items-center gap-4 rounded-2xl border border-line bg-white px-5 py-4 shadow-sm transition hover:border-brand"
+      >
+        <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-dark" aria-hidden="true">
+          <Route className="h-5 w-5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block font-bold text-ink">Trilha de manuais</span>
+          <span className="block text-sm text-ink/60">Os manuais abrem um de cada vez, com tempo mínimo de leitura. Veja onde você parou.</span>
+        </span>
+        <span className="text-sm font-semibold text-brand">Abrir</span>
+      </Link>
+
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink/45">Áreas</h2>
         <div className="flex gap-2 overflow-x-auto pb-1">
@@ -88,10 +103,10 @@ export function HomePage() {
         </div>
         {recentes.map((documento) => (
           <Link key={documento.id} to={`/documento/${documento.id}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 hover:bg-paper">
-            <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand/10 text-[10px] font-bold uppercase text-brand-dark">{rotuloTipo(documento.tipo).slice(0, 3)}</span>
+            <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand/10 text-[10px] font-bold uppercase text-brand-dark">{seloExibicao(tipoExibicao(documento))}</span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{documento.titulo}</span>
-              <span className="text-xs text-ink/45">{rotuloTipo(documento.tipo)} · versão {documento.versao}</span>
+              <span className="text-xs text-ink/45">{rotuloExibicao(tipoExibicao(documento))} · versão {documento.versao}</span>
             </span>
             {leituraDaVersao(portal.leituras, user.uid, documento.id, documento.versao) ? <Selo tom="lima">Lido</Selo> : null}
           </Link>

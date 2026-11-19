@@ -1,10 +1,11 @@
-import { Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, LayoutTemplate, LogOut, Menu, MessageCircle, Search, Shield, X } from 'lucide-react'
+import { Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, LayoutTemplate, LogOut, Menu, MessageCircle, Route as RotaIcon, Search, Shield, SlidersHorizontal, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { GRUPOS, MODULOS } from '../data/modulos'
 import { useAuth } from '../lib/auth'
 import { observarPendentes } from '../lib/chamados'
 import { podeModulo } from '../lib/modulosAcesso'
+import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { observarSolicitacoesAbertas } from '../lib/senhas'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
@@ -16,6 +17,8 @@ const CHAVE = 'ubox-modulo-expandido'
 
 const itensManuais = [
   { to: '/manuais', label: 'Início', icon: Home, fim: true },
+  { to: '/manuais/trilha', label: 'Trilha de manuais', icon: RotaIcon },
+  { to: '/manuais/gestao', label: 'Gestão da trilha', icon: SlidersHorizontal, gestao: true },
   { to: '/biblioteca', label: 'Documentos', icon: BookOpen },
   { to: '/atribuicoes', label: 'Atribuições', icon: ClipboardCheck, admin: true },
   { to: '/modelos', label: 'Modelos', icon: LayoutTemplate, admin: true },
@@ -163,7 +166,7 @@ export function Layout() {
                       <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-line pl-2">
                         {modulo.slug === 'manuais'
                           ? itensManuais
-                              .filter((item) => !item.admin || ehAdmin)
+                              .filter((item) => (!item.admin || ehAdmin) && (!item.gestao || (podeGerirTrilha(user, ehAdmin) && !comoFranqueado)))
                               .map((item) => (
                                 <NavLink
                                   key={item.to}

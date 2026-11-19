@@ -747,6 +747,120 @@ await caso('gravar segredo com batch correto é aceito', (async () => {
   await assertSucceeds(lote.commit())
 })())
 
+
+// ===============================================================
+// Módulo 4 — trilha de manuais com tempo mínimo
+// ===============================================================
+const passado = new Date(Date.now() - 2 * 60 * 60 * 1000)
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  await setDoc(doc(banco, 'unidades', 'un-m'), {
+    nome: 'Unidade Manuais', cidade: 'Uberaba', responsavel: 'Dono Manuais', email: 'fr-m@ubox.test', uid: 'fr-m',
+    modulosLiberados: ['manuais'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'unidades', 'un-m2'), {
+    nome: 'Outra Manuais', cidade: 'Uberaba', responsavel: 'Dono Dois', email: 'fr-m2@ubox.test', uid: 'fr-m2',
+    modulosLiberados: ['manuais'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'usuarios', 'fr-m'), usuario('fr-m', { unidadeId: 'un-m', unidade: 'Unidade Manuais', nome: 'Dono Manuais' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-m'), usuario('eq-m', { papel: 'equipe_franqueado', unidadeId: 'un-m', unidade: 'Unidade Manuais', criadoPor: 'fr-m', nome: 'Equipe Manuais' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-m2'), usuario('eq-m2', { papel: 'equipe_franqueado', unidadeId: 'un-m2', unidade: 'Outra Manuais', criadoPor: 'fr-m2', nome: 'Equipe Outra' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-sem-m'), usuario('fr-sem-m', { unidadeId: 'un-m', unidade: 'Unidade Manuais', modulos: [], nome: 'Sem Manuais' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-m'), usuario('eq-rede-m', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['manuais'], nome: 'Rede Manuais' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-sem'), usuario('eq-rede-sem', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: [], nome: 'Rede Sem' }))
+  for (const id of ['man-1', 'man-2', 'man-3']) {
+    await setDoc(doc(banco, 'documentos', id), { titulo: `Manual ${id}`, categoriaId: 'cat-1', tipo: 'manual', status: 'publicado', publico: true, unidades: [], papeis: [], uidsExtra: [], uids: [] })
+  }
+  const item = (id, ordem, anteriorId, tempo = 60) => ({
+    documentoId: id, titulo: `Manual ${id}`, etapa: 'Etapa 1', ordem, tempoMinimoSeg: tempo, videoMinutos: 0,
+    anteriorId, ativo: true, atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin Rede', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'manuaisTrilha', 'man-1'), item('man-1', 1, ''))
+  await setDoc(doc(banco, 'manuaisTrilha', 'man-2'), item('man-2', 2, 'man-1'))
+  await setDoc(doc(banco, 'manuaisTrilha', 'man-3'), item('man-3', 3, 'man-2'))
+  // Progresso antigo do man-2 da equipe, iniciado há 2 horas, para testar a conclusão no tempo.
+  await setDoc(doc(banco, 'progressoManuais', 'eq-m_man-1'), {
+    uid: 'eq-m', documentoId: 'man-1', nome: 'Equipe Manuais', unidadeId: 'un-m', unidadeNome: 'Unidade Manuais',
+    status: 'concluido', iniciadoEm: passado, reinicios: 0, tempoMinimoSeg: 60, concluidoEm: passado, atualizadoEm: passado,
+  })
+  await setDoc(doc(banco, 'progressoManuais', 'eq-m_man-2'), {
+    uid: 'eq-m', documentoId: 'man-2', nome: 'Equipe Manuais', unidadeId: 'un-m', unidadeNome: 'Unidade Manuais',
+    status: 'em_andamento', iniciadoEm: passado, reinicios: 0, tempoMinimoSeg: 60, concluidoEm: null, atualizadoEm: passado,
+  })
+})
+
+const frM = ambiente.authenticatedContext('fr-m', { email: 'fr-m@ubox.test' }).firestore()
+const eqM = ambiente.authenticatedContext('eq-m', { email: 'eq-m@ubox.test' }).firestore()
+const eqM2 = ambiente.authenticatedContext('eq-m2', { email: 'eq-m2@ubox.test' }).firestore()
+const frSemM = ambiente.authenticatedContext('fr-sem-m', { email: 'fr-sem-m@ubox.test' }).firestore()
+const eqRedeM = ambiente.authenticatedContext('eq-rede-m', { email: 'eq-rede-m@ubox.test' }).firestore()
+const eqRedeSem = ambiente.authenticatedContext('eq-rede-sem', { email: 'eq-rede-sem@ubox.test' }).firestore()
+const adminM = ambiente.authenticatedContext('admin-1', { email: 'admin@ubox.test' }).firestore()
+
+function progresso(uid, documentoId, extra = {}) {
+  return {
+    uid, documentoId, nome: 'Dono Manuais', unidadeId: 'un-m', unidadeNome: 'Unidade Manuais',
+    status: 'em_andamento', iniciadoEm: serverTimestamp(), reinicios: 0, tempoMinimoSeg: 60, concluidoEm: null,
+    atualizadoEm: serverTimestamp(), ...extra,
+  }
+}
+
+function itemTrilha(autor, nome, extra = {}) {
+  return {
+    documentoId: 'man-3', titulo: 'Manual man-3', etapa: 'Etapa 2', ordem: 3, tempoMinimoSeg: 120, videoMinutos: 1,
+    anteriorId: 'man-2', ativo: true, atualizadoPor: autor, atualizadoPorNome: nome, atualizadoEm: serverTimestamp(), ...extra,
+  }
+}
+
+await caso('franqueado lê a trilha de manuais', assertSucceeds(getDocs(collection(frM, 'manuaisTrilha'))))
+await caso('franqueado sem o módulo manuais não lê a trilha', assertFails(getDocs(collection(frSemM, 'manuaisTrilha'))))
+await caso('franqueado lê o próprio progresso que ainda não existe', assertSucceeds(getDoc(doc(frM, 'progressoManuais', 'fr-m_man-1'))))
+await caso('franqueado grava o próprio progresso do primeiro manual', assertSucceeds(setDoc(doc(frM, 'progressoManuais', 'fr-m_man-1'), progresso('fr-m', 'man-1'))))
+await caso('não grava progresso de outro uid', assertFails(setDoc(doc(frM, 'progressoManuais', 'eq-m_man-3'), progresso('eq-m', 'man-3', { nome: 'Equipe Manuais' }))))
+await caso('não cria progresso com id diferente de uid_documento', assertFails(setDoc(doc(frM, 'progressoManuais', 'qualquer'), progresso('fr-m', 'man-1'))))
+await caso('não pula manual sem concluir o anterior', assertFails(setDoc(doc(frM, 'progressoManuais', 'fr-m_man-2'), progresso('fr-m', 'man-2'))))
+await caso('não cria progresso já concluído', assertFails(setDoc(doc(frM, 'progressoManuais', 'fr-m_man-3'), progresso('fr-m', 'man-3', { status: 'concluido', concluidoEm: serverTimestamp() }))))
+await caso('não cria progresso com tempo mínimo diferente da trilha', assertFails(setDoc(doc(eqM, 'progressoManuais', 'eq-m_man-3'), progresso('eq-m', 'man-3', { nome: 'Equipe Manuais', tempoMinimoSeg: 30 }))))
+await caso('franqueado sem o módulo não grava progresso', assertFails(setDoc(doc(frSemM, 'progressoManuais', 'fr-sem-m_man-1'), progresso('fr-sem-m', 'man-1', { nome: 'Sem Manuais' }))))
+await caso('não conclui antes do tempo mínimo', assertFails(updateDoc(doc(frM, 'progressoManuais', 'fr-m_man-1'), {
+  status: 'concluido', concluidoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+})))
+await caso('reinício zera o cronômetro do servidor', assertSucceeds(updateDoc(doc(frM, 'progressoManuais', 'fr-m_man-1'), {
+  iniciadoEm: serverTimestamp(), reinicios: 1, tempoMinimoSeg: 60, atualizadoEm: serverTimestamp(),
+})))
+await caso('reinício não pula o contador', assertFails(updateDoc(doc(frM, 'progressoManuais', 'fr-m_man-1'), {
+  iniciadoEm: serverTimestamp(), reinicios: 5, tempoMinimoSeg: 60, atualizadoEm: serverTimestamp(),
+})))
+await caso('reinício não volta o iniciadoEm para o passado', assertFails(updateDoc(doc(frM, 'progressoManuais', 'fr-m_man-1'), {
+  iniciadoEm: passado, reinicios: 2, tempoMinimoSeg: 60, atualizadoEm: serverTimestamp(),
+})))
+await caso('conclui depois do tempo mínimo', assertSucceeds(updateDoc(doc(eqM, 'progressoManuais', 'eq-m_man-2'), {
+  status: 'concluido', concluidoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+})))
+await caso('concluído não volta para em andamento', assertFails(updateDoc(doc(eqM, 'progressoManuais', 'eq-m_man-2'), {
+  status: 'em_andamento', iniciadoEm: serverTimestamp(), reinicios: 1, atualizadoEm: serverTimestamp(),
+})))
+await caso('próximo manual abre depois de concluir o anterior', assertSucceeds(setDoc(doc(eqM, 'progressoManuais', 'eq-m_man-3'), progresso('eq-m', 'man-3', { nome: 'Equipe Manuais' }))))
+await caso('outra pessoa não conclui o progresso de alguém', assertFails(updateDoc(doc(frM, 'progressoManuais', 'eq-m_man-3'), {
+  status: 'concluido', concluidoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+})))
+await caso('ninguém apaga progresso', assertFails(deleteDoc(doc(eqM, 'progressoManuais', 'eq-m_man-3'))))
+await caso('equipe de outra unidade não lê progresso alheio', assertFails(getDoc(doc(eqM2, 'progressoManuais', 'eq-m_man-2'))))
+await caso('equipe de outra unidade não lista a unidade alheia', assertFails(getDocs(query(collection(eqM2, 'progressoManuais'), where('unidadeId', '==', 'un-m')))))
+await caso('equipe da unidade não lista a unidade toda', assertFails(getDocs(query(collection(eqM, 'progressoManuais'), where('unidadeId', '==', 'un-m')))))
+await caso('pessoa lista o próprio progresso', assertSucceeds(getDocs(query(collection(eqM, 'progressoManuais'), where('uid', '==', 'eq-m')))))
+await caso('franqueado lista o progresso da própria unidade', assertSucceeds(getDocs(query(collection(frM, 'progressoManuais'), where('unidadeId', '==', 'un-m')))))
+await caso('franqueadora com o módulo lê o progresso da rede', assertSucceeds(getDocs(collection(eqRedeM, 'progressoManuais'))))
+await caso('franqueadora sem o módulo não lê o progresso da rede', assertFails(getDocs(collection(eqRedeSem, 'progressoManuais'))))
+await caso('franqueadora com o módulo configura a trilha', assertSucceeds(setDoc(doc(eqRedeM, 'manuaisTrilha', 'man-3'), itemTrilha('eq-rede-m', 'Rede Manuais'))))
+await caso('admin configura a trilha', assertSucceeds(setDoc(doc(adminM, 'manuaisTrilha', 'man-3'), itemTrilha('admin-1', 'Admin Rede'))))
+await caso('franqueado não configura a trilha', assertFails(setDoc(doc(frM, 'manuaisTrilha', 'man-3'), itemTrilha('fr-m', 'Dono Manuais'))))
+await caso('franqueadora sem o módulo não configura a trilha', assertFails(setDoc(doc(eqRedeSem, 'manuaisTrilha', 'man-3'), itemTrilha('eq-rede-sem', 'Rede Sem'))))
+await caso('trilha recusa tempo mínimo abaixo de 30 s', assertFails(setDoc(doc(adminM, 'manuaisTrilha', 'man-3'), itemTrilha('admin-1', 'Admin Rede', { tempoMinimoSeg: 5 }))))
+await caso('trilha recusa item de documento que não existe', assertFails(setDoc(doc(adminM, 'manuaisTrilha', 'nao-existe'), itemTrilha('admin-1', 'Admin Rede', { documentoId: 'nao-existe' }))))
+await caso('trilha recusa nome do autor forjado', assertFails(setDoc(doc(eqRedeM, 'manuaisTrilha', 'man-3'), itemTrilha('eq-rede-m', 'Outro Nome'))))
+await caso('ninguém apaga item da trilha', assertFails(deleteDoc(doc(adminM, 'manuaisTrilha', 'man-3'))))
+
 void manual
 await ambiente.cleanup()
 
