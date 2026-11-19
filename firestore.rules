@@ -2453,6 +2453,8 @@ service cloud.firestore {
 
     match /checklistExecucoes/{execucaoId} {
       allow read: if signedIn() && exists(userPath()) && gereChecklist(userData());
+      // Auditoria (Módulo 8): o auditor lê execuções para referenciar e recalcular o score.
+      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
       // Unidade: o histórico da própria unidade.
       allow read: if signedIn() && exists(userPath())
         && unidadeChecklist(userData())
@@ -2479,6 +2481,237 @@ service cloud.firestore {
           && request.resource.data.obsProprietario.size() <= 2000
           && request.resource.data.obsProprietarioNome == userData().nome
           && request.resource.data.obsProprietarioEm == request.time
+        ) : false;
+      allow delete: if false;
+    }
+
+    // ===== Módulo 8: Auditoria e Qualidade =====
+    function gereAuditoria(dados) {
+      return contaAtiva(dados)
+        && (
+          dados.papel == 'admin'
+          || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'auditoria'))
+        );
+    }
+
+    // Pessoa da unidade auditada (não depende de módulo: a auditoria é da franqueadora).
+    function daUnidadeAuditada(dados, unidadeId) {
+      return contaAtiva(dados)
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados)
+        && dados.unidadeId == unidadeId;
+    }
+
+    function auditoriaPath(id) {
+      return /databases/$(database)/documents/auditorias/$(id);
+    }
+
+    function isValidModeloAuditoria(data) {
+      return data.keys().hasOnly(['titulo', 'descricao', 'itens', 'totalItens', 'pesoTotal', 'notaMinima', 'versao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['titulo', 'descricao', 'itens', 'totalItens', 'pesoTotal', 'notaMinima', 'versao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && validName(data.titulo)
+        && validShort(data.descricao, 1000)
+        && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 80
+        && data.totalItens == data.itens.size()
+        && data.pesoTotal is int && data.pesoTotal >= data.totalItens && data.pesoTotal <= data.totalItens * 10
+        && data.notaMinima is int && data.notaMinima >= 0 && data.notaMinima <= 100
+        && data.versao is int && data.versao >= 1
+        && data.ativo is bool
+        && iaOk(data)
+        && data.criadoEm is timestamp
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    function isValidAuditoria(data) {
+      return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'modeloId', 'modeloTitulo', 'modeloVersao', 'modalidade', 'dataVisita', 'auditorUid', 'auditorNome', 'respostas', 'totalItens', 'pesoTotal', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'criadoEm', 'atualizadoEm'])
+        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'modeloId', 'modeloTitulo', 'modeloVersao', 'modalidade', 'dataVisita', 'auditorUid', 'auditorNome', 'respostas', 'totalItens', 'pesoTotal', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'criadoEm', 'atualizadoEm'])
+        && data.unidadeId is string && data.unidadeId.size() > 0 && data.unidadeId.size() <= 64
+        && validName(data.unidadeNome)
+        && data.modeloId is string && data.modeloId.size() > 0 && data.modeloId.size() <= 64
+        && validName(data.modeloTitulo)
+        && data.modeloVersao is int
+        && data.modalidade in ['visita', 'presencial', 'remota']
+        && data.dataVisita is timestamp
+        && data.respostas is list && data.respostas.size() == data.totalItens
+        && data.totalItens is int && data.totalItens >= 1 && data.totalItens <= 80
+        && data.pesoTotal is int
+        && totaisChecklistOk(data, data)
+        && data.notaMinima is int && data.notaMinima >= 0 && data.notaMinima <= 100
+        && data.checklistExecucaoId is string && data.checklistExecucaoId.size() <= 64
+        && (data.checklistExecucaoId == ''
+          ? data.checklistScore == null
+          : (data.checklistScore is int && data.checklistScore >= 0 && data.checklistScore <= 100))
+        // Aprovação pela pontuação: a auditoria e, se houver, o checklist de referência atingem a nota mínima.
+        && data.resultado == ((data.score >= data.notaMinima && (data.checklistScore == null || data.checklistScore >= data.notaMinima)) ? 'aprovada' : 'reprovada')
+        && validShort(data.obsGeral, 4000)
+        && iaOk(data)
+        && data.status in ['rascunho', 'aguardando_ciencia', 'concluida']
+        && validShort(data.contestacao, 2000)
+        && data.criadoEm is timestamp
+        && data.atualizadoEm == request.time;
+    }
+
+    function checklistDaAuditoriaOk(data) {
+      return data.checklistExecucaoId == ''
+        || (
+          exists(/databases/$(database)/documents/checklistExecucoes/$(data.checklistExecucaoId))
+          && get(/databases/$(database)/documents/checklistExecucoes/$(data.checklistExecucaoId)).data.unidadeId == data.unidadeId
+        );
+    }
+
+    function assinaturaVazia(data) {
+      return data.assinaturaAuditorUid == '' && data.assinaturaAuditorNome == '' && data.assinaturaAuditorEm == null;
+    }
+
+    function cienciaVazia(data) {
+      return data.cienciaUid == '' && data.cienciaNome == '' && data.cienciaEm == null && data.contestacao == '';
+    }
+
+    function modeloServeAuditoria(data, modelo) {
+      return modelo.ativo == true
+        && data.modeloVersao == modelo.versao
+        && data.modeloTitulo == modelo.titulo
+        && data.totalItens == modelo.totalItens
+        && data.pesoTotal == modelo.pesoTotal;
+    }
+
+    function isValidAcao(data) {
+      return data.keys().hasOnly(['auditoriaId', 'unidadeId', 'itemId', 'itemTexto', 'descricao', 'responsavel', 'prazo', 'status', 'evidenciaUrl', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['auditoriaId', 'unidadeId', 'itemId', 'itemTexto', 'descricao', 'responsavel', 'prazo', 'status', 'evidenciaUrl', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && validShort(data.itemId, 64)
+        && validShort(data.itemTexto, 300)
+        && data.descricao is string && data.descricao.size() >= 2 && data.descricao.size() <= 1000
+        && validName(data.responsavel)
+        && data.prazo is timestamp
+        && data.status in ['aberta', 'em_andamento', 'concluida_unidade', 'validada', 'reaberta']
+        && linkHttps(data.evidenciaUrl, true)
+        && validShort(data.comentarioUnidade, 1000)
+        && validShort(data.comentarioFranqueadora, 1000)
+        && data.criadoEm is timestamp
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    match /auditoriaModelos/{modeloId} {
+      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereAuditoria(userData())
+          && isValidModeloAuditoria(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.versao == 1
+          && request.resource.data.criadoEm == request.time
+        ) : false;
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereAuditoria(userData())
+          && isValidModeloAuditoria(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.criadoEm == resource.data.criadoEm
+          && request.resource.data.versao == (
+            request.resource.data.itens == resource.data.itens
+              && request.resource.data.titulo == resource.data.titulo
+              && request.resource.data.pesoTotal == resource.data.pesoTotal
+              ? resource.data.versao : resource.data.versao + 1)
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /auditorias/{auditoriaId} {
+      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
+      // Unidade (franqueado e equipe, só leitura): auditorias assinadas pelo auditor, da própria unidade.
+      allow read: if resource.data.status in ['aguardando_ciencia', 'concluida'] ? (
+          signedIn() && exists(userPath())
+          && daUnidadeAuditada(userData(), resource.data.unidadeId)
+        ) : false;
+
+      allow create: if request.resource.data.auditorUid == request.auth.uid && request.resource.data.status == 'rascunho' ? (
+          signedIn() && exists(userPath())
+          && gereAuditoria(userData())
+          && isValidAuditoria(request.resource.data)
+          && request.resource.data.auditorNome == userData().nome
+          && request.resource.data.criadoEm == request.time
+          && assinaturaVazia(request.resource.data)
+          && cienciaVazia(request.resource.data)
+          && exists(unidadePath(request.resource.data.unidadeId))
+          && exists(/databases/$(database)/documents/auditoriaModelos/$(request.resource.data.modeloId))
+          && modeloServeAuditoria(request.resource.data, get(/databases/$(database)/documents/auditoriaModelos/$(request.resource.data.modeloId)).data)
+          && checklistDaAuditoriaOk(request.resource.data)
+        ) : false;
+
+      // Auditor: edita o rascunho e assina (a assinatura congela o conteúdo).
+      allow update: if resource.data.status == 'rascunho' ? (
+          signedIn() && exists(userPath())
+          && gereAuditoria(userData())
+          && (resource.data.auditorUid == request.auth.uid || userData().papel == 'admin')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['modalidade', 'dataVisita', 'respostas', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'atualizadoEm'])
+          && isValidAuditoria(request.resource.data)
+          && checklistDaAuditoriaOk(request.resource.data)
+          && (request.resource.data.status == 'rascunho'
+            ? assinaturaVazia(request.resource.data)
+            : (request.resource.data.status == 'aguardando_ciencia'
+              && request.resource.data.assinaturaAuditorUid == request.auth.uid
+              && request.resource.data.assinaturaAuditorNome == userData().nome
+              && request.resource.data.assinaturaAuditorEm == request.time))
+        ) : false;
+
+      // Franqueado da unidade: assina a ciência (com contestação opcional). Depois disso, nada muda.
+      allow update: if resource.data.status == 'aguardando_ciencia' && request.resource.data.cienciaUid == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && daUnidadeAuditada(userData(), resource.data.unidadeId)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'atualizadoEm'])
+          && request.resource.data.status == 'concluida'
+          && request.resource.data.cienciaNome == userData().nome
+          && request.resource.data.cienciaEm == request.time
+          && request.resource.data.atualizadoEm == request.time
+          && validShort(request.resource.data.contestacao, 2000)
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /auditoriaAcoes/{acaoId} {
+      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
+      allow read: if signedIn() && exists(userPath()) && daUnidadeAuditada(userData(), resource.data.unidadeId);
+
+      // Franqueadora: cria o plano para uma auditoria já assinada pelo auditor.
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid && request.resource.data.status == 'aberta' ? (
+          signedIn() && exists(userPath())
+          && gereAuditoria(userData())
+          && isValidAcao(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.evidenciaUrl == ''
+          && request.resource.data.comentarioUnidade == ''
+          && exists(auditoriaPath(request.resource.data.auditoriaId))
+          && get(auditoriaPath(request.resource.data.auditoriaId)).data.status in ['aguardando_ciencia', 'concluida']
+          && get(auditoriaPath(request.resource.data.auditoriaId)).data.unidadeId == request.resource.data.unidadeId
+        ) : false;
+
+      // Franqueadora: ajusta o plano e valida ou reabre o que a unidade concluiu.
+      allow update: if resource.data.status != 'validada' && request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereAuditoria(userData())
+          && isValidAcao(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'responsavel', 'prazo', 'comentarioFranqueadora', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && (request.resource.data.status == resource.data.status
+            || (resource.data.status == 'concluida_unidade' && request.resource.data.status in ['validada', 'reaberta']))
+        ) : false;
+
+      // Franqueado da unidade: andamento e conclusão com evidência (a equipe só lê).
+      allow update: if resource.data.status in ['aberta', 'em_andamento', 'reaberta']
+          && request.resource.data.status in ['em_andamento', 'concluida_unidade']
+          && request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && daUnidadeAuditada(userData(), resource.data.unidadeId)
+          && isValidAcao(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenciaUrl', 'comentarioUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && (request.resource.data.status == 'em_andamento' || linkHttps(request.resource.data.evidenciaUrl, false))
         ) : false;
       allow delete: if false;
     }

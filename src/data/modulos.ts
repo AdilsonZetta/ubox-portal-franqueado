@@ -181,8 +181,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos da franqueadora',
     audiencia: 'franqueadora',
     icon: ShieldCheck,
-    descricao: 'Visitas de campo e plano de ação.',
-    recursos: ['Checklist', 'Notas', 'Plano de ação', 'Histórico'],
+    descricao: 'Auditorias das unidades com nota mínima, assinaturas e plano de ação.',
+    recursos: ['Auditorias', 'Modelos', 'Assinatura e ciência', 'Plano de ação'],
+    ativo: true,
+    para: '/auditoria',
   },
   {
     slug: 'nuvem-rede',

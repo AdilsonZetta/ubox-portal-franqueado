@@ -25,6 +25,22 @@
       ]
     },
     {
+      "collectionGroup": "auditorias",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadeId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "auditoriaAcoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadeId", "order": "ASCENDING" },
+        { "fieldPath": "auditoriaId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "documentos",
       "queryScope": "COLLECTION",
       "fields": [

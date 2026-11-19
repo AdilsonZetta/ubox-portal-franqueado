@@ -39,6 +39,10 @@ import { PreencherChecklistPage } from './pages/checklist/Preencher'
 import { ExecucaoChecklistPage } from './pages/checklist/Execucao'
 import { HistoricoChecklistPage, NaoConformidadesPage } from './pages/checklist/Historico'
 import { GestaoChecklistPage } from './pages/checklist/GestaoChecklist'
+import { GestaoAuditoriaPage } from './pages/auditoria/GestaoAuditoria'
+import { EditorAuditoriaPage } from './pages/auditoria/EditorAuditoria'
+import { AuditoriaPage } from './pages/auditoria/Auditoria'
+import { MinhasAuditoriasPage } from './pages/auditoria/MinhasAuditorias'
 
 const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ default: mod.PainelPage })))
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
@@ -113,6 +117,11 @@ function Area() {
           <Route path="/checklist/historico" element={<HistoricoChecklistPage />} />
           <Route path="/checklist/nao-conformidades" element={<NaoConformidadesPage />} />
           <Route path="/checklist/gestao" element={<GestaoChecklistPage />} />
+          <Route path="/auditoria" element={<GestaoAuditoriaPage />} />
+          <Route path="/auditoria/nova" element={<EditorAuditoriaPage />} />
+          <Route path="/auditoria/editar/:id" element={<EditorAuditoriaPage />} />
+          <Route path="/auditorias" element={<MinhasAuditoriasPage />} />
+          <Route path="/auditorias/:id" element={<AuditoriaPage />} />
           {/* Trilhas e quizzes antigos corrigiam a nota no aparelho: agora tudo passa pela Universidade. */}
           <Route path="/trilhas/*" element={<Navigate to="/universidade" replace />} />
           <Route path="/certificado/:trilhaId" element={<CertificadoPage />} />

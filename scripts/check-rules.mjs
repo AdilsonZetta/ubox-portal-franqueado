@@ -85,6 +85,15 @@ exigir(rules.includes('data.score == math.floor(data.pontosObtidos * 100 / data.
 exigir(rules.includes('(data.qtdNaoOk == 0) == (data.pontosObtidos == data.pontosPossiveis)'), 'checklist sem amarrar não conformidade aos pontos')
 exigir(rules.includes("affectedKeys().hasOnly(['obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm'])"), 'execução de checklist editável além da observação do proprietário')
 
+exigir(rules.includes('match /auditoriaModelos/{modeloId}'), 'coleção auditoriaModelos ausente')
+exigir(rules.includes('match /auditorias/{auditoriaId}'), 'coleção auditorias ausente')
+exigir(rules.includes('match /auditoriaAcoes/{acaoId}'), 'coleção auditoriaAcoes ausente')
+exigir(rules.includes("data.resultado == ((data.score >= data.notaMinima && (data.checklistScore == null || data.checklistScore >= data.notaMinima)) ? 'aprovada' : 'reprovada')"), 'resultado da auditoria sem amarrar à pontuação')
+exigir(rules.includes("affectedKeys().hasOnly(['status', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'atualizadoEm'])"), 'ciência da auditoria editável além da assinatura e contestação')
+exigir(rules.includes('request.resource.data.assinaturaAuditorEm == request.time'), 'assinatura do auditor sem horário do servidor')
+exigir(rules.includes("allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());"), 'auditor sem leitura limitada por gereAuditoria')
+exigir(/match \/checklistExecucoes\/\{execucaoId\}[\s\S]*?gereAuditoria\(userData\(\)\)/.test(rules), 'auditor sem leitura do checklist de referência')
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)
