@@ -34,6 +34,11 @@ import { MarketingPage } from './pages/marketing/Marketing'
 import { CalendarioMarketingPage } from './pages/marketing/Calendario'
 import { PedidosMarketingPage } from './pages/marketing/Pedidos'
 import { GestaoMarketingPage } from './pages/marketing/GestaoMarketing'
+import { ChecklistPage } from './pages/checklist/Checklist'
+import { PreencherChecklistPage } from './pages/checklist/Preencher'
+import { ExecucaoChecklistPage } from './pages/checklist/Execucao'
+import { HistoricoChecklistPage, NaoConformidadesPage } from './pages/checklist/Historico'
+import { GestaoChecklistPage } from './pages/checklist/GestaoChecklist'
 
 const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ default: mod.PainelPage })))
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
@@ -102,6 +107,12 @@ function Area() {
           <Route path="/marketing/calendario" element={<CalendarioMarketingPage />} />
           <Route path="/marketing/pedidos" element={<PedidosMarketingPage />} />
           <Route path="/marketing/gestao" element={<GestaoMarketingPage />} />
+          <Route path="/checklist" element={<ChecklistPage />} />
+          <Route path="/checklist/preencher/:modeloId" element={<PreencherChecklistPage />} />
+          <Route path="/checklist/execucao/:id" element={<ExecucaoChecklistPage />} />
+          <Route path="/checklist/historico" element={<HistoricoChecklistPage />} />
+          <Route path="/checklist/nao-conformidades" element={<NaoConformidadesPage />} />
+          <Route path="/checklist/gestao" element={<GestaoChecklistPage />} />
           {/* Trilhas e quizzes antigos corrigiam a nota no aparelho: agora tudo passa pela Universidade. */}
           <Route path="/trilhas/*" element={<Navigate to="/universidade" replace />} />
           <Route path="/certificado/:trilhaId" element={<CertificadoPage />} />

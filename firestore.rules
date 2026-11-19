@@ -2169,7 +2169,7 @@ service cloud.firestore {
     function iaOk(data) {
       return data.geradoPorIA is bool
         && data.iaModelo is string && data.iaModelo.size() <= 80
-        && (data.geradoPorIA == false || data.iaModelo.size() >= 2);
+        && (data.geradoPorIA == false || (data.iaModelo.size() >= 2 && data.iaModelo.matches('.*\\S.*')));
     }
 
     function autoriaMarketing(data, dados) {
@@ -2328,6 +2328,157 @@ service cloud.firestore {
           && (request.resource.data.status == 'cancelada'
             || (request.resource.data.complemento.size() >= 2 && request.resource.data.complemento != resource.data.complemento))
           && isValidSolicitacaoMkt(request.resource.data)
+        ) : false;
+      allow delete: if false;
+    }
+
+    // ===== Módulo 7: Checklist Operacional =====
+    function gereChecklist(dados) {
+      return contaAtiva(dados)
+        && (
+          dados.papel == 'admin'
+          || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'checklist'))
+        );
+    }
+
+    function unidadeChecklist(dados) {
+      return contaAtiva(dados)
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && temLista(dados, 'checklist')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados);
+    }
+
+    function isValidModeloChecklist(data) {
+      return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'frequencia', 'itens', 'totalItens', 'pesoTotal', 'versao', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'frequencia', 'itens', 'totalItens', 'pesoTotal', 'versao', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && validName(data.titulo)
+        && validShort(data.descricao, 1000)
+        && data.tipo in ['abertura', 'fechamento', 'limpeza', 'inauguracao', 'vistoria', 'outro']
+        && data.frequencia in ['diaria', 'semanal', 'mensal', 'avulsa']
+        && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 60
+        && data.totalItens == data.itens.size()
+        && data.pesoTotal is int && data.pesoTotal >= data.totalItens && data.pesoTotal <= data.totalItens * 10
+        && data.versao is int && data.versao >= 1
+        && data.publico is bool
+        && listaUnidadesOk(data.unidades)
+        && (data.publico == true ? data.unidades.size() == 0 : data.unidades.size() > 0)
+        && data.ativo is bool
+        && iaOk(data)
+        && data.criadoEm is timestamp
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    // Totais coerentes entre si e com o modelo (a soma item a item fica no cliente).
+    function totaisChecklistOk(data, modelo) {
+      return data.qtdOk is int && data.qtdNaoOk is int && data.qtdNa is int
+        && data.qtdOk >= 0 && data.qtdNaoOk >= 0 && data.qtdNa >= 0
+        && data.qtdOk + data.qtdNaoOk + data.qtdNa == data.totalItens
+        && data.pontosPossiveis is int && data.pontosObtidos is int
+        && data.pontosObtidos >= data.qtdOk
+        && data.pontosPossiveis - data.pontosObtidos >= data.qtdNaoOk
+        && data.pontosPossiveis <= modelo.pesoTotal
+        && data.pontosPossiveis <= (data.qtdOk + data.qtdNaoOk) * 10
+        && data.pontosObtidos <= data.qtdOk * 10
+        && (data.qtdNaoOk == 0) == (data.pontosObtidos == data.pontosPossiveis)
+        && data.score is int
+        && (data.pontosPossiveis == 0
+          ? data.score == 100
+          : data.score == math.floor(data.pontosObtidos * 100 / data.pontosPossiveis));
+    }
+
+    function execucaoNovaOk(data, dados) {
+      return data.keys().hasOnly(['modeloId', 'modeloTitulo', 'modeloVersao', 'tipo', 'frequencia', 'unidadeId', 'unidadeNome', 'uid', 'nome', 'respostas', 'totalItens', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'obsGeral', 'obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm', 'criadoEm'])
+        && data.keys().hasAll(['modeloId', 'modeloTitulo', 'modeloVersao', 'tipo', 'frequencia', 'unidadeId', 'unidadeNome', 'uid', 'nome', 'respostas', 'totalItens', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'obsGeral', 'obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm', 'criadoEm'])
+        && data.nome == dados.nome
+        && data.unidadeId == dados.unidadeId
+        && data.unidadeNome == dados.get('unidade', '')
+        && data.modeloId is string && data.modeloId.size() > 0 && data.modeloId.size() <= 64
+        && data.respostas is list
+        && validShort(data.obsGeral, 2000)
+        && data.obsProprietario == ''
+        && data.obsProprietarioPor == ''
+        && data.obsProprietarioNome == ''
+        && data.obsProprietarioEm == null
+        && data.criadoEm == request.time;
+    }
+
+    function modeloServeExecucao(data, modelo) {
+      return modelo.ativo == true
+        && (modelo.publico == true || data.unidadeId in modelo.unidades)
+        && data.modeloVersao == modelo.versao
+        && data.modeloTitulo == modelo.titulo
+        && data.tipo == modelo.tipo
+        && data.frequencia == modelo.frequencia
+        && data.totalItens == modelo.totalItens
+        && data.respostas.size() == modelo.totalItens;
+    }
+
+    match /checklistModelos/{modeloId} {
+      allow read: if signedIn() && exists(userPath()) && gereChecklist(userData());
+      // Unidade: só modelos ativos, da rede toda ou direcionados à própria unidade.
+      allow read: if resource.data.ativo == true && resource.data.publico == true ? (
+          signedIn() && exists(userPath()) && unidadeChecklist(userData())
+        ) : false;
+      allow read: if resource.data.ativo == true ? (
+          signedIn() && exists(userPath()) && unidadeChecklist(userData())
+          && userData().unidadeId in resource.data.unidades
+        ) : false;
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereChecklist(userData())
+          && isValidModeloChecklist(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.versao == 1
+          && request.resource.data.criadoEm == request.time
+        ) : false;
+      // Edição: itens, título, tipo, frequência ou peso total novos sobem a versão (execuções antigas guardam a versão que usaram).
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereChecklist(userData())
+          && isValidModeloChecklist(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.criadoEm == resource.data.criadoEm
+          && request.resource.data.versao == (
+            request.resource.data.itens == resource.data.itens
+              && request.resource.data.titulo == resource.data.titulo
+              && request.resource.data.tipo == resource.data.tipo
+              && request.resource.data.frequencia == resource.data.frequencia
+              && request.resource.data.pesoTotal == resource.data.pesoTotal
+              ? resource.data.versao : resource.data.versao + 1)
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /checklistExecucoes/{execucaoId} {
+      allow read: if signedIn() && exists(userPath()) && gereChecklist(userData());
+      // Unidade: o histórico da própria unidade.
+      allow read: if signedIn() && exists(userPath())
+        && unidadeChecklist(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+
+      allow create: if request.resource.data.uid == request.auth.uid
+          && exists(/databases/$(database)/documents/checklistModelos/$(request.resource.data.modeloId)) ? (
+          signedIn() && exists(userPath())
+          && unidadeChecklist(userData())
+          && execucaoNovaOk(request.resource.data, userData())
+          && modeloServeExecucao(request.resource.data, get(/databases/$(database)/documents/checklistModelos/$(request.resource.data.modeloId)).data)
+          && totaisChecklistOk(request.resource.data, get(/databases/$(database)/documents/checklistModelos/$(request.resource.data.modeloId)).data)
+        ) : false;
+
+      // Só a observação do proprietário (franqueado da unidade) muda depois do envio.
+      allow update: if request.resource.data.obsProprietarioPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && unidadeChecklist(userData())
+          && resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm'])
+          && request.resource.data.obsProprietario is string
+          && request.resource.data.obsProprietario.size() >= 2
+          && request.resource.data.obsProprietario.size() <= 2000
+          && request.resource.data.obsProprietarioNome == userData().nome
+          && request.resource.data.obsProprietarioEm == request.time
         ) : false;
       allow delete: if false;
     }

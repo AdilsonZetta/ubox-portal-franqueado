@@ -8,6 +8,7 @@ import { podeModulo } from '../lib/modulosAcesso'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { podeGerirUniversidade } from '../lib/universidade'
 import { podeGerirMarketing } from '../lib/marketing'
+import { podeGerirChecklist } from '../lib/checklist'
 import { observarSolicitacoesAbertas } from '../lib/senhas'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
@@ -31,6 +32,7 @@ const itensManuais = [
 function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/modulos/')) return pathname.split('/')[2] || null
   if (pathname.startsWith('/marketing')) return 'marketing'
+  if (pathname.startsWith('/checklist')) return 'checklist'
   if (pathname.startsWith('/universidade') || pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
   if (pathname.startsWith('/chamados')) return 'chamados'
   if (pathname.startsWith('/senhas')) return 'senhas'
@@ -214,6 +216,27 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
+                        {modulo.slug === 'checklist' ? (
+                          <>
+                            {!(podeGerirChecklist(user, ehAdmin) && !comoFranqueado) ? (
+                              <>
+                                <NavLink to="/checklist" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                  Rotinas da unidade
+                                </NavLink>
+                                <NavLink to="/checklist/historico" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                  Histórico
+                                </NavLink>
+                                <NavLink to="/checklist/nao-conformidades" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                  Não conformidades
+                                </NavLink>
+                              </>
+                            ) : (
+                              <NavLink to="/checklist/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                Gestão do checklist
+                              </NavLink>
+                            )}
+                          </>
+                        ) : null}
                         {modulo.slug === 'marketing' ? (
                           <>
                             <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
@@ -261,7 +284,7 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
-                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' ? (
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' ? (
                           <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                             Abrir
                           </NavLink>

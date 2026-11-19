@@ -94,8 +94,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: ClipboardList,
-    descricao: 'Rotinas de abertura, fechamento e conferência da unidade.',
+    descricao: 'Abertura, fechamento, limpeza e vistorias com score, evidências e pendências.',
     recursos: ['Abertura', 'Fechamento', 'Conferência do corredor', 'Pendências do dia'],
+    ativo: true,
+    para: '/checklist',
   },
   {
     slug: 'estoque',

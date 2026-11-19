@@ -75,9 +75,15 @@ exigir(rules.includes('match /marketingMateriais/{materialId}'), 'coleção mark
 exigir(rules.includes('match /marketingCampanhas/{campanhaId}'), 'coleção marketingCampanhas ausente')
 exigir(rules.includes('match /marketingSolicitacoes/{solicitacaoId}'), 'coleção marketingSolicitacoes ausente')
 exigir(rules.includes("v.matches('^https://"), 'links de marketing sem exigir https')
-exigir(rules.includes('data.geradoPorIA == false || data.iaModelo.size() >= 2'), 'conteúdo com IA sem registrar o modelo')
+exigir(rules.includes("data.geradoPorIA == false || (data.iaModelo.size() >= 2 && data.iaModelo.matches('.*\\\\S.*'))"), 'conteúdo com IA sem registrar o modelo (com caractere visível)')
+exigir(rules.includes('request.resource.data.pesoTotal == resource.data.pesoTotal'), 'versão do modelo de checklist não sobe ao mudar o peso total')
 exigir(rules.includes('data.publico == true ? data.unidades.size() == 0 : data.unidades.size() > 0'), 'material de marketing sem coerência entre público e unidades')
 exigir(rules.includes('request.resource.data.complemento != resource.data.complemento'), 'resposta da unidade ao pedido de marketing sem exigir texto novo')
+exigir(rules.includes('match /checklistModelos/{modeloId}'), 'coleção checklistModelos ausente')
+exigir(rules.includes('match /checklistExecucoes/{execucaoId}'), 'coleção checklistExecucoes ausente')
+exigir(rules.includes('data.score == math.floor(data.pontosObtidos * 100 / data.pontosPossiveis)'), 'score do checklist sem conferência nas rules')
+exigir(rules.includes('(data.qtdNaoOk == 0) == (data.pontosObtidos == data.pontosPossiveis)'), 'checklist sem amarrar não conformidade aos pontos')
+exigir(rules.includes("affectedKeys().hasOnly(['obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm'])"), 'execução de checklist editável além da observação do proprietário')
 
 if (erros.length) {
   console.error(erros.join('\n'))
