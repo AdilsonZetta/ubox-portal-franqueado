@@ -172,8 +172,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos da franqueadora',
     audiencia: 'franqueadora',
     icon: Users,
-    descricao: 'Visão da jornada e dos combinados de cada unidade.',
-    recursos: ['Ficha da unidade', 'Módulos ativos', 'Pendências', 'Contatos'],
+    descricao: 'Saúde de cada unidade, visitas, reuniões e os combinados com a franqueadora.',
+    recursos: ['Visão da rede', 'Painel da unidade', 'Visitas e reuniões', 'Próximos passos'],
+    ativo: true,
+    para: '/acompanhamento',
   },
   {
     slug: 'auditoria',

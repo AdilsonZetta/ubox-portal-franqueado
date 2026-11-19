@@ -35,6 +35,9 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/checklist')) return 'checklist'
   // Auditorias da unidade: não dependem de módulo (a auditoria é da franqueadora; as rules limitam à própria unidade).
   if (pathname.startsWith('/auditorias')) return null
+  // Acompanhamento da unidade: também não depende de módulo (só os registros compartilhados).
+  if (pathname.startsWith('/meu-acompanhamento')) return null
+  if (pathname.startsWith('/acompanhamento')) return 'acompanhamento'
   if (pathname.startsWith('/auditoria')) return 'auditoria'
   if (pathname.startsWith('/universidade') || pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
   if (pathname.startsWith('/chamados')) return 'chamados'
@@ -256,6 +259,11 @@ export function Layout() {
                             </Link>
                           </>
                         ) : null}
+                        {modulo.slug === 'acompanhamento' ? (
+                          <NavLink to="/acompanhamento" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            Visão da rede
+                          </NavLink>
+                        ) : null}
                         {modulo.slug === 'marketing' ? (
                           <>
                             <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
@@ -303,7 +311,7 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
-                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'auditoria' ? (
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'auditoria' && modulo.slug !== 'acompanhamento' ? (
                           <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                             Abrir
                           </NavLink>
@@ -339,6 +347,11 @@ export function Layout() {
       {(user?.papel === 'franqueado' || user?.papel === 'equipe_franqueado') && !comoFranqueado ? (
         <NavLink to="/auditorias" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
           Auditorias da unidade
+        </NavLink>
+      ) : null}
+      {(user?.papel === 'franqueado' || user?.papel === 'equipe_franqueado') && !comoFranqueado ? (
+        <NavLink to="/meu-acompanhamento" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
+          Acompanhamento
         </NavLink>
       ) : null}
       {user?.papel === 'admin' ? (

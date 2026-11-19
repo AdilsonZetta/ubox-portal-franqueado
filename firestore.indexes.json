@@ -41,6 +41,22 @@
       ]
     },
     {
+      "collectionGroup": "acompanhamentoRegistros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadeId", "order": "ASCENDING" },
+        { "fieldPath": "compartilhado", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "acompanhamentoPassos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "unidadeId", "order": "ASCENDING" },
+        { "fieldPath": "compartilhado", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "documentos",
       "queryScope": "COLLECTION",
       "fields": [
