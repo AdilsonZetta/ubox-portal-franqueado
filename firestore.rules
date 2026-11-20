@@ -336,7 +336,7 @@ service cloud.firestore {
         && data.htmlConteudo is string
         && data.htmlConteudo.size() < 900000
         && urlOuVazio(data.htmlUrl)
-        && data.criadoEm == request.time
+        && data.criadoEm is timestamp
         && data.autorId == uid()
         && validShort(data.autorNome, 120);
     }
@@ -389,7 +389,7 @@ service cloud.firestore {
         && validShort(data.documentoId, 80)
         && data.tipo in ['novo', 'atualizado', 'geral']
         && audienciaValida(data)
-        && data.criadoEm == request.time;
+        && data.criadoEm is timestamp;
     }
 
     function docPath(docId) {
@@ -762,23 +762,23 @@ service cloud.firestore {
     }
 
     match /categorias/{id} {
-      allow read: if isAdmin();
+      allow read: if gereTrilhaManuais(userData());
       allow read: if isActive() && podeModulo('manuais') && velho().publico == true;
       allow read: if isActive() && podeModulo('manuais') && uidsContemUsuario();
       allow read: if isActive() && podeModulo('manuais') && !('publico' in velho());
 
-      allow create: if isAdmin()
+      allow create: if gereTrilhaManuais(userData())
         && isValidCategoria(novo())
         && criadoAgora()
         && atualizadoAgora();
-      allow update: if isAdmin()
+      allow update: if gereTrilhaManuais(userData())
         && isValidCategoria(novo())
         && atualizacaoValida();
       allow delete: if isAdmin();
     }
 
     match /documentos/{id} {
-      allow read: if isAdmin();
+      allow read: if gereTrilhaManuais(userData());
       allow read: if isActive()
         && podeModulo('manuais')
         && velho().status == 'publicado'
@@ -788,18 +788,20 @@ service cloud.firestore {
         && velho().status == 'publicado'
         && uidsContemUsuario();
 
-      allow create: if isAdmin()
+      allow create: if gereTrilhaManuais(userData())
         && isValidDocumento(novo())
         && criadoAgora()
         && atualizadoAgora();
-      allow update: if isAdmin()
+      allow update: if gereTrilhaManuais(userData())
         && isValidDocumento(novo())
         && atualizacaoValida();
       allow delete: if isAdmin();
 
       match /versoes/{versaoId} {
-        allow read: if isAdmin();
-        allow create: if isAdmin() && isValidVersao(novo());
+        allow read: if gereTrilhaManuais(userData());
+        allow create: if gereTrilhaManuais(userData())
+          && isValidVersao(novo())
+          && criadoAgora();
         allow update, delete: if false;
       }
     }
@@ -852,11 +854,21 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    function avisoDeDocumento(data) {
+      return data.tipo in ['novo', 'atualizado']
+        && data.documentoId.size() > 0;
+    }
+
     match /avisos/{id} {
       allow read: if isAdmin();
       allow read: if isActive() && podeModulo('manuais') && velho().publico == true;
       allow read: if isActive() && podeModulo('manuais') && uidsContemUsuario();
-      allow create: if isAdmin() && isValidAviso(novo());
+      allow read: if gereTrilhaManuais(userData()) && avisoDeDocumento(velho());
+      allow create: if isValidAviso(novo())
+        && criadoAgora()
+        && (isAdmin() || (gereTrilhaManuais(userData())
+          && avisoDeDocumento(novo())
+          && docAtual(novo().documentoId).status == 'publicado'));
       allow update: if false;
       allow delete: if isAdmin();
     }

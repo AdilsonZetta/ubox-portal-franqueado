@@ -39,6 +39,7 @@ import type {
   Usuario,
   VersaoDocumento,
 } from '../types'
+import { podeGerirTrilha } from './manuaisTrilha'
 import { calcularUids } from './access'
 import { deveCarregar } from './portalCarga'
 import { requireDb } from './firebase'
@@ -259,8 +260,19 @@ export async function carregarPortal(usuario: Usuario): Promise<{
     return { categorias, documentos, trilhas }
   }
 
-  const conhecidas = manuais
-    ? await Promise.all(
+  const gestorManuais = podeGerirTrilha(usuario, false)
+  const formacao = async () => {
+    if (!universidade) return null
+    try {
+      const snap = await getDoc(doc(banco, 'trilhas', 'trilha-formacao-inicial'))
+      return snap.exists() ? mapTrilha(snap.id, snap.data()) : null
+    } catch {
+      return null
+    }
+  }
+
+  const categoriasConhecidas: Promise<(Categoria | null)[]> = manuais && !gestorManuais
+    ? Promise.all(
         IDS_CATEGORIAS.map(async (id) => {
           try {
             const snap = await getDoc(doc(banco, 'categorias', id))
@@ -270,35 +282,28 @@ export async function carregarPortal(usuario: Usuario): Promise<{
           }
         }),
       )
-    : []
-
-  let trilhaFormacao: Trilha | null = null
-  if (universidade) {
-    try {
-      const snap = await getDoc(doc(banco, 'trilhas', 'trilha-formacao-inicial'))
-      if (snap.exists()) trilhaFormacao = mapTrilha(snap.id, snap.data())
-    } catch {
-      trilhaFormacao = null
-    }
-  }
+    : Promise.resolve([])
 
   const nada = Promise.resolve([] as QueryDocumentSnapshot<DocumentData>[])
-  const [catPublicas, catMinhas, docsPublicos, docsMeus, trilhasPublicas, trilhasMinhas] = await Promise.all([
-    manuais ? documentosDe(query(collection(banco, 'categorias'), where('publico', '==', true))) : nada,
-    manuais ? documentosDe(query(collection(banco, 'categorias'), where('uids', 'array-contains', usuario.uid))) : nada,
-    manuais ? documentosDe(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('publico', '==', true))) : nada,
-    manuais ? documentosDe(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('uids', 'array-contains', usuario.uid))) : nada,
+  const [catPublicas, catMinhas, docsPublicos, docsMeus, trilhasPublicas, trilhasMinhas, trilhaFormacao, conhecidas, gestao] = await Promise.all([
+    manuais && !gestorManuais ? documentosDe(query(collection(banco, 'categorias'), where('publico', '==', true))) : nada,
+    manuais && !gestorManuais ? documentosDe(query(collection(banco, 'categorias'), where('uids', 'array-contains', usuario.uid))) : nada,
+    manuais && !gestorManuais ? documentosDe(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('publico', '==', true))) : nada,
+    manuais && !gestorManuais ? documentosDe(query(collection(banco, 'documentos'), where('status', '==', 'publicado'), where('uids', 'array-contains', usuario.uid))) : nada,
     universidade ? documentosDe(query(collection(banco, 'trilhas'), where('publicado', '==', true), where('publico', '==', true))) : nada,
     universidade ? documentosDe(query(collection(banco, 'trilhas'), where('publicado', '==', true), where('uids', 'array-contains', usuario.uid))) : nada,
+    formacao(),
+    categoriasConhecidas,
+    gestorManuais ? Promise.all([lerColecao('categorias', mapCategoria), lerColecao('documentos', mapDocumento)]) : null,
   ])
 
   return {
-    categorias: mesclar([
+    categorias: gestao?.[0] ?? mesclar([
       conhecidas.filter((item): item is Categoria => item !== null),
       catPublicas.map((item) => mapCategoria(item.id, item.data())),
       catMinhas.map((item) => mapCategoria(item.id, item.data())),
     ]),
-    documentos: mesclar([
+    documentos: gestao?.[1] ?? mesclar([
       docsPublicos.map((item) => mapDocumento(item.id, item.data())),
       docsMeus.map((item) => mapDocumento(item.id, item.data())),
     ]),
@@ -332,21 +337,23 @@ export interface RascunhoCategoria {
   uidsExtra: string[]
 }
 
-export async function salvarCategoria(rascunho: RascunhoCategoria, usuarios: Usuario[], id?: string): Promise<string> {
+export async function salvarCategoria(rascunho: RascunhoCategoria, usuarios: Usuario[] | null, id?: string): Promise<string> {
   if (BACKEND === 'supabase') return salvarCategoriaSb(rascunho, usuarios, id)
   const banco = requireDb()
   const ref = id ? doc(banco, 'categorias', id) : doc(collection(banco, 'categorias'))
   const anterior = id ? await getDoc(ref) : null
-  const uids = calcularUids(rascunho, usuarios)
+  const audienciaAnterior = !usuarios && anterior?.exists() ? audiencia(anterior.data(), true) : null
+  const alvo = audienciaAnterior ?? rascunho
+  const uids = usuarios ? calcularUids(alvo, usuarios) : audienciaAnterior?.uids ?? []
   await setDoc(ref, {
     nome: rascunho.nome.trim(),
     descricao: rascunho.descricao.trim(),
     ordem: rascunho.ordem,
     parentId: rascunho.parentId,
-    publico: rascunho.publico,
-    unidades: rascunho.unidades,
-    papeis: rascunho.papeis,
-    uidsExtra: rascunho.uidsExtra,
+    publico: alvo.publico,
+    unidades: alvo.unidades,
+    papeis: alvo.papeis,
+    uidsExtra: alvo.uidsExtra,
     uids,
     criadoEm: criadoEmDe(anterior?.exists() ? anterior.data().criadoEm : undefined),
     atualizadoEm: serverTimestamp(),
@@ -376,7 +383,7 @@ export interface RascunhoDocumento {
   uidsExtra: string[]
 }
 
-export async function salvarDocumento(rascunho: RascunhoDocumento, autor: Usuario, usuarios: Usuario[], id?: string): Promise<string> {
+export async function salvarDocumento(rascunho: RascunhoDocumento, autor: Usuario, usuarios: Usuario[] | null, id?: string): Promise<string> {
   if (BACKEND === 'supabase') return salvarDocumentoSb(rascunho, autor, usuarios, id)
   const banco = requireDb()
   const ref = id ? doc(banco, 'documentos', id) : doc(collection(banco, 'documentos'))
@@ -394,7 +401,8 @@ export async function salvarDocumento(rascunho: RascunhoDocumento, autor: Usuari
     anterior.titulo !== rascunho.titulo.trim()
   let versao = anterior?.versao ?? 1
   if (anterior && anterior.status === 'publicado' && rascunho.status === 'publicado' && mudou) versao = anterior.versao + 1
-  const uids = calcularUids(rascunho, usuarios)
+  const alvo = !usuarios && anterior ? anterior : rascunho
+  const uids = usuarios ? calcularUids(alvo, usuarios) : anterior?.uids ?? []
   const publicarAgora = rascunho.status === 'publicado' && (!anterior || anterior.status !== 'publicado' || versao !== anterior.versao)
   await setDoc(ref, {
     titulo: rascunho.titulo.trim(),
@@ -409,10 +417,10 @@ export async function salvarDocumento(rascunho: RascunhoDocumento, autor: Usuari
     htmlConteudo: limitar(rascunho.htmlConteudo, 800000),
     htmlUrl: rascunho.htmlUrl.trim(),
     anexos: rascunho.anexos,
-    publico: rascunho.publico,
-    unidades: rascunho.unidades,
-    papeis: rascunho.papeis,
-    uidsExtra: rascunho.uidsExtra,
+    publico: alvo.publico,
+    unidades: alvo.unidades,
+    papeis: alvo.papeis,
+    uidsExtra: alvo.uidsExtra,
     uids,
     criadoEm: criadoEmDe(anterior?.criadoEm),
     atualizadoEm: serverTimestamp(),
@@ -435,17 +443,17 @@ export async function salvarDocumento(rascunho: RascunhoDocumento, autor: Usuari
         htmlUrl: rascunho.htmlUrl.trim(),
         criadoEm: serverTimestamp(),
         autorId: autor.uid,
-        autorNome: autor.nome,
+        autorNome: autor.nome.slice(0, 120),
       })
       await addDoc(collection(banco, 'avisos'), {
         titulo: limitar(anterior?.status === 'publicado' ? `Atualizado: ${rascunho.titulo.trim()}` : `Novo: ${rascunho.titulo.trim()}`, 120),
         mensagem: anterior?.status === 'publicado' ? 'Uma nova versão foi publicada na biblioteca.' : 'Um documento novo foi publicado na biblioteca.',
         documentoId: ref.id,
         tipo: (anterior?.status === 'publicado' ? 'atualizado' : 'novo') satisfies TipoAviso,
-        publico: rascunho.publico,
-        unidades: rascunho.unidades,
-        papeis: rascunho.papeis,
-        uidsExtra: rascunho.uidsExtra,
+        publico: alvo.publico,
+        unidades: alvo.unidades,
+        papeis: alvo.papeis,
+        uidsExtra: alvo.uidsExtra,
         uids,
         criadoEm: serverTimestamp(),
       })

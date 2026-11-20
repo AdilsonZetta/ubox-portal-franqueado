@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Plus, Sparkles } from 'lucide-react'
 import { Aviso, Button, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
@@ -164,6 +164,18 @@ export function GestaoTrilhaPage() {
         </div>
       </header>
 
+      <nav aria-label="Gestão da biblioteca" className="flex flex-wrap gap-2">
+        <Link to="/admin/documento/novo" className="rounded-xl bg-brand-dark px-3 py-2 text-sm font-semibold text-white">
+          Novo documento
+        </Link>
+        <Link to="/biblioteca" className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+          Editar na biblioteca
+        </Link>
+        <Link to="/admin/categorias" className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+          Gerenciar categorias
+        </Link>
+      </nav>
+
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
       {carregando ? <Carregando texto="Carregando a trilha…" /> : null}
@@ -221,6 +233,11 @@ export function GestaoTrilhaPage() {
                     </div>
                     <div className="min-w-0">
                       <p className="truncate font-semibold text-ink">{item.titulo}</p>
+                      {porId.has(item.documentoId) ? (
+                        <Link to={`/admin/documento/${item.documentoId}`} className="text-xs font-semibold text-brand-dark" aria-label={`Editar ${item.titulo}`}>
+                          Editar
+                        </Link>
+                      ) : null}
                       {semDocumento ? <p className="text-xs text-red-700">Documento não encontrado ou sem permissão de leitura.</p> : null}
                     </div>
                     <label className="text-xs text-ink/60">

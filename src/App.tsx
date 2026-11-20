@@ -3,6 +3,7 @@ import { lazy, Suspense, type ReactNode } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { Carregando } from './components/ui'
+import { podeGerirTrilha } from './lib/manuaisTrilha'
 import { firebaseConfigured } from './lib/firebase'
 import { AuthProvider, useAuth } from './lib/auth'
 import { useVisao, VisaoProvider } from './lib/visao'
@@ -69,6 +70,13 @@ function Admin({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const { ehAdmin } = useVisao()
   if (user?.papel !== 'admin' || !ehAdmin) return <Navigate to="/" replace />
+  return <Suspense fallback={<Carregando />}>{children}</Suspense>
+}
+
+function GestorManuais({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  const { ehAdmin } = useVisao()
+  if (!podeGerirTrilha(user, ehAdmin)) return <Navigate to="/" replace />
   return <Suspense fallback={<Carregando />}>{children}</Suspense>
 }
 
@@ -166,9 +174,9 @@ function Area() {
           <Route path="/admin" element={<Admin><PainelPage /></Admin>} />
           <Route path="/admin/usuarios" element={<Admin><UsuariosPage /></Admin>} />
           <Route path="/admin/conformidade" element={<Admin><ConformidadePage /></Admin>} />
-          <Route path="/admin/categorias" element={<Admin><CategoriasPage /></Admin>} />
-          <Route path="/admin/documento/novo" element={<Admin><DocumentoEditor /></Admin>} />
-          <Route path="/admin/documento/:id" element={<Admin><DocumentoEditor /></Admin>} />
+          <Route path="/admin/categorias" element={<GestorManuais><CategoriasPage /></GestorManuais>} />
+          <Route path="/admin/documento/novo" element={<GestorManuais><DocumentoEditor key="novo" /></GestorManuais>} />
+          <Route path="/admin/documento/:id" element={<GestorManuais><DocumentoEditor key="edicao" /></GestorManuais>} />
           <Route path="/admin/trilhas" element={<Admin><TrilhasAdminPage /></Admin>} />
           <Route path="/admin/trilhas/nova" element={<Admin><TrilhaEditor /></Admin>} />
           <Route path="/admin/trilhas/:id" element={<Admin><TrilhaEditor /></Admin>} />

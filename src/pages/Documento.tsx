@@ -8,6 +8,7 @@ import { mensagemErro } from '../lib/errors'
 import { formatarData, rotuloExibicao, tipoExibicao } from '../lib/format'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
+import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { useVisao } from '../lib/visao'
 import { useAcessoTrilha } from '../lib/useAcessoTrilha'
 import { Lock } from 'lucide-react'
@@ -20,6 +21,7 @@ export function DocumentoPage() {
   const imprimir = window.location.hash.includes('/imprimir')
   const { user } = useAuth()
   const { ehAdmin } = useVisao()
+  const gestor = podeGerirTrilha(user, ehAdmin)
   const portal = usePortal()
   const documento = portal.documentos.find((item) => item.id === id)
   const [erro, setErro] = useState('')
@@ -47,9 +49,9 @@ export function DocumentoPage() {
   }, [imprimir, liberadoPelaTrilha])
 
   useEffect(() => {
-    if (!ehAdmin || !documento) return
+    if (!gestor || !documento) return
     void listarVersoes(documento.id).then(setVersoes).catch(() => undefined)
-  }, [ehAdmin, documento?.id])
+  }, [gestor, documento?.id, documento?.versao])
 
   if (!user) return null
   if (portal.carregando && !documento) return <p>Carregando documento…</p>
@@ -121,7 +123,7 @@ export function DocumentoPage() {
         <Link to={`/documento/${documento.id}/imprimir`} className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
           Imprimir / PDF
         </Link>
-        {ehAdmin ? (
+        {gestor ? (
           <Link to={`/admin/documento/${documento.id}`} className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
             Editar
           </Link>

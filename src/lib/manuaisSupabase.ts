@@ -288,28 +288,29 @@ export function mapGabaritoSb(data: Linha): Linha {
 
 type AudienciaRascunho = Omit<Audiencia, 'uids'>
 
-function audienciaParaLinha(dados: AudienciaRascunho, usuarios: Usuario[]) {
+function audienciaParaLinha(dados: AudienciaRascunho, usuarios: Usuario[] | null, audienciaAnterior?: Audiencia) {
+  const alvo = !usuarios && audienciaAnterior ? audienciaAnterior : dados
   return {
-    publico: dados.publico,
-    unidades: dados.unidades,
-    papeis: dados.papeis,
-    uids_extra: dados.uidsExtra,
-    uids: calcularUids(dados, usuarios),
+    publico: alvo.publico,
+    unidades: alvo.unidades,
+    papeis: alvo.papeis,
+    uids_extra: alvo.uidsExtra,
+    uids: usuarios ? calcularUids(alvo, usuarios) : audienciaAnterior?.uids ?? [],
   }
 }
 
-export function categoriaParaLinha(id: string, dados: RascunhoCategoria, usuarios: Usuario[]) {
+export function categoriaParaLinha(id: string, dados: RascunhoCategoria, usuarios: Usuario[] | null, audienciaAnterior?: Audiencia) {
   return {
     id,
     nome: dados.nome.trim(),
     descricao: dados.descricao.trim(),
     ordem: dados.ordem,
     parent_id: dados.parentId,
-    ...audienciaParaLinha(dados, usuarios),
+    ...audienciaParaLinha(dados, usuarios, audienciaAnterior),
   }
 }
 
-export function documentoParaLinha(id: string, dados: RascunhoDocumento, autor: Usuario, usuarios: Usuario[], versao: number) {
+export function documentoParaLinha(id: string, dados: RascunhoDocumento, autor: Usuario, usuarios: Usuario[] | null, versao: number, audienciaAnterior?: Audiencia) {
   const corpo = dados.formato === 'html' ? dados.htmlConteudo || dados.conteudoHtml : dados.conteudoHtml
   return {
     id,
@@ -325,7 +326,7 @@ export function documentoParaLinha(id: string, dados: RascunhoDocumento, autor: 
     html_conteudo: limitar(dados.htmlConteudo, 800000),
     html_url: dados.htmlUrl.trim(),
     anexos: dados.anexos,
-    ...audienciaParaLinha(dados, usuarios),
+    ...audienciaParaLinha(dados, usuarios, audienciaAnterior),
     atualizado_por: autor.uid,
     atualizado_por_nome: autor.nome.slice(0, 120),
   }
@@ -518,8 +519,10 @@ export async function carregarPortalSb(usuario: Usuario) {
   return { categorias, documentos, trilhas }
 }
 
-export async function salvarCategoriaSb(rascunho: RascunhoCategoria, usuarios: Usuario[], id = novoId()): Promise<string> {
-  await gravar('categorias', categoriaParaLinha(id, rascunho, usuarios))
+export async function salvarCategoriaSb(rascunho: RascunhoCategoria, usuarios: Usuario[] | null, id = novoId()): Promise<string> {
+  const anterior = usuarios ? null : await obterLinha('categorias', id)
+  const alvo = anterior ? mapCategoriaSb(anterior) : undefined
+  await gravar('categorias', categoriaParaLinha(id, rascunho, usuarios, alvo))
   return id
 }
 
@@ -527,7 +530,7 @@ export async function excluirCategoriaSb(id: string): Promise<void> {
   await apagar('categorias', 'id', id)
 }
 
-export async function salvarDocumentoSb(rascunho: RascunhoDocumento, autor: Usuario, usuarios: Usuario[], id?: string): Promise<string> {
+export async function salvarDocumentoSb(rascunho: RascunhoDocumento, autor: Usuario, usuarios: Usuario[] | null, id?: string): Promise<string> {
   const linhaAnterior = id ? await obterLinha('documentos', id) : null
   const anterior = linhaAnterior ? mapDocumentoSb(linhaAnterior) : null
   const mudou = anterior && (
@@ -539,7 +542,7 @@ export async function salvarDocumentoSb(rascunho: RascunhoDocumento, autor: Usua
   const publicado = rascunho.status === 'publicado'
   const eraPublicado = anterior?.status === 'publicado'
   const versao = (anterior?.versao ?? 1) + (eraPublicado && publicado && mudou ? 1 : 0)
-  const dados = documentoParaLinha(id ?? novoId(), rascunho, autor, usuarios, versao)
+  const dados = documentoParaLinha(id ?? novoId(), rascunho, autor, usuarios, versao, anterior ?? undefined)
   const banco = requireSupabase()
   if (linhaAnterior) {
     const { data, error } = await banco.from('documentos').update(dados)

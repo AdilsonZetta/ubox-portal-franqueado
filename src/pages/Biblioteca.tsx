@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Lock } from 'lucide-react'
 import { Aviso, Carregando, Selo, Vazio } from '../components/ui'
+import { useAuth } from '../lib/auth'
+import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { useVisao } from '../lib/visao'
 import { formatarData, rotuloExibicao, seloExibicao, tipoExibicao, tiposPresentes, type TipoExibicao } from '../lib/format'
 import { usePortal } from '../lib/portal'
@@ -11,8 +13,10 @@ import { useAcessoTrilha } from '../lib/useAcessoTrilha'
 
 export function BibliotecaPage() {
   const { categoriaId } = useParams()
+  const { user } = useAuth()
   const { ehAdmin } = useVisao()
-  const { categorias, documentos, carregando, erro } = usePortal()
+  const gestor = podeGerirTrilha(user, ehAdmin)
+  const { categorias, documentos, carregando, erro, atualizar } = usePortal()
   const [filtro, setFiltro] = useState<TipoExibicao | 'todos'>('todos')
   const trilhaAcesso = useAcessoTrilha()
   const atual = categorias.find((categoria) => categoria.id === categoriaId)
@@ -21,9 +25,9 @@ export function BibliotecaPage() {
   const daPasta = useMemo(
     () =>
       documentos
-        .filter((documento) => (ehAdmin ? true : documento.status === 'publicado'))
+        .filter((documento) => gestor || documento.status === 'publicado')
         .filter((documento) => (atual ? documento.categoriaId === atual.id : true)),
-    [documentos, atual, ehAdmin],
+    [documentos, atual, gestor],
   )
   // Os filtros mostram só os tipos que esta pasta tem.
   const tipos = useMemo(() => tiposPresentes(daPasta), [daPasta])
@@ -56,14 +60,19 @@ export function BibliotecaPage() {
             <h1 className="text-2xl font-extrabold">{atual ? atual.nome.replace(/^\d+\s*/, '') : 'Todos os documentos'}</h1>
             <p className="text-sm text-ink/55">{atual?.descricao || 'POPs, manuais, políticas e processos da rede.'}</p>
           </div>
-          {ehAdmin ? (
-            <Link to="/admin/documento/novo" className="rounded-xl bg-brand px-3 py-2 text-sm font-semibold text-white">
-              Novo documento
-            </Link>
+          {gestor ? (
+            <div className="flex flex-wrap gap-2">
+              <Link to="/admin/categorias" className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+                Gerenciar categorias
+              </Link>
+              <Link to="/admin/documento/novo" className="rounded-xl bg-brand-dark px-3 py-2 text-sm font-semibold text-white">
+                Novo documento
+              </Link>
+            </div>
           ) : null}
         </div>
       </header>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? <Aviso tom="erro">{erro} <button type="button" onClick={() => void atualizar()} className="underline">Tentar novamente</button></Aviso> : null}
       {carregando ? <Carregando /> : null}
       {filhos.length ? (
         <div className="flex gap-2 overflow-x-auto">
@@ -106,23 +115,30 @@ export function BibliotecaPage() {
               )
             }
             return (
-            <Link key={documento.id} to={`/documento/${documento.id}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 hover:bg-paper">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-[10px] font-bold uppercase text-ink/70">{seloExibicao(tipoExibicao(documento))}</span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{documento.titulo}</span>
-                <span className="text-xs text-ink/40">Atualizado {formatarData(documento.atualizadoEm)}</span>
-              </span>
-              <span className="hidden text-xs text-ink/40 sm:block">v{documento.versao}</span>
-              {acesso.estado === 'concluido' ? <Selo tom="lima">Trilha: concluído</Selo> : acesso.estado ? <Selo>Na trilha</Selo> : null}
-              {documento.status === 'rascunho' ? <Selo tom="alerta">Rascunho</Selo> : null}
-              {documento.leituraObrigatoria ? <Selo tom="marca">Aceite</Selo> : null}
-            </Link>
+              <div key={documento.id} className="flex items-center border-b border-line last:border-0 hover:bg-paper">
+                <Link to={`/documento/${documento.id}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-4 py-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-[10px] font-bold uppercase text-ink/70">{seloExibicao(tipoExibicao(documento))}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{documento.titulo}</span>
+                    <span className="text-xs text-ink/40">Atualizado {formatarData(documento.atualizadoEm)}</span>
+                  </span>
+                  <span className="hidden text-xs text-ink/40 sm:block">v{documento.versao}</span>
+                  {acesso.estado === 'concluido' ? <Selo tom="lima">Trilha: concluído</Selo> : acesso.estado ? <Selo>Na trilha</Selo> : null}
+                  {documento.status === 'rascunho' ? <Selo tom="alerta">Rascunho</Selo> : null}
+                  {documento.leituraObrigatoria ? <Selo tom="marca">Aceite</Selo> : null}
+                </Link>
+                {gestor ? (
+                  <Link to={`/admin/documento/${documento.id}`} className="mr-4 rounded-lg px-2 py-1 text-sm font-semibold text-brand-dark hover:underline" aria-label={`Editar ${documento.titulo}`}>
+                    Editar
+                  </Link>
+                ) : null}
+              </div>
             )
           })}
         </div>
-      ) : (
-        <Vazio titulo="Nenhum documento neste filtro" texto="A franqueadora publica os materiais oficiais nesta área." />
-      )}
+      ) : !carregando && !erro ? (
+        <Vazio titulo="Nenhum documento neste filtro" texto={gestor ? "Use Novo documento para cadastrar um material." : "A franqueadora publica os materiais oficiais nesta área."} />
+      ) : null}
     </div>
   )
 }
