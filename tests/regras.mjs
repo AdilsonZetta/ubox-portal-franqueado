@@ -1093,6 +1093,87 @@ await caso('prova com alternativas válidas na versão 2', assertSucceeds((async
   await lote.commit()
 })()))
 
+function perguntasProva(tamanho, alternativas) {
+  return Array.from({ length: tamanho }, (_, indice) => ({
+    id: `p${indice + 1}`,
+    enunciado: 'Q'.repeat(600),
+    opcoes: Array(alternativas).fill('a'.repeat(300)),
+  }))
+}
+
+function salvarLoteProva(cursoId, versao, perguntas) {
+  const lote = writeBatch(eqRedeU)
+  lote.set(doc(eqRedeU, 'provas', cursoId), provaB(versao, {
+    cursoId, perguntas, totalPerguntas: perguntas.length,
+  }))
+  lote.set(doc(eqRedeU, 'provasGabarito', cursoId), {
+    ...gabB(versao, perguntas.map(() => 0)), cursoId,
+  })
+  return lote.commit()
+}
+
+for (const cursoId of ['curso-prova-20', 'curso-prova-10', 'curso-prova-update', 'curso-prova-invalida']) {
+  await caso(`franqueadora cria ${cursoId}`, assertSucceeds(setDoc(doc(eqRedeU, 'cursos', cursoId), {
+    titulo: 'Curso para teste de prova', descricao: 'Novo', ordem: 3, aulas: ['man-2'],
+    publicado: true, ...autoriaU('eq-rede-u', 'Rede Uni'),
+  })))
+}
+await caso('cria prova com 20 perguntas e 6 opções de tamanho máximo', assertSucceeds(
+  salvarLoteProva('curso-prova-20', 1, perguntasProva(20, 6)),
+))
+await caso('cria versão inicial para testar atualização', assertSucceeds(
+  salvarLoteProva('curso-prova-update', 1, perguntasProva(2, 2)),
+))
+await caso('atualiza prova para 20 perguntas e 6 opções de tamanho máximo', assertSucceeds(
+  salvarLoteProva('curso-prova-update', 2, perguntasProva(20, 6)),
+))
+await caso('cria prova com 10 perguntas e 4 opções', assertSucceeds(
+  salvarLoteProva('curso-prova-10', 1, perguntasProva(10, 4)),
+))
+await caso('recusa prova com 21 perguntas', assertFails(
+  salvarLoteProva('curso-prova-invalida', 1, perguntasProva(21, 2)),
+))
+const cincoOpcoes = Array(5).fill('a')
+for (const [nome, alteracao] of [
+  ['7 opções', { opcoes: Array(7).fill('a') }],
+  ['opção com 301 caracteres', { opcoes: [...cincoOpcoes, 'x'.repeat(301)] }],
+  ['opção vazia', { opcoes: [...cincoOpcoes, ''] }],
+  ['opção que não é texto', { opcoes: [...cincoOpcoes, 7] }],
+  ['chave extra na pergunta', { correta: 0 }],
+]) {
+  const perguntas = perguntasProva(20, 6)
+  Object.assign(perguntas[19], alteracao)
+  await caso(`recusa prova com ${nome} na última pergunta`, assertFails(
+    salvarLoteProva('curso-prova-invalida', 1, perguntas),
+  ))
+}
+{
+  const sep = '1' + '0'.repeat(600)
+  const casos = [
+    ['separador injetado no enunciado da 1ª pergunta', 0, { enunciado: 'a' + sep + 'b' }],
+    ['id com 41 caracteres na 1ª pergunta', 0, { id: 'x'.repeat(41) }],
+    ['enunciado com 601 caracteres na 15ª pergunta', 14, { enunciado: 'Q'.repeat(601) }],
+    ['1 opção na 11ª pergunta', 10, { opcoes: ['a'] }],
+    ['enunciado vazio na 5ª pergunta', 4, { enunciado: '' }],
+  ]
+  for (const [nome, indice, alteracao] of casos) {
+    const perguntas = perguntasProva(20, 2)
+    perguntas[indice] = { ...perguntas[indice], ...alteracao }
+    await caso(`recusa prova com ${nome}`, assertFails(
+      salvarLoteProva('curso-prova-invalida', 1, perguntas),
+    ))
+  }
+  const lote = writeBatch(eqRedeU)
+  const perguntas = perguntasProva(3, 2)
+  lote.set(doc(eqRedeU, 'provas', 'curso-prova-invalida'), provaB(1, {
+    cursoId: 'curso-prova-invalida', perguntas, totalPerguntas: 3,
+  }))
+  lote.set(doc(eqRedeU, 'provasGabarito', 'curso-prova-invalida'), {
+    ...gabB(1, [0, 1.5, 0]), cursoId: 'curso-prova-invalida',
+  })
+  await caso('recusa gabarito com resposta fracionária', assertFails(lote.commit()))
+}
+
 await caso('aluno emite certificado do curso aprovado', assertSucceeds(setDoc(doc(eqU, 'certificados', 'eq-u_curso-a'), {
   uid: 'eq-u', trilhaId: 'curso-a', nome: 'Aluno Uni', trilhaTitulo: 'Curso A', emitidoEm: serverTimestamp(), codigo: 'UBOX-ABC123', tentativaId: 'eq-u_curso-a_1_2',
 })))

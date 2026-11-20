@@ -76,7 +76,14 @@ exigir(rules.includes('d.numero is int && d.numero >= 1 && d.numero <= 3'), 'ten
   const tentativa = rules.slice(rules.indexOf('function isValidTentativaProva'), rules.indexOf('function alunoConfere'))
   exigir(!tentativa.includes("'respostas'"), 'respostas voltaram para o doc da tentativa')
 }
-exigir(rules.includes('o[5] is string'), 'alternativas da prova sem checagem de texto')
+{
+  const pergunta = rules.slice(rules.indexOf('function perguntaOk'), rules.indexOf('function separadorPergunta'))
+  exigir(
+    pergunta.includes('.concat(q.opcoes)') && pergunta.includes('.join(separador)')
+      && pergunta.includes('.split(separador) == textos') && pergunta.includes('.{1,300}){2,6}'),
+    'alternativas da prova sem checagem de tipo, tamanho ou quantidade',
+  )
+}
 exigir(rules.includes(': depois.aprovado == false'), 'tentativa presa quando a versão do gabarito muda')
 
 exigir(rules.includes('match /marketingMateriais/{materialId}'), 'coleção marketingMateriais ausente')
