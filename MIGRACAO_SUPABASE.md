@@ -254,7 +254,7 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 
 Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 
-## 14. Fase 5 — chamados
+## 14. O que a fase 5 entregou (chamados)
 
 - Migração `20261120151537_fase5_chamados` (aplicada no projeto): tabelas `chamados` e `chamado_eventos`, RLS por verbo, anon sem nada.
 - Gatilho `app.chamado_carimbar` (definer, só no schema `app`) valida as transições de status, carimba datas pelo servidor e grava o evento de transição no mesmo comando; histórico imutável e sem DELETE.
