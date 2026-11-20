@@ -1,0 +1,10 @@
+{
+  "adminCriado": {
+    "uid": "autor",
+    "email": "autor@example.com",
+    "criadoEm": {
+      "_seconds": 1795125600,
+      "_nanoseconds": 123456789
+    }
+  }
+}
