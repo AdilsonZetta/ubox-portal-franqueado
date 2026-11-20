@@ -1,23 +1,18 @@
-import { useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Vazio, inputClass } from '../../components/ui'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData } from '../../lib/format'
 import {
-  MAX_COBRANCAS,
-  MAX_RECADOS,
-  MAX_VISITAS,
+  ITENS_VAZIOS,
+  RECADOS_NO_LINK,
   ROTULO_VISITA,
   centavos,
   formatarCompetencia,
   formatarDiaISO,
   formatarReais,
   hojeISO,
-  idCurto,
-  incluirCobranca,
-  incluirRecado,
-  incluirVisita,
   linkPainel,
   primeiroNomeDe,
   proximaCompetencia,
@@ -29,9 +24,10 @@ import {
   vencimentoDe,
   type Cliente,
   type ClienteForm,
+  type ItensPainel,
   type Painel,
 } from '../../lib/cliente'
-import { atualizarPainel, salvarCliente, trocarLink, type MudancaPainel } from '../../lib/clienteApi'
+import { agendarVisita, atualizarPainel, carregarItens, lancarCobranca, marcarCobranca, mudarVisita, publicarRecado, salvarCliente, trocarLink, type MudancaPainel } from '../../lib/clienteApi'
 import { CamposCliente } from './Clientes'
 import { RodapeModulo12, SituacaoSelo, diaDe, useClientes } from './partes'
 
@@ -49,6 +45,16 @@ export function ClientePage() {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [edit, setEdit] = useState<ClienteForm | null>(null)
+  const [itens, setItens] = useState<ItensPainel>(ITENS_VAZIOS)
+  const [tique, setTique] = useState(0)
+  const recarregarItens = useCallback(() => setTique((t) => t + 1), [])
+  const token = painel?.token ?? ''
+  useEffect(() => {
+    if (!token) return
+    let vivo = true
+    void carregarItens(token).then((r) => vivo && setItens(r)).catch((f) => vivo && setErro(mensagemErro(f)))
+    return () => { vivo = false }
+  }, [token, tique])
 
   async function acao(fn: () => Promise<unknown>, msg: string) {
     setSalvando(true)
@@ -73,6 +79,7 @@ export function ClientePage() {
 
   const pessoa = dados.pessoa
   const mudar = (m: MudancaPainel, msg: string) => pessoa ? acao(() => atualizarPainel(painel, m), msg) : Promise.resolve(false)
+  const item = (fn: () => Promise<unknown>, msg: string) => acao(fn, msg).then((r) => { recarregarItens(); return r })
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -89,15 +96,15 @@ export function ClientePage() {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
         <div className="space-y-5">
-          <Cobrancas painel={painel} cliente={cliente} salvando={salvando} mudar={mudar} />
-          <Visitas painel={painel} salvando={salvando} mudar={mudar} />
-          <Recados painel={painel} autor={primeiroNomeDe(pessoa?.nome ?? '')} salvando={salvando} mudar={mudar} />
+          <Cobrancas painel={painel} cliente={cliente} itens={itens} salvando={salvando} item={item} />
+          <Visitas painel={painel} itens={itens} salvando={salvando} item={item} />
+          <Recados painel={painel} itens={itens} autor={primeiroNomeDe(pessoa?.nome ?? '')} salvando={salvando} item={item} />
         </div>
         <div className="space-y-5">
           <LinkCard painel={painel} cliente={cliente} salvando={salvando}
             ativar={(ativo) => void mudar({ ativo }, ativo ? 'Link ativado: o cliente já pode abrir.' : 'Link desativado: quem tiver o endereço não vê mais nada.')}
             contato={(contatoUnidade) => void mudar({ contatoUnidade: contatoUnidade.trim().slice(0, 120) }, 'Contato da unidade atualizado no link.')}
-            trocar={() => pessoa && void acao(() => trocarLink(pessoa, cliente, painel), 'Link trocado. O endereço antigo deixou de funcionar.')} />
+            trocar={() => pessoa && void acao(() => trocarLink(pessoa, cliente, painel, itens), 'Link trocado. O endereço antigo deixou de funcionar.')} />
           <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold">Cadastro e contrato</h2>
             <p className="text-xs text-ink/50">Telefone, e-mail, sobrenome e observação ficam só com a unidade.</p>
@@ -140,7 +147,7 @@ export function ClientePage() {
   )
 }
 
-type Mudar = (m: MudancaPainel, msg: string) => Promise<boolean>
+type Item = (fn: () => Promise<unknown>, msg: string) => Promise<boolean>
 
 function LinkCard({ painel, cliente, salvando, ativar, contato, trocar }: { painel: Painel; cliente: Cliente; salvando: boolean; ativar: (a: boolean) => void; contato: (c: string) => void; trocar: () => void }) {
   const url = linkPainel(painel.token)
@@ -168,24 +175,20 @@ function LinkCard({ painel, cliente, salvando, ativar, contato, trocar }: { pain
   )
 }
 
-function Cobrancas({ painel, cliente, salvando, mudar }: { painel: Painel; cliente: Cliente; salvando: boolean; mudar: Mudar }) {
+function Cobrancas({ painel, cliente, itens, salvando, item }: { painel: Painel; cliente: Cliente; itens: ItensPainel; salvando: boolean; item: Item }) {
   const hoje = useMemo(() => hojeISO(), [])
-  const comp = proximaCompetencia(painel.cobrancas)
+  const comp = proximaCompetencia(itens.cobrancas)
   const [n, setN] = useState({ competencia: comp, valor: (cliente.valorMensalCentavos / 100).toFixed(2).replace('.', ','), vencimento: vencimentoDe(comp, cliente.diaVencimento) })
   const [erro, setErro] = useState('')
-  const r = resumoCobrancas(painel.cobrancas, hoje)
+  const r = resumoCobrancas(itens.cobrancas, hoje)
+  useEffect(() => { setN((x) => ({ ...x, competencia: comp, vencimento: vencimentoDe(comp, cliente.diaVencimento) })) }, [comp, cliente.diaVencimento])
 
   function incluir() {
     const erros = validarCobranca(n)
+    if (itens.cobrancas.some((c) => c.competencia === n.competencia)) erros.push('Já existe cobrança para esse mês.')
     if (erros.length) { setErro(erros.join(' ')); return }
-    const nova = incluirCobranca(painel.cobrancas, { id: idCurto(), competencia: n.competencia, valorCentavos: centavos(n.valor), vencimento: n.vencimento, status: 'pendente', pagoEm: '' })
-    if (!nova) { setErro(painel.cobrancas.some((c) => c.competencia === n.competencia) ? 'Já existe cobrança para esse mês.' : `O painel guarda até ${MAX_COBRANCAS} cobranças e todas estão em aberto.`); return }
     setErro('')
-    void mudar({ cobrancas: nova }, `Cobrança de ${formatarCompetencia(n.competencia)} lançada.`).then((ok) => {
-      if (!ok) return
-      const prox = proximaCompetencia(nova)
-      setN({ ...n, competencia: prox, vencimento: vencimentoDe(prox, cliente.diaVencimento) })
-    })
+    void item(() => lancarCobranca(painel, { competencia: n.competencia, valorCentavos: centavos(n.valor), vencimento: n.vencimento, status: 'pendente', pagoEm: '' }), `Cobrança de ${formatarCompetencia(n.competencia)} lançada.`)
   }
 
   return (
@@ -201,9 +204,9 @@ function Cobrancas({ painel, cliente, salvando, mudar }: { painel: Painel; clien
         <Campo label="Vencimento"><input className={inputClass} type="date" value={n.vencimento} onChange={(e) => setN({ ...n, vencimento: e.target.value })} /></Campo>
         <Button type="button" disabled={salvando} onClick={incluir}>Lançar cobrança</Button>
       </div>
-      {painel.cobrancas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma cobrança lançada.</p> : (
+      {itens.cobrancas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma cobrança lançada.</p> : (
         <ul className="divide-y divide-line">
-          {painel.cobrancas.map((c) => {
+          {itens.cobrancas.map((c) => {
             const s = situacao(c, hoje)
             return (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
@@ -212,28 +215,26 @@ function Cobrancas({ painel, cliente, salvando, mudar }: { painel: Painel; clien
                   <span className="tabular-nums">{formatarReais(c.valorCentavos)}</span>
                   <SituacaoSelo s={s} />
                   {c.status === 'pendente'
-                    ? <button type="button" disabled={salvando} className="rounded-lg border border-line px-2 py-1 text-xs font-semibold hover:bg-paper" onClick={() => void mudar({ cobrancas: painel.cobrancas.map((x) => (x.id === c.id ? { ...x, status: 'pago', pagoEm: hoje } : x)) }, `Cobrança de ${formatarCompetencia(c.competencia)} marcada como paga.`)}>Marcar paga</button>
-                    : <button type="button" disabled={salvando} className="rounded-lg px-2 py-1 text-xs text-ink/50 hover:bg-paper" onClick={() => void mudar({ cobrancas: painel.cobrancas.map((x) => (x.id === c.id ? { ...x, status: 'pendente', pagoEm: '' } : x)) }, 'Pagamento desfeito.')}>Desfazer</button>}
+                    ? <button type="button" disabled={salvando} className="rounded-lg border border-line px-2 py-1 text-xs font-semibold hover:bg-paper" onClick={() => void item(() => marcarCobranca(painel, c.competencia, true, hoje), `Cobrança de ${formatarCompetencia(c.competencia)} marcada como paga.`)}>Marcar paga</button>
+                    : <button type="button" disabled={salvando} className="rounded-lg px-2 py-1 text-xs text-ink/50 hover:bg-paper" onClick={() => void item(() => marcarCobranca(painel, c.competencia, false, hoje), 'Pagamento desfeito.')}>Desfazer</button>}
                 </div>
               </li>
             )
           })}
         </ul>
       )}
-      <p className="text-[11px] text-ink/40">Controle manual (sem boleto ou Pix integrados). O painel guarda as {MAX_COBRANCAS} mais recentes; ao passar disso, sai a paga mais antiga.</p>
+      <p className="text-[11px] text-ink/40">Controle manual (sem boleto ou Pix integrados). Uma cobrança por mês; nada é apagado.</p>
     </section>
   )
 }
 
-function Visitas({ painel, salvando, mudar }: { painel: Painel; salvando: boolean; mudar: Mudar }) {
+function Visitas({ painel, itens, salvando, item }: { painel: Painel; itens: ItensPainel; salvando: boolean; item: Item }) {
   const [v, setV] = useState({ data: hojeISO(), hora: '10:00', motivo: '' })
   const [erro, setErro] = useState('')
   function incluir() {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v.data) || !/^\d{2}:\d{2}$/.test(v.hora)) { setErro('Informe data e hora.'); return }
-    const nova = incluirVisita(painel.visitas, { id: idCurto(), data: v.data, hora: v.hora, motivo: v.motivo.trim().slice(0, 200), status: 'agendada' })
-    if (!nova) { setErro(`O painel guarda até ${MAX_VISITAS} visitas e todas estão agendadas.`); return }
     setErro('')
-    void mudar({ visitas: nova }, `Visita agendada para ${formatarDiaISO(v.data)} às ${v.hora}.`).then((ok) => ok && setV({ ...v, motivo: '' }))
+    void item(() => agendarVisita(painel, v), `Visita agendada para ${formatarDiaISO(v.data)} às ${v.hora}.`).then((ok) => ok && setV({ ...v, motivo: '' }))
   }
   return (
     <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
@@ -245,16 +246,16 @@ function Visitas({ painel, salvando, mudar }: { painel: Painel; salvando: boolea
         <Campo label="Motivo (aparece para o cliente)"><input className={inputClass} maxLength={200} placeholder="Ex.: retirada de móveis" value={v.motivo} onChange={(e) => setV({ ...v, motivo: e.target.value })} /></Campo>
         <Button type="button" disabled={salvando} onClick={incluir}>Agendar</Button>
       </div>
-      {painel.visitas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma visita registrada.</p> : (
+      {itens.visitas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma visita registrada.</p> : (
         <ul className="divide-y divide-line">
-          {painel.visitas.map((x) => (
+          {itens.visitas.map((x) => (
             <li key={x.id} className="flex flex-wrap items-center justify-between gap-2 py-2 text-sm">
               <div><p className="font-semibold">{formatarDiaISO(x.data)} às {x.hora}</p><p className="text-xs text-ink/55">{x.motivo || 'sem motivo informado'} · {ROTULO_VISITA[x.status]}</p></div>
               {x.status === 'agendada' ? (
                 <div className="flex gap-1">
                   {(['realizada', 'cancelada'] as const).map((s) => (
                     <button key={s} type="button" disabled={salvando} className="rounded-lg border border-line px-2 py-1 text-xs font-semibold hover:bg-paper"
-                      onClick={() => void mudar({ visitas: painel.visitas.map((y) => (y.id === x.id ? { ...y, status: s } : y)) }, `Visita marcada como ${ROTULO_VISITA[s].toLowerCase()}.`)}>{ROTULO_VISITA[s]}</button>
+                      onClick={() => void item(() => mudarVisita(painel, x.id, s), `Visita marcada como ${ROTULO_VISITA[s].toLowerCase()}.`)}>{ROTULO_VISITA[s]}</button>
                   ))}
                 </div>
               ) : null}
@@ -266,15 +267,14 @@ function Visitas({ painel, salvando, mudar }: { painel: Painel; salvando: boolea
   )
 }
 
-function Recados({ painel, autor, salvando, mudar }: { painel: Painel; autor: string; salvando: boolean; mudar: Mudar }) {
+function Recados({ painel, itens, autor, salvando, item }: { painel: Painel; itens: ItensPainel; autor: string; salvando: boolean; item: Item }) {
   const [t, setT] = useState({ texto: '', ia: false, iaModelo: '' })
   const [erro, setErro] = useState('')
   function enviar() {
     const erros = validarRecado(t.texto, t.ia, t.iaModelo)
     if (erros.length) { setErro(erros.join(' ')); return }
     setErro('')
-    const lista = incluirRecado(painel.recados, { id: idCurto(), texto: t.texto.trim().slice(0, 500), emMs: Date.now(), autor, geradoPorIA: t.ia, iaModelo: t.ia ? t.iaModelo.trim().slice(0, 80) : '' })
-    void mudar({ recados: lista }, painel.ativo ? 'Recado publicado no link do cliente.' : 'Recado salvo (o link está desativado).').then((ok) => ok && setT({ texto: '', ia: false, iaModelo: '' }))
+    void item(() => publicarRecado(painel, { texto: t.texto, autor, geradoPorIA: t.ia, iaModelo: t.iaModelo }), painel.ativo ? 'Recado publicado no link do cliente.' : 'Recado salvo (o link está desativado).').then((ok) => ok && setT({ texto: '', ia: false, iaModelo: '' }))
   }
   return (
     <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
@@ -286,17 +286,17 @@ function Recados({ painel, autor, salvando, mudar }: { painel: Painel; autor: st
         {t.ia ? <input className={`${inputClass} max-w-56`} aria-label="Qual IA / modelo" placeholder="Qual IA / modelo" maxLength={80} value={t.iaModelo} onChange={(e) => setT({ ...t, iaModelo: e.target.value })} /> : null}
         <Button type="button" disabled={salvando} onClick={enviar}>Publicar recado</Button>
       </div>
-      {painel.recados.length === 0 ? <p className="text-sm text-ink/50">Nenhum recado.</p> : (
+      {itens.recados.length === 0 ? <p className="text-sm text-ink/50">Nenhum recado.</p> : (
         <ol className="space-y-2">
-          {painel.recados.map((r) => (
+          {itens.recados.map((r) => (
             <li key={r.id} className="rounded-xl border border-line px-3 py-2 text-sm">
-              <p className="text-[11px] text-ink/45">{formatarData(r.emMs)} · {r.autor || 'Equipe'}{r.geradoPorIA ? ` · IA: ${r.iaModelo}` : ''}</p>
+              <p className="text-[11px] text-ink/45">{formatarData(r.criadoEmMs)} · {r.autor || 'Equipe'}{r.geradoPorIA ? ` · IA: ${r.iaModelo}` : ''}</p>
               <p className="whitespace-pre-wrap">{r.texto}</p>
             </li>
           ))}
         </ol>
       )}
-      <p className="text-[11px] text-ink/40">O link mostra os {MAX_RECADOS} recados mais recentes.</p>
+      <p className="text-[11px] text-ink/40">Recados não são editados nem apagados. O link mostra os {RECADOS_NO_LINK} mais recentes.</p>
     </section>
   )
 }

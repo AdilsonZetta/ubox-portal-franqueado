@@ -14,7 +14,7 @@ export function ClientesPage() {
   const [busca, setBusca] = useState('')
   const [encerrados, setEncerrados] = useState(false)
   const hoje = useMemo(() => hojeISO(), [])
-  const k = kpisClientes(dados.clientes, dados.paineis, hoje)
+  const k = kpisClientes(dados.clientes, dados.paineis, dados.cobrancas, hoje)
   const lista = dados.clientes.filter((c) => (encerrados || c.status === 'ativo')
     && (!busca.trim() || `${c.nome} ${c.box} ${c.telefone}`.toLowerCase().includes(busca.trim().toLowerCase())))
 
@@ -65,7 +65,7 @@ export function ClientesPage() {
                   <tbody>
                     {lista.map((c) => {
                       const p = dados.paineis.get(c.id)
-                      const r = p ? resumoCobrancas(p.cobrancas, hoje) : null
+                      const r = c.status === 'ativo' ? resumoCobrancas(dados.cobrancas.get(c.id) ?? [], hoje) : null
                       return (
                         <tr key={c.id} className={cx('border-t border-line', c.status === 'encerrado' && 'opacity-60')}>
                           <td className="px-4 py-2"><Link to={`/clientes/${c.id}`} className="font-semibold text-ink hover:text-brand-dark hover:underline">{c.nome}</Link><p className="text-xs text-ink/50">{c.telefone || 'sem telefone'}</p></td>

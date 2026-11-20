@@ -3,20 +3,25 @@ import { useParams } from 'react-router-dom'
 import { Logo } from '../../components/Logo'
 import { Carregando } from '../../components/ui'
 import { formatarData } from '../../lib/format'
-import { ROTULO_VISITA, formatarCompetencia, formatarDiaISO, formatarReais, hojeISO, resumoCobrancas, situacao, type Painel } from '../../lib/cliente'
-import { lerPainelPublico } from '../../lib/clienteApi'
+import { ITENS_VAZIOS, RECADOS_NO_LINK, ROTULO_VISITA, formatarCompetencia, formatarDiaISO, formatarReais, hojeISO, resumoCobrancas, situacao, type ItensPainel, type Painel } from '../../lib/cliente'
+import { carregarItens, lerPainelPublico } from '../../lib/clienteApi'
 import { RodapeModulo12, SituacaoSelo, diaDe } from './partes'
 
 /** Página pública do locatário: abre por link secreto, sem login. Só lê o painel do token. */
 export function PainelClientePage() {
   const { token = '' } = useParams()
   const [painel, setPainel] = useState<Painel | null>(null)
+  const [itens, setItens] = useState<ItensPainel>(ITENS_VAZIOS)
   const [carregando, setCarregando] = useState(true)
   const hoje = useMemo(() => hojeISO(), [])
 
   useEffect(() => {
     let ativo = true
-    void lerPainelPublico(token).then((p) => { if (ativo) { setPainel(p); setCarregando(false) } })
+    void lerPainelPublico(token)
+      .then(async (p) => {
+        const i = p?.ativo ? await carregarItens(token).catch(() => ITENS_VAZIOS) : ITENS_VAZIOS
+        if (ativo) { setPainel(p); setItens(i); setCarregando(false) }
+      })
     return () => { ativo = false }
   }, [token])
 
@@ -33,8 +38,8 @@ export function PainelClientePage() {
     )
   }
 
-  const r = resumoCobrancas(painel.cobrancas, hoje)
-  const proximasVisitas = painel.visitas.filter((v) => v.status === 'agendada' && v.data >= hoje).sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
+  const r = resumoCobrancas(itens.cobrancas, hoje)
+  const proximasVisitas = itens.visitas.filter((v) => v.status === 'agendada' && v.data >= hoje).sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
 
   return (
     <div className="min-h-screen bg-paper">
@@ -58,12 +63,12 @@ export function PainelClientePage() {
             <p className="text-xs text-ink/50">{r.atrasadas ? `${r.atrasadas} mensalidade(s) vencida(s)` : r.proxima ? `vence ${formatarDiaISO(r.proxima.vencimento)}` : 'nenhuma cobrança em aberto'}</p></div>
         </section>
 
-        {painel.recados.length ? (
+        {itens.recados.length ? (
           <section className="space-y-2 rounded-3xl border border-line bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold">Recados da unidade</h2>
-            {painel.recados.map((x) => (
+            {itens.recados.slice(0, RECADOS_NO_LINK).map((x) => (
               <article key={x.id} className="rounded-xl bg-paper px-3 py-2 text-sm">
-                <p className="text-[11px] text-ink/45">{formatarData(x.emMs)} · {x.autor || 'Equipe Ubox'}{x.geradoPorIA ? ` · texto com ajuda de IA (${x.iaModelo})` : ''}</p>
+                <p className="text-[11px] text-ink/45">{formatarData(x.criadoEmMs)} · {x.autor || 'Equipe Ubox'}{x.geradoPorIA ? ` · texto com ajuda de IA (${x.iaModelo})` : ''}</p>
                 <p className="whitespace-pre-wrap">{x.texto}</p>
               </article>
             ))}
@@ -72,9 +77,9 @@ export function PainelClientePage() {
 
         <section className="space-y-2 rounded-3xl border border-line bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold">Mensalidades</h2>
-          {painel.cobrancas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma cobrança lançada ainda.</p> : (
+          {itens.cobrancas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma cobrança lançada ainda.</p> : (
             <ul className="divide-y divide-line">
-              {painel.cobrancas.map((c) => (
+              {itens.cobrancas.slice(0, 24).map((c) => (
                 <li key={c.id} className="flex items-center justify-between gap-2 py-2 text-sm">
                   <div><p className="font-semibold">{formatarCompetencia(c.competencia)}</p><p className="text-xs text-ink/55">vence {formatarDiaISO(c.vencimento)}{c.pagoEm ? ` · paga em ${formatarDiaISO(c.pagoEm)}` : ''}</p></div>
                   <div className="flex items-center gap-2"><span className="tabular-nums">{formatarReais(c.valorCentavos)}</span><SituacaoSelo s={situacao(c, hoje)} /></div>
@@ -86,9 +91,9 @@ export function PainelClientePage() {
 
         <section className="space-y-2 rounded-3xl border border-line bg-white p-5 shadow-sm">
           <h2 className="text-lg font-bold">Visitas</h2>
-          {painel.visitas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma visita agendada.</p> : (
+          {itens.visitas.length === 0 ? <p className="text-sm text-ink/50">Nenhuma visita agendada.</p> : (
             <ul className="divide-y divide-line">
-              {(proximasVisitas.length ? proximasVisitas : painel.visitas).map((v) => (
+              {(proximasVisitas.length ? proximasVisitas : itens.visitas.slice(0, 5)).map((v) => (
                 <li key={v.id} className="py-2 text-sm"><p className="font-semibold">{formatarDiaISO(v.data)} às {v.hora} · {ROTULO_VISITA[v.status]}</p>{v.motivo ? <p className="text-xs text-ink/55">{v.motivo}</p> : null}</li>
               ))}
             </ul>

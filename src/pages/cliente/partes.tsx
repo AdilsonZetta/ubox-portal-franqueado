@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { useVisao } from '../../lib/visao'
-import { fazCliente, ROTULO_SITUACAO, type Cliente, type Painel, type SituacaoCobranca } from '../../lib/cliente'
-import { carregarClientes } from '../../lib/clienteApi'
+import { fazCliente, ROTULO_SITUACAO, type Cliente, type Cobranca, type Painel, type SituacaoCobranca } from '../../lib/cliente'
+import { carregarClientes, carregarCobrancasDaUnidade } from '../../lib/clienteApi'
 import type { Usuario } from '../../types'
 
 export interface UsoClientes {
@@ -11,6 +11,7 @@ export interface UsoClientes {
   participa: boolean
   clientes: Cliente[]
   paineis: Map<string, Painel>
+  cobrancas: Map<string, Cobranca[]>
   carregando: boolean
   erro: string
   recarregar: () => void
@@ -24,6 +25,7 @@ export function useClientes(): UsoClientes {
   const participa = fazCliente(pessoa)
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [paineis, setPaineis] = useState<Map<string, Painel>>(new Map())
+  const [cobrancas, setCobrancas] = useState<Map<string, Cobranca[]>>(new Map())
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
   const [tique, setTique] = useState(0)
@@ -38,13 +40,17 @@ export function useClientes(): UsoClientes {
     setCarregando(true)
     setErro('')
     void carregarClientes(pessoa.unidadeId ?? '')
-      .then((r) => { if (ativo) { setClientes(r.clientes); setPaineis(r.paineis) } })
+      .then(async (r) => {
+        const ativos = new Map([...r.paineis].filter(([id]) => r.clientes.some((c) => c.id === id && c.status === 'ativo')))
+        const cob = await carregarCobrancasDaUnidade(ativos)
+        if (ativo) { setClientes(r.clientes); setPaineis(r.paineis); setCobrancas(cob) }
+      })
       .catch((falha) => ativo && setErro(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => { ativo = false }
   }, [pessoa, participa, tique])
 
-  return { pessoa, participa, clientes, paineis, carregando, erro, recarregar }
+  return { pessoa, participa, clientes, paineis, cobrancas, carregando, erro, recarregar }
 }
 
 const COR_SITUACAO: Record<SituacaoCobranca, string> = {

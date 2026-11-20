@@ -1,13 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
-  MAX_COBRANCAS,
-  MAX_RECADOS,
-  MAX_VISITAS,
   centavos,
   gerarToken,
-  incluirCobranca,
-  incluirRecado,
-  incluirVisita,
   kpisClientes,
   linkPainel,
   primeiroNomeDe,
@@ -21,7 +15,6 @@ import {
   type Cliente,
   type Cobranca,
   type Painel,
-  type Visita,
 } from './cliente'
 
 const cob = (competencia: string, status: Cobranca['status'] = 'pendente', valor = 10000): Cobranca => ({ id: competencia, competencia, valorCentavos: valor, vencimento: `${competencia}-10`, status, pagoEm: status === 'pago' ? `${competencia}-09` : '' })
@@ -71,24 +64,11 @@ describe('módulo 12: painel do cliente', () => {
     expect(proximaCompetencia([], agora)).toBe('2026-11')
   })
 
-  it('limita as cobranças: sai a paga mais antiga e recusa repetidas ou tudo em aberto', () => {
-    const cheias = Array.from({ length: MAX_COBRANCAS }, (_, i) => cob(`20${24 + Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, '0')}`, i < 2 ? 'pago' : 'pendente'))
-    const nova = incluirCobranca(cheias, cob('2030-01'))
-    expect(nova).toHaveLength(MAX_COBRANCAS)
-    expect(nova?.some((c) => c.competencia === '2024-01')).toBe(false)
-    expect(incluirCobranca(cheias, cob('2025-05'))).toBeNull()
-    expect(incluirCobranca(cheias.map((c) => ({ ...c, status: 'pendente' as const })), cob('2030-02'))).toBeNull()
-  })
-
-  it('limita visitas e recados', () => {
-    const v = (i: number, status: Visita['status']): Visita => ({ id: `v${i}`, data: `2026-11-${String(i + 1).padStart(2, '0')}`, hora: '10:00', motivo: '', status })
-    const cheias = Array.from({ length: MAX_VISITAS }, (_, i) => v(i, i === 0 ? 'realizada' : 'agendada'))
-    expect(incluirVisita(cheias, v(20, 'agendada'))?.some((x) => x.id === 'v0')).toBe(false)
-    expect(incluirVisita(cheias.map((x) => ({ ...x, status: 'agendada' as const })), v(21, 'agendada'))).toBeNull()
-    let recados = [] as Parameters<typeof incluirRecado>[0]
-    for (let i = 0; i < 15; i++) recados = incluirRecado(recados, { id: `r${i}`, texto: 'oi', emMs: i, autor: 'Ana', geradoPorIA: false, iaModelo: '' })
-    expect(recados).toHaveLength(MAX_RECADOS)
-    expect(recados[0].id).toBe('r14')
+  it('ordena cobranças, visitas e recados do mais recente para o mais antigo', async () => {
+    const { ordenarCobrancas, ordenarRecados, ordenarVisitas } = await import('./cliente')
+    expect(ordenarCobrancas([cob('2026-01'), cob('2026-03'), cob('2026-02')]).map((c) => c.competencia)).toEqual(['2026-03', '2026-02', '2026-01'])
+    expect(ordenarVisitas([{ id: 'a', data: '2026-01-02', hora: '09:00', motivo: '', status: 'agendada' }, { id: 'b', data: '2026-01-02', hora: '10:00', motivo: '', status: 'agendada' }]).map((v) => v.id)).toEqual(['b', 'a'])
+    expect(ordenarRecados([{ id: 'x', texto: 'oi', criadoEmMs: 1, autor: '', geradoPorIA: false, iaModelo: '' }, { id: 'y', texto: 'oi', criadoEmMs: 2, autor: '', geradoPorIA: false, iaModelo: '' }]).map((r) => r.id)).toEqual(['y', 'x'])
   })
 
   it('valida o cadastro e o recado com IA', () => {
@@ -105,8 +85,8 @@ describe('módulo 12: painel do cliente', () => {
   it('monta o link com hash e calcula os números da unidade', () => {
     expect(linkPainel('a'.repeat(32), 'https://x.github.io/app/')).toBe(`https://x.github.io/app/#/painel/${'a'.repeat(32)}`)
     const c = (id: string, status: Cliente['status'], valor: number): Cliente => ({ id, unidadeId: 'u', nome: id, telefone: '', email: '', box: 'B', contratoInicioMs: 1, contratoFimMs: 0, valorMensalCentavos: valor, diaVencimento: 10, status, painelToken: id, obs: '', criadoEmMs: 1, atualizadoPorNome: '', atualizadoEmMs: 1 })
-    const p = (clienteId: string, ativo: boolean, cobrancas: Cobranca[]) => [clienteId, { clienteId, ativo, cobrancas } as unknown as Painel] as const
-    const k = kpisClientes([c('a', 'ativo', 20000), c('b', 'ativo', 30000), c('z', 'encerrado', 99999)], new Map([p('a', true, [cob('2026-10')]), p('b', false, [])]), '2026-11-19')
+    const p = (clienteId: string, ativo: boolean) => [clienteId, { clienteId, ativo } as unknown as Painel] as const
+    const k = kpisClientes([c('a', 'ativo', 20000), c('b', 'ativo', 30000), c('z', 'encerrado', 99999)], new Map([p('a', true), p('b', false)]), new Map([['a', [cob('2026-10')]], ['b', []], ['z', [cob('2026-01')]]]), '2026-11-19')
     expect(k).toEqual({ ativos: 2, receitaMensalCentavos: 50000, atrasadoCentavos: 10000, clientesEmAtraso: 1, linksAtivos: 1 })
   })
 })

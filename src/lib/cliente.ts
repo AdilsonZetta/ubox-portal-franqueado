@@ -5,9 +5,8 @@ export type StatusCobranca = 'pendente' | 'pago'
 export type SituacaoCobranca = 'pago' | 'pendente' | 'atrasado'
 export type StatusVisita = 'agendada' | 'realizada' | 'cancelada'
 
-export const MAX_COBRANCAS = 24
-export const MAX_VISITAS = 10
-export const MAX_RECADOS = 10
+/** Quantos recados o link mostra (os mais recentes). */
+export const RECADOS_NO_LINK = 10
 
 /** Cadastro do locatário com dados pessoais: só a unidade lê. */
 export interface Cliente {
@@ -49,7 +48,7 @@ export interface Visita {
 export interface Recado {
   id: string
   texto: string
-  emMs: number
+  criadoEmMs: number
   autor: string // só o primeiro nome de quem escreveu
   geradoPorIA: boolean
   iaModelo: string
@@ -68,12 +67,18 @@ export interface Painel {
   contratoFimMs: number
   valorMensalCentavos: number
   diaVencimento: number
-  cobrancas: Cobranca[]
-  visitas: Visita[]
-  recados: Recado[]
   ativo: boolean
   atualizadoEmMs: number
 }
+
+/** Itens do painel: um documento por cobrança (id = AAAA-MM), visita e recado, em subcoleções do painel. */
+export interface ItensPainel {
+  cobrancas: Cobranca[]
+  visitas: Visita[]
+  recados: Recado[]
+}
+
+export const ITENS_VAZIOS: ItensPainel = { cobrancas: [], visitas: [], recados: [] }
 
 export interface ClienteForm {
   nome: string
@@ -185,36 +190,7 @@ export function proximaCompetencia(lista: Cobranca[], agora = Date.now()): strin
 export const ordenarCobrancas = (l: Cobranca[]) => [...l].sort((a, b) => b.competencia.localeCompare(a.competencia))
 export const ordenarVisitas = (l: Visita[]) => [...l].sort((a, b) => `${b.data}${b.hora}`.localeCompare(`${a.data}${a.hora}`))
 
-/**
- * Inclui uma cobrança respeitando o limite do painel: se cheio, sai a paga mais antiga.
- * Retorna null quando todas estão em aberto (a unidade precisa baixar alguma antes).
- */
-export function incluirCobranca(lista: Cobranca[], nova: Cobranca): Cobranca[] | null {
-  if (lista.some((c) => c.competencia === nova.competencia)) return null
-  const base = [...lista]
-  if (base.length >= MAX_COBRANCAS) {
-    const pagas = base.filter((c) => c.status === 'pago').sort((a, b) => a.competencia.localeCompare(b.competencia))
-    if (!pagas.length) return null
-    base.splice(base.indexOf(pagas[0]), 1)
-  }
-  return ordenarCobrancas([...base, nova])
-}
-
-/** Visitas: se cheio, sai a mais antiga já realizada/cancelada. */
-export function incluirVisita(lista: Visita[], nova: Visita): Visita[] | null {
-  const base = [...lista]
-  if (base.length >= MAX_VISITAS) {
-    const fechadas = base.filter((v) => v.status !== 'agendada').sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
-    if (!fechadas.length) return null
-    base.splice(base.indexOf(fechadas[0]), 1)
-  }
-  return ordenarVisitas([...base, nova])
-}
-
-/** Recados: os 10 mais recentes. */
-export function incluirRecado(lista: Recado[], novo: Recado): Recado[] {
-  return [novo, ...lista].sort((a, b) => b.emMs - a.emMs).slice(0, MAX_RECADOS)
-}
+export const ordenarRecados = (l: Recado[]) => [...l].sort((a, b) => b.criadoEmMs - a.criadoEmMs)
 
 export function validarCliente(f: ClienteForm): string[] {
   const erros: string[] = []
@@ -259,7 +235,7 @@ export interface KpisClientes {
   linksAtivos: number
 }
 
-export function kpisClientes(clientes: Cliente[], paineis: Map<string, Painel>, hoje: string): KpisClientes {
+export function kpisClientes(clientes: Cliente[], paineis: Map<string, Painel>, cobrancas: Map<string, Cobranca[]>, hoje: string): KpisClientes {
   let ativos = 0
   let receitaMensalCentavos = 0
   let atrasadoCentavos = 0
@@ -269,10 +245,8 @@ export function kpisClientes(clientes: Cliente[], paineis: Map<string, Painel>, 
     if (c.status !== 'ativo') continue
     ativos += 1
     receitaMensalCentavos += c.valorMensalCentavos
-    const p = paineis.get(c.id)
-    if (!p) continue
-    if (p.ativo) linksAtivos += 1
-    const r = resumoCobrancas(p.cobrancas, hoje)
+    if (paineis.get(c.id)?.ativo) linksAtivos += 1
+    const r = resumoCobrancas(cobrancas.get(c.id) ?? [], hoje)
     if (r.atrasadas) {
       clientesEmAtraso += 1
       atrasadoCentavos += r.atrasadoCentavos
