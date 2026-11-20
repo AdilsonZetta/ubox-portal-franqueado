@@ -47,19 +47,19 @@ export default {
   }),
   leituras: tabela('leituras', `
     uid:u! documento_id! versao titulo lido_em:d
-  `),
+  `, { idComUid: true }),
   aceites: tabela('aceites', `
     uid:u! documento_id! versao! titulo nome! email! texto! aceito_em:d
-  `, { enums: { texto: ['Li e concordo'] } }),
+  `, { idComUid: true, enums: { texto: ['Li e concordo'] } }),
   tentativas: tabela('tentativas', `
     uid:u! quiz_id! trilha_id nota aprovado? respostas:j respondido_em:d
   `),
   certificados: tabela('certificados', `
     uid:u! trilha_id! nome! trilha_titulo! codigo! tentativa_id! emitido_em:d
-  `),
+  `, { idComUid: true, referenciaTentativa: true }),
   avisosLeituras: tabela('avisos_leituras', `
     uid:u! aviso_id! lida_em:d
-  `),
+  `, { idComUid: true }),
   manuaisTrilha: tabela('manuais_trilha', `
     documento_id! titulo! etapa ordem tempo_minimo_seg! video_minutos anterior_id ativo atualizado_por:u?
     atualizado_por_nome! atualizado_em:d
@@ -68,6 +68,7 @@ export default {
     uid:u! documento_id! nome! unidade_id! unidade_nome! status reinicios tempo_minimo_seg! concluido_em:d?
     iniciado_em:d atualizado_em:d
   `, {
+    idComUid: true,
     enums: { status: 'em_andamento concluido' },
   }),
 }

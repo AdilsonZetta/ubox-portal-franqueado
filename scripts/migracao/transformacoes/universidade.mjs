@@ -20,18 +20,21 @@ export default {
     uid:u! curso_id! ciclo! numero! nome! unidade_id! unidade_nome! versao! aprovado? criado_em:d
     corrigido_em:d?
   `, {
+    idComUid: true,
     filha: 'folha/atual',
   }),
   'tentativasProva/folha': tabela('tentativas_prova_folha', `
     uid:u! versao! respostas!
   `, {
     pai: 'tentativa_id:tentativas_prova',
+    paiComUid: true,
     idFilho: 'atual',
     pk: 'tentativa_id',
   }),
   reestudos: tabela('reestudos', `
     uid:u! curso_id! ciclo documento_id! status reinicios concluido_em:d? iniciado_em:d atualizado_em:d
   `, {
+    idComUid: true,
     enums: { status: 'em_andamento concluido' },
   }),
 }

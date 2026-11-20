@@ -216,35 +216,34 @@ function imprimirPlano(plano, dados, log) {
   for (const aviso of plano.avisos) log(mascararEmails(aviso))
 }
 
-async function vincularContas(dir, admin, preliminar) {
+async function vincularContas(admin, preliminar, auth, log) {
   const existentes = await listarContas(admin)
-  const arquivo = 'mapa-usuarios.json'
-  const anterior = await lerJson(dir, arquivo, {})
-  const mapa = new Map(Object.entries(anterior))
+  const mapa = new Map()
   const uidPorId = new Map(Object.entries(preliminar.mapaUids).map(([uid, id]) => [id, uid]))
+  const desativadas = new Set(auth.filter(conta => conta.disabled === true).map(conta => conta.uid))
   let criadas = 0
   for (const { id, email } of preliminar.authUsers) {
     const uid = uidPorId.get(id)
+    const desativada = desativadas.has(uid)
     let destino = existentes.get(email)
     if (!destino) {
       try {
-        const { data, error } = await admin.createUser({ email, email_confirm: true, user_metadata: { firebase_uid: uid } })
+        const { data, error } = await admin.createUser({
+          email, email_confirm: true, user_metadata: { firebase_uid: uid },
+          ...(desativada ? { ban_duration: '876000h' } : {}),
+        })
         if (error || !data?.user?.id) throw error
         destino = data.user.id
         criadas++
       } catch {
         throw new ErroMigracao(`Falha ao criar a conta ${mascararEmails(email)}.`)
       }
+    } else if (desativada) {
+      log(`Aviso — conta reutilizada ${mascararEmails(email)} estava desativada no Firebase. Confira o bloqueio no Supabase.`)
     }
-    if (mapa.get(uid) !== destino) {
-      mapa.set(uid, destino)
-      await gravarJson(dir, arquivo, Object.fromEntries(mapa))
-    }
+    mapa.set(uid, destino)
   }
-  // O mapa final reflete somente as contas selecionadas desta exportação.
-  const atual = Object.fromEntries([...uidPorId.values()].map(uid => [uid, mapa.get(uid)]))
-  if (mapa.size !== uidPorId.size || uidPorId.size === 0) await gravarJson(dir, arquivo, atual)
-  return { mapa: atual, criadas }
+  return { mapa, criadas }
 }
 
 export async function carregarPerfis(db, plano) {
@@ -298,9 +297,13 @@ export async function aplicar({
   const db = await abrirBanco(conexao)
   try {
     const cliente = criarCliente(url, chave, opcoesAuth)
-    const { mapa, criadas } = await vincularContas(dir, cliente.auth.admin, preliminar)
-    const plano = planejarImportacao(dados, { gerarId: uid => mapa[uid] })
+    const { mapa, criadas } = await vincularContas(cliente.auth.admin, preliminar, dados.auth, log)
+    const plano = planejarImportacao(dados, { gerarId: uid => mapa.get(uid) })
     await carregarPerfis(db, plano)
+    // Publica apenas os vínculos com perfil após a transação. A retomada relê as contas por e-mail.
+    await gravarJson(dir, 'mapa-usuarios.json', Object.fromEntries(
+      plano.usuarios.map(({ firebase_uid, id }) => [firebase_uid, id]),
+    ))
     log(`Carga concluída — ${criadas} contas criadas, ${plano.authUsers.length - criadas} reutilizadas.`)
     return { ...plano.contagens, criadas }
   } finally {
@@ -327,11 +330,22 @@ export async function enviarSenha({
   }
   const arquivo = 'envios.json'
   const enviados = new Set(await lerJson(dir, arquivo, []))
-  const auth = await lerJson(dir, 'auth.json')
-  const enderecos = new Set(auth.map(({ email }) => email?.trim().toLowerCase()).filter(Boolean))
+  const dados = await lerExportacao(dir)
+  const mapa = await lerJson(dir, 'mapa-usuarios.json', {})
+  const plano = planejarImportacao(dados)
+  const perfis = new Set(plano.usuarios.map(perfil => perfil.firebase_uid))
+  const enderecos = new Set()
+  let ignorados = 0
+  for (const { uid, email, disabled } of dados.auth) {
+    if (disabled === true || !perfis.has(uid) || !Object.hasOwn(mapa, uid) || !mapa[uid]) {
+      ignorados++
+      continue
+    }
+    enderecos.add(email.trim().toLowerCase())
+  }
   const pendentes = [...enderecos].filter(email => !enviados.has(email))
-  log(`E-mails pendentes — ${pendentes.length}. Lotes previstos — ${Math.ceil(pendentes.length / lote)}.`)
-  if (simular || pendentes.length === 0) return { enviados: 0, pendentes: pendentes.length }
+  log(`E-mails pendentes — ${pendentes.length}. Lotes previstos — ${Math.ceil(pendentes.length / lote)}. Contas ignoradas — ${ignorados}.`)
+  if (simular || pendentes.length === 0) return { enviados: 0, pendentes: pendentes.length, ignorados }
 
   const cliente = criarCliente(url, chave, opcoesAuth)
   let concluidos = enderecos.size - pendentes.length
@@ -349,7 +363,7 @@ export async function enviarSenha({
     concluidos++
     log(`E-mail de senha enviado para ${mascarado}.`)
   }
-  return { enviados: pendentes.length, pendentes: 0 }
+  return { enviados: pendentes.length, pendentes: 0, ignorados }
 }
 
 async function executar([comando, ...args]) {

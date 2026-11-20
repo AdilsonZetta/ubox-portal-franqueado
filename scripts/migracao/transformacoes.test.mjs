@@ -1,3 +1,6 @@
+import { idAvisoLeitura, idCertificado, idLeitura } from '../../src/lib/ids'
+import { idProgresso } from '../../src/lib/manuaisTrilha'
+import { idReestudo, idTentativa } from '../../src/lib/universidade'
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { readFileSync } from 'node:fs'
 import { validarParesCrm } from './transformacoes/crm.mjs'
@@ -144,4 +147,50 @@ it('registra o lead cujo contato pertence a outra unidade', () => {
   expect(pendencias).toEqual([expect.objectContaining({
     tabela: 'crm_leads', motivo: 'contato CRM correspondente ausente ou inválido',
   })])
+})
+
+
+describe('identidades compostas pelo usuário', () => {
+  it.each([
+    ['manuais', 'leituras', uid => idLeitura(uid, 'documento', 1)],
+    ['manuais', 'aceites', uid => idLeitura(uid, 'documento', 1)],
+    ['manuais', 'certificados', uid => idCertificado(uid, 'trilha')],
+    ['manuais', 'avisosLeituras', uid => idAvisoLeitura(uid, 'aviso')],
+    ['manuais', 'progressoManuais', uid => idProgresso(uid, 'documento')],
+    ['universidade', 'tentativasProva', uid => idTentativa(uid, 'curso', 1, 1)],
+    ['universidade', 'reestudos', uid => idReestudo(uid, 'curso', 1)],
+  ])('traduz o ID de %s/%s pelo mesmo padrão do app', (modulo, colecao, gerarId) => {
+    const doc = documento(colecao)
+    Object.assign(doc, { id: gerarId('autor'), path: colecao + '/' + gerarId('autor') })
+    const transformar = modulos[modulo][colecao].transformar
+    expect(transformar(doc, contexto).linhas[0].linha).toMatchObject({ id: gerarId(autor), uid: autor })
+    expect(transformar({ ...doc, id: gerarId('outro') }, contexto).linhas[0].linha.id).toBe(gerarId('outro'))
+    const resultado = transformar(doc, { uid: () => null })
+    expect(resultado.linhas).toEqual([])
+    expect(resultado.pendencias).toContainEqual(expect.objectContaining({ campo: 'uid', motivo: 'UID sem correspondência' }))
+  })
+
+  it('traduz as referências entre tentativa, folha e certificado do curso', () => {
+    const legado = idTentativa('autor', 'curso', 1, 1)
+    const destino = idTentativa(autor, 'curso', 1, 1)
+    const path = 'tentativasProva/' + legado
+    const tentativa = { ...documento('tentativasProva'), path, id: legado }
+    const folha = { ...documento('tentativasProva/folha'), path: path + '/folha/atual', pai: path }
+    const certificado = documento('certificados')
+    Object.assign(certificado.data, { trilhaId: 'curso', tentativaId: legado })
+    certificado.id = idCertificado('autor', 'curso')
+    certificado.path = 'certificados/' + certificado.id
+    const ctx = { ...contexto, temDocumento: caminho => [path, folha.path].includes(caminho) }
+    expect(modulos.universidade.tentativasProva.transformar(tentativa, ctx).linhas[0].linha)
+      .toMatchObject({ id: destino, folha_id: destino })
+    expect(modulos.universidade['tentativasProva/folha'].transformar(folha, ctx).linhas[0])
+      .toMatchObject({ linha: { tentativa_id: destino }, depende: { tabela: 'tentativas_prova', valor: destino } })
+    expect(modulos.manuais.certificados.transformar(certificado, ctx).linhas[0].linha)
+      .toMatchObject({ id: idCertificado(autor, 'curso'), tentativa_id: destino })
+    for (const outra of ['sem-quiz', 'autor_quiz']) {
+      certificado.data.tentativaId = outra
+      const ctxQuiz = { ...ctx, temDocumento: caminho => caminho === 'tentativas/' + outra }
+      expect(modulos.manuais.certificados.transformar(certificado, ctxQuiz).linhas[0].linha.tentativa_id).toBe(outra)
+    }
+  })
 })

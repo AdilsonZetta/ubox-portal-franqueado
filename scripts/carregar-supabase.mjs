@@ -160,11 +160,12 @@ function codigoSql(erro) {
 
 export async function carregar({
   dir, db, destino = 'local', simular = false, refazer, zerar = false, log = console.log, depoisDeInserir,
+  arquivoMapa = 'mapa-usuarios.json',
 }) {
   if (refazer && refazer !== saldos && !Object.hasOwn(modulos, refazer)) throw new ErroMigracao('Módulo inválido para --refazer.')
   dir = await diretorioExterno(dir)
   await prepararDiretorio(dir)
-  const exportacao = await lerCarga(dir)
+  const exportacao = await lerCarga(dir, arquivoMapa)
   const { mapa, porColecao, caminhos } = exportacao
   // app.da_api() na fase 1 só reconhece anon/authenticated. Como postgres,
   // os gatilhos de carimbo (inclusive os da fase 4) devolvem NEW sem alteração.
@@ -273,8 +274,11 @@ async function principal(args) {
   await prepararDiretorio(dir)
   let db
   let destino
+  let arquivoMapa
   try {
     if (local) {
+      const { mapaDeEnsaio } = await import('./migracao/cargaLocal.mjs')
+      arquivoMapa = await mapaDeEnsaio(dir)
       const pasta = await diretorioExterno(local)
       await prepararDiretorio(pasta)
       destino = hash(await realpath(pasta))
@@ -283,7 +287,7 @@ async function principal(args) {
       const { rows: [{ inicializado }] } = await db.query("select to_regclass('public.usuarios') is not null as inicializado")
       if (!inicializado) {
         const { prepararBancoLocal } = await import('./migracao/cargaLocal.mjs')
-        await prepararBancoLocal(db, dir)
+        await prepararBancoLocal(db, dir, arquivoMapa)
       }
     } else {
       const { Client } = await import('pg').catch(erro => {
@@ -301,7 +305,7 @@ async function principal(args) {
       await db.query('select pg_advisory_lock(1502, 0)')
     }
     await carregar({
-      dir, db, destino, simular: !local && (op.simular || comando === 'ensaio'), refazer: op.refazer, zerar: !!op.zerar,
+      dir, db, destino, simular: !local && (op.simular || comando === 'ensaio'), refazer: op.refazer, zerar: !!op.zerar, arquivoMapa,
     })
   } finally {
     if (local) await db?.close()
@@ -311,7 +315,8 @@ async function principal(args) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   await principal(process.argv.slice(2)).catch(erro => {
-    console.error(erro instanceof ErroMigracao ? erro.message : 'Não foi possível executar a carga.')
+    // Só nome e código: mensagens do driver podem trazer dados pessoais da linha.
+    console.error(erro instanceof ErroMigracao ? erro.message : `Não foi possível executar a carga (${erro?.name ?? 'Erro'}${erro?.code ? ' ' + erro.code : ''}).`)
     process.exitCode = 1
   })
 }

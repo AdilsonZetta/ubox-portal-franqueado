@@ -346,19 +346,34 @@ Produção segue no Firebase. Esta fase prepara o corte para o Supabase `zmrefls
 
 ### 24.1 Pré-requisitos que ainda faltam (bloqueiam o corte)
 
-- [ ] 1. Implementar `scripts/migrar-usuarios.mjs exportar` e `aplicar`. Hoje são stubs e só `ensaio` funciona.
-- [ ] 2. Criar `scripts/exportar-firestore.mjs` e `scripts/carregar-supabase.mjs`, previstos na seção 5. Incluir a inicialização de `estoque_saldos` a partir dos movimentos importados.
-- [x] 3. Alterar o passo de build de `.github/workflows/pages.yml` para ler `VITE_BACKEND`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` das variáveis do repositório (feito na Fase 15b).
-- [ ] 4. Revisar e aprovar o PR **Fase 15b** (scripts e ajuste do workflow) antes do dia do corte. Confirmar nele a sintaxe dos comandos propostos abaixo e ensaiar a carga e o build com os dois backends.
+- [x] 1. `scripts/migrar-usuarios.mjs exportar`, `aplicar` e `enviar-senha` implementados (Fase 15b, PR #37).
+- [x] 2. `scripts/exportar-firestore.mjs` e `scripts/carregar-supabase.mjs` implementados, com a inicialização de `estoque_saldos` e o relatório de saldos negativos (Fase 15b, PR #37).
+- [x] 3. O passo de build de `.github/workflows/pages.yml` lê `VITE_BACKEND` (padrão `firebase`), `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` das variáveis do repositório e recusa chave secreta (Fase 15b). As variáveis **não** foram criadas.
+- [ ] 4. Revisar e aprovar o PR **Fase 15b** (#37). Depois, o Adilson ensaia a exportação real na própria máquina (24.2, passos 2 e 3) antes de marcar a data.
 
 ### 24.2 O que o Adilson roda na própria máquina
 
-- [ ] 1. Criar uma pasta privada de exportação fora do repositório e apontar `EXPORT_DIR` para ela. No ambiente local da máquina do Adilson, configurar `GOOGLE_APPLICATION_CREDENTIALS` com o caminho da credencial local do `firebase-admin`, `SUPABASE_SECRET_KEY` para a API administrativa e `SUPABASE_DB_URL` para a conexão como `postgres`. Obter as credenciais do Supabase no dashboard. Manter credenciais e arquivos de exportação fora do repositório e do frontend.
-- [ ] 2. Com a Fase 15b pronta, exportar com `node scripts/migrar-usuarios.mjs exportar --dir "$EXPORT_DIR"` e `node scripts/exportar-firestore.mjs --dir "$EXPORT_DIR"`. Conferir `auth.json`, `usuarios.json`, `unidades.json`, `config.json` e os JSONL de coleções e subcoleções. A exportação do Auth contém UID, e-mail e metadados, sem senhas nem hashes.
-- [ ] 3. Rodar `node scripts/migrar-usuarios.mjs ensaio --dir "$EXPORT_DIR"` e ensaiar os módulos em destino isolado com `node scripts/carregar-supabase.mjs ensaio --dir "$EXPORT_DIR"`. Conferir contagens previstas e obtidas, hashes por coleção, duplicidades, perfis ignorados e referências sem correspondência. Resolver divergências antes de aplicar. Repetir as conferências com a exportação final.
-- [ ] 4. Na janela aprovada, rodar `node scripts/migrar-usuarios.mjs aplicar --dir "$EXPORT_DIR"`. Criar contas sem senha com `auth.admin.createUser({ email, email_confirm: true })`. Usar os UUIDs retornados para gravar `usuarios.id` e mapear pelo `usuarios.firebase_uid`. Carregar unidades, perfis, vínculos dos responsáveis e `admin_lock` respeitando as FKs. Usar o mapa da aplicação real na carga dos módulos, pois o ensaio gera UUIDs próprios.
-- [ ] 5. Rodar `node scripts/carregar-supabase.mjs aplicar --dir "$EXPORT_DIR"` como `postgres`. Carregar conteúdo e módulos em ordem de FKs, com pais antes dos filhos e pares com FKs adiadas na mesma transação. Preservar IDs de documentos, converter datas e traduzir referências de usuários pelo mapa real. Como `app.da_api()` retorna falso para `postgres`, os gatilhos dispensam as validações da API e o estoque exige cálculo explícito. FKs e restrições das tabelas continuam valendo.
-- [ ] 6. Listar os pares unidade/item com saldo negativo antes de inicializar `estoque_saldos`. Adilson decide se corrige com um ajuste registrado ou se eleva o saldo inicial a zero com exceção documentada. Se optar por zero, usar `greatest(sum(delta), 0)` somente conforme a decisão registrada e reconciliar a diferença com o histórico. Aplicar a inicialização uma vez, em transação, como `postgres`.
+Todos os scripts leem credenciais **só** de variáveis de ambiente locais, recusam diretório de exportação dentro do repositório, gravam arquivos com permissão 0600 (pasta 0700), mascaram e-mails nos logs, aceitam simulação e podem ser repetidos: o que já foi feito é pulado (`estado.json`, `mapa-usuarios.json`, `carga-estado.json`, `envios.json`).
+
+- [ ] 1. Preparar o ambiente, fora do repositório:
+
+  ```bash
+  npm i --no-save firebase-admin pg          # só na máquina do Adilson; não entram no package.json
+  export EXPORT_DIR="$HOME/ubox-exportacao"   # pasta privada, fora do repo
+  export GOOGLE_APPLICATION_CREDENTIALS="$HOME/credenciais/firebase-admin.json"
+  export SUPABASE_URL="https://zmreflstgxgofvuhzqau.supabase.co"
+  export SUPABASE_SECRET_KEY="sb_secret_..."          # só para migrar-usuarios aplicar
+  export SUPABASE_PUBLISHABLE_KEY="sb_publishable_..." # só para enviar-senha
+  export SUPABASE_DB_URL="postgresql://postgres...."   # conexão como postgres (dashboard > Connect)
+  ```
+
+  A exportação inclui os segredos do cofre de Senhas (`acessos__segredo.jsonl`) e dados pessoais de CRM e clientes. Guardar `EXPORT_DIR` com o mesmo cuidado e apagá-la depois do período de rollback.
+
+- [ ] 2. Exportar (só leitura no Firebase): `node scripts/exportar-firestore.mjs --dir "$EXPORT_DIR" --simular` para ver coleções e contagens; depois sem `--simular`. Grava um JSONL por coleção/subcoleção, `auth.json` (UID, e-mail, status e metadados, sem hashes de senha), `usuarios.json`, `unidades.json`, `config.json`, `manifest.json` (contagem e SHA-256 por arquivo) e `estado.json`. Se cair no meio, rodar de novo continua de onde parou; `--refazer` exporta tudo outra vez.
+- [ ] 3. Ensaiar localmente, sem tocar no Supabase: `node scripts/migrar-usuarios.mjs ensaio --dir "$EXPORT_DIR"` e `node scripts/carregar-supabase.mjs --dir "$EXPORT_DIR" --contra-pglite "$HOME/ubox-ensaio-pglite"`. O ensaio aplica todas as migrations num PGlite local, usa UUIDs de ensaio (`mapa-usuarios-ensaio.json`, nunca o mapa real) e grava `relatorio-carga.json`: linhas por tabela × documentos exportados, pendências (UID sem conta, enum inválido, pai ausente), campos desconhecidos e saldos negativos. Resolver as pendências antes da janela.
+- [ ] 4. Na janela, contas: `node scripts/migrar-usuarios.mjs aplicar --dir "$EXPORT_DIR" --simular` (só o plano), depois sem `--simular`. Cria as contas sem senha (`auth.admin.createUser`, e-mail confirmado), reaproveita contas que já existem pelo e-mail, cria contas desativadas no Firebase já bloqueadas (`ban_duration`), grava `mapa-usuarios.json` e carrega `unidades`, `usuarios` e `admin_lock` numa transação idempotente.
+- [ ] 5. Módulos: `node scripts/carregar-supabase.mjs --dir "$EXPORT_DIR" --simular` (tudo dentro de uma transação desfeita no fim) e depois `node scripts/carregar-supabase.mjs aplicar --dir "$EXPORT_DIR"`. Roda como `postgres` (recusa outra sessão); como `app.da_api()` é falso para `postgres`, os gatilhos de carimbo não sobrescrevem `criado_em`/`criado_por` originais. Cada módulo é uma transação com `on conflict do nothing`; módulos concluídos são pulados (`--refazer <modulo>` força um). IDs que embutem o UID do Firebase (`leituras`, `aceites`, `certificados`, `avisos_leituras`, `progresso_manuais`, `tentativas_prova`, `reestudos`) são regravados com o UUID novo, como o app os calcula. No fim imprime a conferência por tabela.
+- [ ] 6. Saldos de estoque: a última etapa calcula `estoque_saldos` a partir de `estoque_movimentos` e lista cada par unidade/item negativo. Por padrão os pares negativos **não** são gravados e o script sai com erro; com a decisão do Adilson, rodar de novo com `--saldo-negativo=zerar` (grava 0 e registra no relatório) ou corrigir com um ajuste e rodar `--refazer estoque`. Conferência manual:
 
   ```sql
   select unidade_id, item_id, sum(delta) as saldo
@@ -366,10 +381,7 @@ Produção segue no Firebase. Esta fase prepara o corte para o Supabase `zmrefls
   group by 1, 2
   having sum(delta) < 0;
 
-  insert into public.estoque_saldos (unidade_id, item_id, saldo)
-  select unidade_id, item_id, sum(delta)
-  from public.estoque_movimentos
-  group by 1, 2;
+  -- a inserção em estoque_saldos é feita pelo carregar-supabase; não rodar à mão.
 
   select unidade_id, item_id, saldo
   from public.estoque_saldos
@@ -402,7 +414,8 @@ O SMTP padrão do Supabase envia cerca de 2 e-mails por hora no projeto e serve 
   <p>Se você não esperava este e-mail, pode ignorá-lo.</p>
   ```
 
-- [ ] 5. Testar entrega, abertura do link em outro navegador ou dispositivo, definição de senha e novo login com 2–3 contas internas. O link funciona em qualquer navegador ou dispositivo, tem uso único e expira conforme a configuração **Email OTP Expiration** do Supabase. Enviar em lotes dentro dos limites do Supabase e do provedor. [Modelos de e-mail](https://supabase.com/docs/guides/auth/auth-email-templates) · [Validade dos links](https://supabase.com/docs/guides/auth/auth-email-passwordless)
+- [ ] 5. Disparo em lotes (chave publicável, nunca a secreta): `node scripts/migrar-usuarios.mjs enviar-senha --dir "$EXPORT_DIR" --lote 20 --intervalo 3600 --simular`, depois sem `--simular`. Só envia para contas importadas com perfil e não desativadas; `envios.json` evita reenvio se o script for interrompido (um e-mail aceito pelo Supabase no instante da queda pode sair duas vezes). Ajustar `--lote`/`--intervalo` ao limite do SMTP escolhido.
+- [ ] 6. Testar entrega, abertura do link em outro navegador ou dispositivo, definição de senha e novo login com 2–3 contas internas. O link funciona em qualquer navegador ou dispositivo, tem uso único e expira conforme a configuração **Email OTP Expiration** do Supabase. Enviar em lotes dentro dos limites do Supabase e do provedor. [Modelos de e-mail](https://supabase.com/docs/guides/auth/auth-email-templates) · [Validade dos links](https://supabase.com/docs/guides/auth/auth-email-passwordless)
 
 ### 24.4 Ordem do dia do corte
 
@@ -452,3 +465,11 @@ O SMTP padrão do Supabase envia cerca de 2 e-mails por hora no projeto e serve 
 - [ ] 5. Fixar o prazo de decisão de rollback.
 - [ ] 6. Decidir quando desativar o Firebase após os 30 dias.
 - [ ] 7. Decidir se o Realtime será habilitado depois.
+
+### 24.9 O que a Fase 15b entregou (PR #37, não mesclado, nada executado em produção)
+
+- Scripts: `exportar-firestore.mjs` (formato JSONL sem perdas para Timestamp/ref/GeoPoint/bytes, manifesto com SHA-256, retomada), `migrar-usuarios.mjs exportar|aplicar|enviar-senha`, `carregar-supabase.mjs` (transformações por módulo em `scripts/migracao/transformacoes/`, separação de PII em `crm_contatos`/`clientes`, segredos só em `acesso_segredos`, `estoque_saldos` e relatório de negativos). `firebase-admin` e `pg` são carregados sob demanda e não entram no `package.json`.
+- Workflow do Pages lendo as três variáveis, padrão `firebase`, com trava contra chave secreta ou `service_role`.
+- Link "Defina sua senha" com `token_hash` (`src/lib/linkSenha.ts`): remove o token da URL antes de verificar, aceita só `type=recovery` e token no formato esperado, chama `verifyOtp` e abre **Criar nova senha**; não lê nenhum parâmetro de redirecionamento; `index.html` usa `referrer: no-referrer`.
+- Testes: unitários das transformações e do formato, importação de usuários com API falsa + PGlite, e ensaio completo da exportação sintética (`scripts/migracao/exemplo-carga/`) carregada num PGlite com todas as migrations: contagens, reexecução sem gravar nada, retomada após falha injetada, saldos e negativos.
+- Autoria: Codex (ChatGPT) escreveu scripts, testes, workflow e link de senha; Grok Bot revisou, pediu as correções (IDs com UID do Firebase, contas desativadas, envio só para contas importadas), fez o mapa de ensaio do `--contra-pglite` e esta seção.

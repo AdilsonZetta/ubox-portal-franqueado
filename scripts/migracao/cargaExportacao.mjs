@@ -4,9 +4,9 @@ import { join } from 'node:path'
 import { ErroMigracao, lerJson } from './arquivosLocais.mjs'
 import { resumirArquivo } from './formatoExportacao.mjs'
 
-export async function lerCarga(dir) {
+export async function lerCarga(dir, arquivoMapa = 'mapa-usuarios.json') {
   const { colecoes, arquivos } = await lerJson(dir, 'manifest.json')
-  const mapa = await lerJson(dir, 'mapa-usuarios.json')
+  const mapa = await lerJson(dir, arquivoMapa)
   if (!mapa || typeof mapa !== 'object' || Array.isArray(mapa)) throw new ErroMigracao('Mapa de usuários inválido.')
   for (const nome of Object.keys(arquivos)) {
     if (nome.endsWith('.jsonl') && !Object.hasOwn(colecoes, nome)) {

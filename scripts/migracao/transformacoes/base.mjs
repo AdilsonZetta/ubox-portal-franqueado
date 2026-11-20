@@ -54,6 +54,13 @@ function valorEscalar(valor) {
   return valor
 }
 
+function trocarPrefixoUid(id, uidFirebase, uidSupabase) {
+  const prefixo = uidFirebase + '_'
+  return uidSupabase && typeof id === 'string' && id.startsWith(prefixo)
+    ? uidSupabase + id.slice(uidFirebase.length)
+    : id
+}
+
 // Lista de colunas aceitas. d = data, u = UID, U = lista de UIDs, j = JSON. O sufixo ! exige
 // presença e ? permite nulo. O chamador serializa JSON ao vincular os parâmetros SQL.
 export function tabela(nome, lista, op = {}) {
@@ -123,7 +130,19 @@ export function tabela(nome, lista, op = {}) {
       else if (pk.includes('id')) linha.id = op.idUuid ? uuidDocumento(doc.path) : doc.id
       else if (op.id) linha[op.id] = doc.id
       if (colunaPai) linha[colunaPai] = idPai(doc)
-      if (op.filha && ctx.temDocumento?.(doc.path + '/' + op.filha)) linha.folha_id = doc.id
+      // IDs compostos no app: leituras, aceites, certificados, avisos_leituras,
+      // progresso_manuais, tentativas_prova e reestudos.
+      const remapearId = id => trocarPrefixoUid(id, dados.uid, linha.uid)
+      if (op.idComUid) linha.id = remapearId(linha.id)
+      if (op.paiComUid) linha[colunaPai] = remapearId(linha[colunaPai])
+      if (op.filha && ctx.temDocumento?.(doc.path + '/' + op.filha)) linha.folha_id = linha.id
+      if (op.referenciaTentativa) {
+        const tentativa = linha.tentativa_id
+        // O certificado também aceita tentativas de quiz com ID opaco e o marcador sem-quiz.
+        if (ctx.temDocumento?.('tentativasProva/' + tentativa) || !ctx.temDocumento?.('tentativas/' + tentativa)) {
+          linha.tentativa_id = remapearId(tentativa)
+        }
+      }
       if (op.responsavelOpcional && linha.responsavel_id == null) {
         if (linha.responsavel_nome != null) registrar('responsavelNome', 'nome omitido sem responsável válido', false)
         linha.responsavel_nome = null
