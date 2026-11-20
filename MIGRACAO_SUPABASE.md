@@ -149,10 +149,7 @@ Se a confirmação de e-mail estiver ligada, a alternativa é uma Edge Function 
 
 ## 8. Corte
 
-1. Congelar a escrita: o aviso de manutenção sai no build do Firebase. Opcionalmente, um deploy de regras só leitura, **com aprovação explícita** do responsável.
-2. Exportar o Firestore e o Auth, carregar no Supabase e conferir as contagens.
-3. Fazer o build com `VITE_BACKEND=supabase`, publicar no Pages e enviar os e-mails de primeiro acesso.
-4. **Volta atrás:** basta publicar de novo o build com `VITE_BACKEND=firebase`. O Firebase fica intacto e só leitura por 30 dias. Depois disso, quem decide é o responsável.
+Consulte o checklist da seção 24 para preparar e executar o corte na janela aprovada.
 
 ## 9. Testes
 
@@ -340,3 +337,111 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - Dono, autor e data de criação imutáveis; carimbos de atualização só pelo gatilho.
 - App: `src/lib/nuvemSupabase.ts` atrás de `VITE_BACKEND=supabase`.
 - Testes: `supabase/tests/fase14_nuvem.test.sql` — 74 casos (59 `nv:` das regras + privacidade da área da unidade), local e remoto com rollback.
+
+## 24. Fase 15 — checklist do corte (preparado, não executado)
+
+Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
+
+Produção segue no Firebase. Esta fase prepara o corte para o Supabase `zmreflstgxgofvuhzqau`, no plano Free.
+
+### 24.1 Pré-requisitos que ainda faltam (bloqueiam o corte)
+
+- [ ] 1. Implementar `scripts/migrar-usuarios.mjs exportar` e `aplicar`. Hoje são stubs e só `ensaio` funciona.
+- [ ] 2. Criar `scripts/exportar-firestore.mjs` e `scripts/carregar-supabase.mjs`, previstos na seção 5. Incluir a inicialização de `estoque_saldos` a partir dos movimentos importados.
+- [ ] 3. Alterar o passo de build de `.github/workflows/pages.yml` para ler `VITE_BACKEND`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` das variáveis do repositório. Hoje o workflow não passa nenhuma das três.
+- [ ] 4. Revisar e aprovar o PR **Fase 15b** (scripts e ajuste do workflow) antes do dia do corte. Confirmar nele a sintaxe dos comandos propostos abaixo e ensaiar a carga e o build com os dois backends.
+
+### 24.2 O que o Adilson roda na própria máquina
+
+- [ ] 1. Criar uma pasta privada de exportação fora do repositório e apontar `EXPORT_DIR` para ela. No ambiente local da máquina do Adilson, configurar `GOOGLE_APPLICATION_CREDENTIALS` com o caminho da credencial local do `firebase-admin`, `SUPABASE_SECRET_KEY` para a API administrativa e `SUPABASE_DB_URL` para a conexão como `postgres`. Obter as credenciais do Supabase no dashboard. Manter credenciais e arquivos de exportação fora do repositório e do frontend.
+- [ ] 2. Com a Fase 15b pronta, exportar com `node scripts/migrar-usuarios.mjs exportar --dir "$EXPORT_DIR"` e `node scripts/exportar-firestore.mjs --dir "$EXPORT_DIR"`. Conferir `auth.json`, `usuarios.json`, `unidades.json`, `config.json` e os JSONL de coleções e subcoleções. A exportação do Auth contém UID, e-mail e metadados, sem senhas nem hashes.
+- [ ] 3. Rodar `node scripts/migrar-usuarios.mjs ensaio --dir "$EXPORT_DIR"` e ensaiar os módulos em destino isolado com `node scripts/carregar-supabase.mjs ensaio --dir "$EXPORT_DIR"`. Conferir contagens previstas e obtidas, hashes por coleção, duplicidades, perfis ignorados e referências sem correspondência. Resolver divergências antes de aplicar. Repetir as conferências com a exportação final.
+- [ ] 4. Na janela aprovada, rodar `node scripts/migrar-usuarios.mjs aplicar --dir "$EXPORT_DIR"`. Criar contas sem senha com `auth.admin.createUser({ email, email_confirm: true })`. Usar os UUIDs retornados para gravar `usuarios.id` e mapear pelo `usuarios.firebase_uid`. Carregar unidades, perfis, vínculos dos responsáveis e `admin_lock` respeitando as FKs. Usar o mapa da aplicação real na carga dos módulos, pois o ensaio gera UUIDs próprios.
+- [ ] 5. Rodar `node scripts/carregar-supabase.mjs aplicar --dir "$EXPORT_DIR"` como `postgres`. Carregar conteúdo e módulos em ordem de FKs, com pais antes dos filhos e pares com FKs adiadas na mesma transação. Preservar IDs de documentos, converter datas e traduzir referências de usuários pelo mapa real. Como `app.da_api()` retorna falso para `postgres`, os gatilhos dispensam as validações da API e o estoque exige cálculo explícito. FKs e restrições das tabelas continuam valendo.
+- [ ] 6. Listar os pares unidade/item com saldo negativo antes de inicializar `estoque_saldos`. Adilson decide se corrige com um ajuste registrado ou se eleva o saldo inicial a zero com exceção documentada. Se optar por zero, usar `greatest(sum(delta), 0)` somente conforme a decisão registrada e reconciliar a diferença com o histórico. Aplicar a inicialização uma vez, em transação, como `postgres`.
+
+  ```sql
+  select unidade_id, item_id, sum(delta) as saldo
+  from public.estoque_movimentos
+  group by 1, 2
+  having sum(delta) < 0;
+
+  insert into public.estoque_saldos (unidade_id, item_id, saldo)
+  select unidade_id, item_id, sum(delta)
+  from public.estoque_movimentos
+  group by 1, 2;
+
+  select unidade_id, item_id, saldo
+  from public.estoque_saldos
+  where saldo < 0;
+  ```
+
+- [ ] 7. Comparar `count(*)` por tabela com o manifesto da exportação mapeada, incluindo `auth.users`, `usuarios`, `unidades`, `admin_lock` e tabelas filhas. Para `estoque_saldos`, comparar a contagem de pares distintos e reconciliar os valores com a soma dos deltas e as exceções aprovadas. Conferir amostras de vínculos e histórico por unidade.
+- [ ] 8. Após validar a carga e fechar a janela de decisão de rollback, apagar a pasta local de exportação, remover as credenciais do ambiente e revogar ou rotacionar no dashboard a `SUPABASE_SECRET_KEY` usada na migração. A `SUPABASE_SERVICE_ROLE_KEY` da Edge Function fica no ambiente gerenciado do Supabase.
+
+### 24.3 SMTP próprio para o e-mail 'Defina sua senha'
+
+O SMTP padrão do Supabase envia cerca de 2 e-mails por hora no projeto e serve para testes internos. Para enviar à rede toda, configurar SMTP próprio. [Documentação do Supabase](https://supabase.com/docs/guides/auth/auth-smtp)
+
+| Provedor | Limites — conferir no provedor | Configuração | SPF, DKIM e DMARC |
+|---|---|---|---|
+| Hostinger E-mail, já usado pelo Adilson | Conferir no hPanel a cota diária da caixa | Baixa. `smtp.hostinger.com`, porta 465 SSL ou 587 STARTTLS, usuário igual ao endereço completo da caixa e remetente como `portal@<seu-dominio>`. [Configuração SMTP](https://support.hostinger.com/en/articles/1575756-how-to-get-email-account-configuration-details-for-hostinger-email) · [Cotas](https://support.hostinger.com/en/articles/4625828-parameters-and-limits-of-hostinger-email) | Conferir SPF e DKIM da caixa e o DMARC do domínio |
+| Gmail / Google Workspace | Limites diários por conta | Baixa a média. Ativar verificação em duas etapas e usar senha de app, se a conta permitir. [Senha de app](https://support.google.com/accounts/answer/185833) | Gmail usa o DNS do Google. Para domínio próprio no Workspace, conferir SPF, DKIM e DMARC |
+| Brevo Free | Cerca de 300/dia. [Cota](https://help.brevo.com/hc/en-us/articles/208580669-FAQs-What-are-the-limits-of-the-Free-plan) | Média. Validar remetente e configurar SMTP | Seguir os registros pedidos pelo provedor e conferir SPF, DKIM e DMARC |
+| Resend Free | Cerca de 100/dia e 3.000/mês. [Cotas](https://resend.com/pricing) | Média. Validar domínio e configurar SMTP | Publicar SPF e DKIM do provedor e conferir DMARC |
+| Amazon SES | Cotas por conta e região. Serviço de baixo custo por uso. [Cotas](https://docs.aws.amazon.com/ses/latest/dg/quotas.html) · [Preços](https://aws.amazon.com/ses/pricing/) | Alta. Verificar domínio, configurar SMTP e solicitar saída do sandbox | Habilitar DKIM e conferir SPF do MAIL FROM e alinhamento DMARC |
+
+- [ ] 1. Em **Authentication > Emails > SMTP Settings**, habilitar o SMTP próprio e preencher servidor, porta, usuário e remetente. Guardar `SMTP_PASSWORD` (senha da caixa, senha de app ou credencial SMTP do provedor) nas configurações SMTP do dashboard do Supabase, fora do repo e do frontend.
+- [ ] 2. Em **Authentication > Rate Limits**, elevar o limite de e-mails após habilitar o SMTP próprio, respeitando a vazão horária e a cota diária do provedor.
+- [ ] 3. Em **Authentication > URL Configuration**, usar `https://adilsonzetta.github.io/ubox-portal-franqueado/` como **Site URL** e permitir a mesma raiz em **Redirect URLs**. No fluxo da seção 4, o app recebe o retorno na raiz e `PASSWORD_RECOVERY` abre **Criar nova senha** (`#/nova-senha` no roteiro do usuário, sem usar o fragmento como URL de retorno).
+- [ ] 4. Em **Email Templates > Reset Password**, definir o assunto **Defina sua senha do Portal Ubox**. Testar entrega, abertura do link, definição de senha e novo login com 2–3 contas internas antes do envio à rede.
+- [ ] 5. Validar o disparo no navegador do destinatário. O PKCE atual exige o verificador do navegador que iniciou o pedido. Se o link disparado pelo operador falhar, validar antes do corte um fluxo compatível ou enviar a instrução de primeiro acesso para cada pessoa iniciar **Esqueci a senha** e abrir o link no mesmo navegador. Enviar em lotes dentro dos limites do Supabase e do provedor. [Fluxo PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow)
+
+### 24.4 Ordem do dia do corte
+
+- [ ] 1. **Adilson · 10 min, com antecedência** — anunciar a janela, o horário de Brasília e o canal de suporte.
+- [ ] 2. **Grok Bot · 15–30 min** — publicar o build Firebase com aviso de manutenção e bloquear os fluxos de escrita. O operador só publica regras Firestore de leitura exclusiva com aprovação explícita do Adilson. Confirmar o congelamento antes da exportação.
+- [ ] 3. **Adilson · 15–30 min** — fazer a exportação final do Auth e do Firestore e conferir o manifesto.
+- [ ] 4. **Adilson · 30–60 min** — rodar o ensaio da exportação final, importar usuários e depois carregar os dados dos módulos.
+- [ ] 5. **Adilson · 10–30 min** — resolver negativos conforme a decisão registrada e inicializar `estoque_saldos`.
+- [ ] 6. **Adilson e Grok Bot · 20–30 min** — conferir contagens por tabela e amostras por unidade. Suspender a virada se houver divergência sem explicação.
+- [ ] 7. **Grok Bot · 15–30 min** — definir as variáveis públicas `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` e virar `VITE_BACKEND=supabase` nas variáveis do repositório. Disparar o workflow do Pages e confirmar a publicação do build.
+- [ ] 8. **Adilson e Grok Bot · 30–60 min** — executar os testes abaixo na publicação com contas e registros de teste, mantendo o aviso de manutenção para a rede.
+- [ ] 9. **Adilson · 10–15 min para iniciar** — iniciar os lotes de **Defina sua senha do Portal Ubox**, no ritmo validado com o provedor.
+- [ ] 10. **Grok Bot · 10–20 min** — com o aceite do Adilson, retirar a manutenção no build Supabase, confirmar o acesso e anunciar a reabertura.
+
+### 24.5 Smoke tests depois da virada
+
+- [ ] 1. **Todos os perfis** — definir nova senha pelo fluxo de recuperação, sair e entrar com ela. Conferir papel, unidade e módulos liberados. Testar uma conta inativa e uma sem módulos.
+- [ ] 2. **`admin`** — listar usuários e unidades, editar uma liberação e criar conta de equipe via Edge Function `criar-conta`. No cofre de Senhas, conferir que vê metadados e que a revelação do segredo de uma unidade é negada.
+- [ ] 3. **`equipe_franqueadora`** — com os módulos liberados, responder a um Chamado, publicar material de Marketing e assinar uma Auditoria de teste. No CRM, verificar leads da rede e confirmar que os contatos da unidade ficam inacessíveis.
+- [ ] 4. **`franqueado`** — criar um login da própria equipe via `criar-conta`, abrir um manual e registrar aceite, concluir uma prova na Universidade e enviar um Checklist. Abrir Chamado e conferir resposta e histórico. Revelar uma senha da própria unidade e conferir o evento. Registrar movimento de Estoque, conferir o saldo após recarregar e testar a recusa de uma saída acima do saldo. Abrir um contato do CRM e um cadastro de Cliente da própria unidade.
+- [ ] 5. **`equipe_franqueado`** — acessar apenas os módulos concedidos e os registros da própria unidade. Conferir um material de Marketing direcionado, uma senha liberada para a equipe e a recusa para uma senha restrita. Abrir um link privado da Nuvem da própria unidade e confirmar que o de outra unidade fica inacessível. Confirmar que a franqueadora também fica sem acesso à área privada da unidade.
+- [ ] 6. **Consultor com `acompanhamento`** — abrir o painel, conferir os resumos e compartilhar um passo de teste. Validar com o franqueado que o passo compartilhado aparece e o interno fica oculto. Confirmar que o consultor vê chamados sem eventos e auditorias assinadas sem rascunhos.
+- [ ] 7. **Cliente e painel público** — em janela privativa, abrir `#/painel/:token` e conferir cobranças, visitas e recados, sem e-mail, telefone ou IDs internos do cliente. Após trocar o link de teste, conferir que só o token atual e ativo funciona.
+- [ ] 8. **Rede e advisors** — na aba Rede do navegador, confirmar chamadas a `supabase.co` e ausência de escritas em `firestore.googleapis.com`. Rodar `get_advisors` de segurança no projeto e confirmar que sobra apenas o INFO intencional de `criar_conta_tentativas`.
+
+### 24.6 Plano de volta ao Firebase (rollback)
+
+- [ ] 1. Acionar rollback se houver falha de login para muitas pessoas, vazamento de dados ou divergência relevante sem correção dentro da janela. Adilson define o prazo de decisão, por exemplo, as primeiras 24 h após a virada.
+- [ ] 2. **Atenção:** qualquer escrita feita no Supabase após a virada fica lá. Congelar novas escritas e identificar o que mudou desde o corte. Se houver dados a preservar, reexportar manualmente do Supabase, reconciliar os registros com o Firestore e validar a reaplicação autorizada antes de reabrir.
+- [ ] 3. Voltar a variável do repositório para `VITE_BACKEND=firebase` e disparar novamente o build do Pages. Se as regras temporárias de leitura exclusiva tiverem sido publicadas, restaurar as regras anteriores. Retirar a manutenção e confirmar login e escrita no Firebase. Os usuários voltam a usar as senhas antigas do Firebase.
+- [ ] 4. Enquanto o Supabase estiver em produção, preservar o Firebase intacto e em modo operacional de só leitura por 30 dias. O bloqueio por regras depende da aprovação explícita do Adilson. Após 30 dias, aguardar a decisão de desativação.
+
+### 24.7 Diferenças conhecidas (aceitas)
+
+- [ ] 1. Listas de Chamados, Senhas, Marketing, Checklist, Estoque e outros módulos consultam o Supabase a cada 15 s em vez de usar Realtime.
+- [ ] 2. O painel público exige painel ativo e token atual do cliente. O Firestore conferia apenas se o painel estava ativo.
+- [ ] 3. O banco recusa movimentos que deixariam o saldo negativo. O app já os bloqueava no cliente.
+- [ ] 4. A RPC `painel_publico` não tem limite de requisições próprio. O token tem 128 bits.
+- [ ] 5. Fechar ou reabrir um Chamado como autor não grava evento, como no Firestore.
+
+### 24.8 Decisões pendentes do Adilson
+
+- [ ] 1. Escolher o provedor SMTP e o endereço do remetente.
+- [ ] 2. Definir data, horário e duração da janela do corte.
+- [ ] 3. Autorizar ou dispensar a publicação de regras Firestore de leitura exclusiva durante o congelamento.
+- [ ] 4. Decidir como tratar os saldos negativos listados no ensaio.
+- [ ] 5. Fixar o prazo de decisão de rollback.
+- [ ] 6. Decidir quando desativar o Firebase após os 30 dias.
+- [ ] 7. Decidir se o Realtime será habilitado depois.
