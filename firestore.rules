@@ -110,7 +110,7 @@ service cloud.firestore {
     }
 
     function isActive() {
-      return signedIn() && exists(userPath()) && perfilAtivo();
+      return userExists() && perfilAtivo();
     }
 
     function perfilAtivo() {
@@ -128,7 +128,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return signedIn() && exists(userPath()) && adminAtivo();
+      return userExists() && adminAtivo();
     }
 
     function adminAtivo() {
@@ -605,7 +605,7 @@ service cloud.firestore {
         && request.resource.data.ativo == true
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['papel', 'ativo', 'atualizadoEm'])
         && request.resource.data.atualizadoEm == request.time;
-      allow update: if resource != null && signedIn() && exists(userPath()) && atualizaComPerfil(uid);
+      allow update: if resource != null && userExists() && atualizaComPerfil(uid);
 
       allow delete: if isAdmin();
     }
@@ -631,7 +631,7 @@ service cloud.firestore {
           && chaves.hasOnly(['papel', 'ativo', 'atualizadoEm'])
           && request.resource.data.atualizadoEm == request.time
         )
-        || (signedIn() && exists(userPath()) && atualizaComPerfil(uid));
+        || (userExists() && atualizaComPerfil(uid));
     }
 
     function atualizaComPerfil(uid) {
@@ -698,9 +698,9 @@ service cloud.firestore {
     match /unidades/{id} {
       allow read: if isAdmin()
         || (signedIn() && resource.data.uid == request.auth.uid)
-        || (signedIn() && exists(userPath()) && userData().unidadeId == id);
+        || (userExists() && userData().unidadeId == id);
       // Módulo 9: consultor da franqueadora vê o cadastro das unidades.
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       allow create: if isAdmin()
         && isValidUnidade(request.resource.data)
         && request.resource.data.criadoPor == request.auth.uid
@@ -902,15 +902,15 @@ service cloud.firestore {
     }
 
     function acessaChamado(chamado) {
-      return signedIn() && exists(userPath()) && perfilAcessaChamado(userData(), chamado);
+      return userExists() && perfilAcessaChamado(userData(), chamado);
     }
 
     function podeEncerrarChamado(chamado) {
-      return signedIn() && exists(userPath()) && perfilPodeEncerrar(userData(), chamado);
+      return userExists() && perfilPodeEncerrar(userData(), chamado);
     }
 
     function operaRede() {
-      return signedIn() && exists(userPath()) && perfilOperaRede(userData());
+      return userExists() && perfilOperaRede(userData());
     }
 
     function urlHttps(url) {
@@ -1118,7 +1118,7 @@ service cloud.firestore {
     match /chamados/{chamadoId} {
       allow read: if acessaChamado(resource.data);
       // Módulo 9: só o chamado (não os eventos), para SLA no acompanhamento.
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       allow create: if request.resource.data.status == 'aberto' ? (
         request.resource.data.status == 'aberto'
           && request.resource.data.abertoPor == request.auth.uid
@@ -1248,7 +1248,7 @@ service cloud.firestore {
     }
 
     function acessaMetadadosAcesso(acesso) {
-      return signedIn() && exists(userPath()) && perfilAcessaMetadadosAcesso(userData(), acesso);
+      return userExists() && perfilAcessaMetadadosAcesso(userData(), acesso);
     }
 
     function podeCriarAcesso(data) {
@@ -1487,17 +1487,17 @@ service cloud.firestore {
     match /acessos/{acessoId} {
       allow read: if acessaMetadadosAcesso(resource.data);
       allow create: if request.resource.data.escopo in ['unidade', 'rede'] && request.resource.data.criadoPor == request.auth.uid ? (
-        signedIn() && exists(userPath()) && isValidAcesso(request.resource.data) && podeCriarAcesso(request.resource.data)
+        userExists() && isValidAcesso(request.resource.data) && podeCriarAcesso(request.resource.data)
       ) : false;
       allow update: if request.resource.data.escopo == resource.data.escopo && request.resource.data.atualizadoEm == request.time ? (
-        signedIn() && exists(userPath()) && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(acessoId, resource.data, request.resource.data)
+        userExists() && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(acessoId, resource.data, request.resource.data)
       ) : false;
       allow delete: if false;
 
       match /segredo/{segredoId} {
-        allow read: if segredoId == 'atual' && signedIn() && exists(userPath()) && perfilPodeLerSegredo(userData(), acessoDoc(acessoId));
+        allow read: if segredoId == 'atual' && userExists() && perfilPodeLerSegredo(userData(), acessoDoc(acessoId));
         allow create, update: if segredoId == 'atual'
-          && signedIn() && exists(userPath())
+          && userExists()
           && isValidSegredo(request.resource.data)
           && perfilPodeEscreverSegredo(userData(), acessoDoc(acessoId))
           // a troca direta do segredo exige registrar a troca no acesso no mesmo lote
@@ -1507,8 +1507,8 @@ service cloud.firestore {
       }
 
       match /eventos/{eventoId} {
-        allow read: if signedIn() && exists(userPath()) && acessaMetadadosAcesso(acessoDoc(acessoId));
-        allow create: if signedIn() && exists(userPath())
+        allow read: if userExists() && acessaMetadadosAcesso(acessoDoc(acessoId));
+        allow create: if userExists()
           && isValidEventoAcesso(request.resource.data)
           && request.resource.data.autorNome == userData().nome
           && (
@@ -1520,9 +1520,9 @@ service cloud.firestore {
     }
 
     match /solicitacoesAcesso/{solicitacaoId} {
-      allow read: if signedIn() && exists(userPath()) && podeLerSolicitacao(resource.data);
-      allow create: if signedIn() && exists(userPath()) && isValidSolicitacaoAcesso(request.resource.data) && podeCriarSolicitacao(request.resource.data);
-      allow update: if signedIn() && exists(userPath()) && resource != null && isValidSolicitacaoAcesso(request.resource.data) && podeDecidirSolicitacao();
+      allow read: if userExists() && podeLerSolicitacao(resource.data);
+      allow create: if userExists() && isValidSolicitacaoAcesso(request.resource.data) && podeCriarSolicitacao(request.resource.data);
+      allow update: if userExists() && resource != null && isValidSolicitacaoAcesso(request.resource.data) && podeDecidirSolicitacao();
       allow delete: if false;
     }
 
@@ -1548,7 +1548,7 @@ service cloud.firestore {
 
     function isValidItemTrilha(data, id) {
       return data.keys().hasOnly(['documentoId', 'titulo', 'etapa', 'ordem', 'tempoMinimoSeg', 'videoMinutos', 'anteriorId', 'ativo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['documentoId', 'titulo', 'etapa', 'ordem', 'tempoMinimoSeg', 'videoMinutos', 'anteriorId', 'ativo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 11
         && data.documentoId == id
         && data.titulo is string && data.titulo.size() > 0 && data.titulo.size() <= 200
         && data.etapa is string && data.etapa.size() <= 80
@@ -1564,7 +1564,7 @@ service cloud.firestore {
 
     function isValidProgressoManual(data) {
       return data.keys().hasOnly(['uid', 'documentoId', 'nome', 'unidadeId', 'unidadeNome', 'status', 'iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'concluidoEm', 'atualizadoEm'])
-        && data.keys().hasAll(['uid', 'documentoId', 'nome', 'unidadeId', 'unidadeNome', 'status', 'iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'concluidoEm', 'atualizadoEm'])
+        && data.keys().size() == 11
         && data.documentoId is string && data.documentoId.size() > 0 && data.documentoId.size() <= 128
         && data.unidadeNome is string && data.unidadeNome.size() <= 120
         && data.status in ['em_andamento', 'concluido']
@@ -1615,9 +1615,9 @@ service cloud.firestore {
 
     match /manuaisTrilha/{id} {
       allow read: if isActive() && podeModulo('manuais');
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereTrilhaManuais(userData())
           && isValidItemTrilha(request.resource.data, id)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -1632,13 +1632,13 @@ service cloud.firestore {
       allow get: if signedIn() && progressoId.size() > request.auth.uid.size() + 1 && progressoId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
         && (resource == null || resource.data.uid == request.auth.uid);
       allow list: if signedIn() && resource.data.uid == request.auth.uid;
-      allow read: if signedIn() && exists(userPath()) && leProgressoDaRede(userData());
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
-      allow read: if signedIn() && exists(userPath()) && leProgressoDaUnidade(userData(), resource.data.unidadeId);
+      allow read: if userExists() && leProgressoDaRede(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
+      allow read: if userExists() && leProgressoDaUnidade(userData(), resource.data.unidadeId);
 
       // Início: em andamento, cronômetro começa agora no servidor, e só se o anterior foi concluído.
       allow create: if request.resource.data.status == 'em_andamento' && request.resource.data.uid == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && isValidProgressoManual(request.resource.data)
           && progressoDoProprio(userData(), request.resource.data, progressoId)
           && request.resource.data.iniciadoEm == request.time
@@ -1650,7 +1650,7 @@ service cloud.firestore {
 
       // Reinício (saiu da tela ou voltou ao manual): o cronômetro do servidor recomeça.
       allow update: if resource.data.status == 'em_andamento' && request.resource.data.status == 'em_andamento' && resource.data.uid == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && isValidProgressoManual(request.resource.data)
           && progressoDoProprio(userData(), request.resource.data, progressoId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'atualizadoEm'])
@@ -1662,7 +1662,7 @@ service cloud.firestore {
 
       // Conclusão: só depois do tempo mínimo desde o último (re)início, medido pelo servidor.
       allow update: if resource.data.status == 'em_andamento' && request.resource.data.status == 'concluido' && resource.data.uid == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && isValidProgressoManual(request.resource.data)
           && progressoDoProprio(userData(), request.resource.data, progressoId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'concluidoEm', 'atualizadoEm'])
@@ -1751,7 +1751,7 @@ service cloud.firestore {
 
     function isValidCurso(data, id) {
       return data.keys().hasOnly(['titulo', 'descricao', 'ordem', 'aulas', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'ordem', 'aulas', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 8
         && idCursoOk(id)
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
@@ -1808,7 +1808,7 @@ service cloud.firestore {
 
     function isValidProva(data, id) {
       return data.keys().hasOnly(['cursoId', 'titulo', 'notaMinima', 'perguntas', 'totalPerguntas', 'manualRetornoId', 'tempoReestudoSeg', 'versao', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['cursoId', 'titulo', 'notaMinima', 'perguntas', 'totalPerguntas', 'manualRetornoId', 'tempoReestudoSeg', 'versao', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 12
         && data.cursoId == id
         && validName(data.titulo)
         && data.notaMinima is int && data.notaMinima >= 1 && data.notaMinima <= 100
@@ -1849,7 +1849,7 @@ service cloud.firestore {
 
     function isValidGabarito(data, id) {
       return data.keys().hasOnly(['cursoId', 'corretas', 'versao', 'atualizadoPor', 'atualizadoEm'])
-        && data.keys().hasAll(['cursoId', 'corretas', 'versao', 'atualizadoPor', 'atualizadoEm'])
+        && data.keys().size() == 5
         && data.cursoId == id
         && corretasOk(data.corretas)
         && data.versao is int && data.versao >= 1
@@ -1927,7 +1927,7 @@ service cloud.firestore {
 
     function isValidTentativaProva(d) {
       return d.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'aprovado', 'criadoEm', 'corrigidoEm'])
-        && d.keys().hasAll(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'aprovado', 'criadoEm', 'corrigidoEm'])
+        && d.keys().size() == 11
         && idCursoOk(d.cursoId)
         && d.ciclo is int && d.ciclo >= 1 && d.ciclo <= 50
         && d.numero is int && d.numero >= 1 && d.numero <= 3
@@ -1966,11 +1966,11 @@ service cloud.firestore {
 
     match /cursos/{cursoId} {
       allow read: if isActive() && podeModulo('universidade') && resource.data.publicado == true;
-      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      allow read: if userExists() && gereUniversidade(userData());
       // Acompanhamento (Módulo 9): só cursos publicados (a consulta filtra publicado == true).
-      allow read: if resource.data.publicado == true ? (signedIn() && exists(userPath()) && gereAcompanhamento(userData())) : false;
+      allow read: if resource.data.publicado == true ? (userExists() && gereAcompanhamento(userData())) : false;
       allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereUniversidade(userData())
           && isValidCurso(request.resource.data, cursoId)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -1980,10 +1980,10 @@ service cloud.firestore {
 
     match /provas/{cursoId} {
       allow read: if isActive() && podeModulo('universidade') && resource.data.publicado == true;
-      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      allow read: if userExists() && gereUniversidade(userData());
       // Prova e gabarito sobem juntos no mesmo lote, com a mesma versão.
       allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereUniversidade(userData())
           && isValidProva(request.resource.data, cursoId)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -1998,9 +1998,9 @@ service cloud.firestore {
 
     match /provasGabarito/{cursoId} {
       // Nunca legível pelo aluno.
-      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      allow read: if userExists() && gereUniversidade(userData());
       allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereUniversidade(userData())
           && isValidGabarito(request.resource.data, cursoId)
           && existsAfter(provaPath(cursoId))
@@ -2014,14 +2014,14 @@ service cloud.firestore {
         && tentativaId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
         && (resource == null || resource.data.uid == request.auth.uid);
       allow list: if signedIn() && resource.data.uid == request.auth.uid;
-      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
-      allow read: if signedIn() && exists(userPath()) && leResultadoUnidade(userData(), resource.data.unidadeId);
+      allow read: if userExists() && gereUniversidade(userData());
+      allow read: if userExists() && leResultadoUnidade(userData(), resource.data.unidadeId);
       // Módulo 9: só o documento da tentativa (aprovado/pendente); a folha de respostas segue fechada.
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
 
       // Envio: grava as respostas e ocupa a chance. Sem resultado ainda, para que uma recusa não sirva de "oráculo".
       allow create: if request.resource.data.uid == request.auth.uid && request.resource.data.aprovado == null ? (
-          signedIn() && exists(userPath())
+          userExists()
           && isValidTentativaProva(request.resource.data)
           && tentativaId == idTentativa(request.resource.data.cursoId, request.resource.data.ciclo, request.resource.data.numero)
           && request.resource.data.corrigidoEm == null
@@ -2043,7 +2043,7 @@ service cloud.firestore {
 
       // A franqueadora pode fechar como reprovada uma tentativa que ficou sem correção.
       allow update: if resource.data.aprovado == null && request.resource.data.aprovado == false ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereUniversidade(userData())
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['aprovado', 'corrigidoEm'])
           && request.resource.data.corrigidoEm == request.time
@@ -2054,10 +2054,10 @@ service cloud.firestore {
       // O franqueado lê o resultado da equipe no doc pai, mas não a folha (senão reconstruiria o gabarito).
       match /folha/{folhaId} {
         allow read: if signedIn() && resource.data.uid == request.auth.uid;
-        allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+        allow read: if userExists() && gereUniversidade(userData());
         allow create: if request.resource.data.uid == request.auth.uid && folhaId == 'atual' ? (
             request.resource.data.keys().hasOnly(['uid', 'versao', 'respostas'])
-            && request.resource.data.keys().hasAll(['uid', 'versao', 'respostas'])
+            && request.resource.data.keys().size() == 3
             && tentativaId.size() > request.auth.uid.size() + 1
             && tentativaId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
             && !exists(tentativaProvaPath(tentativaId))
@@ -2076,12 +2076,12 @@ service cloud.firestore {
         && reestudoId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
         && (resource == null || resource.data.uid == request.auth.uid);
       allow list: if signedIn() && resource.data.uid == request.auth.uid;
-      allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
+      allow read: if userExists() && gereUniversidade(userData());
 
       allow create: if request.resource.data.uid == request.auth.uid && request.resource.data.status == 'em_andamento' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && request.resource.data.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'documentoId', 'status', 'iniciadoEm', 'reinicios', 'concluidoEm', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['uid', 'cursoId', 'ciclo', 'documentoId', 'status', 'iniciadoEm', 'reinicios', 'concluidoEm', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 9
           && idCursoOk(request.resource.data.cursoId)
           && request.resource.data.ciclo is int && request.resource.data.ciclo >= 1 && request.resource.data.ciclo <= 50
           && reestudoId == request.auth.uid + '_' + request.resource.data.cursoId + '_' + string(request.resource.data.ciclo)
@@ -2190,7 +2190,7 @@ service cloud.firestore {
 
     function isValidMaterial(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'categoria', 'campanhaId', 'url', 'previaUrl', 'formato', 'regrasUso', 'validoDe', 'validoAte', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'categoria', 'campanhaId', 'url', 'previaUrl', 'formato', 'regrasUso', 'validoDe', 'validoAte', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 20
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.tipo in ['arte', 'campanha', 'logo', 'marca', 'template', 'video', 'outro']
@@ -2212,7 +2212,7 @@ service cloud.firestore {
 
     function isValidCampanhaMkt(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'inicio', 'fim', 'ativo', 'geradoPorIA', 'iaModelo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'inicio', 'fim', 'ativo', 'geradoPorIA', 'iaModelo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 11
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.tipo in ['campanha', 'data_comemorativa', 'lancamento']
@@ -2224,17 +2224,17 @@ service cloud.firestore {
     }
 
     match /marketingMateriais/{materialId} {
-      allow read: if signedIn() && exists(userPath()) && gereMarketing(userData());
+      allow read: if userExists() && gereMarketing(userData());
       // Unidade: só materiais ativos, para a rede toda ou para a própria unidade.
       allow read: if resource.data.ativo == true && resource.data.publico == true ? (
-          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+          userExists() && unidadeMarketing(userData())
         ) : false;
       allow read: if resource.data.ativo == true ? (
-          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+          userExists() && unidadeMarketing(userData())
           && userData().unidadeId in resource.data.unidades
         ) : false;
       allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereMarketing(userData())
           && isValidMaterial(request.resource.data)
           && autoriaMarketing(request.resource.data, userData())
@@ -2245,12 +2245,12 @@ service cloud.firestore {
     }
 
     match /marketingCampanhas/{campanhaId} {
-      allow read: if signedIn() && exists(userPath()) && gereMarketing(userData());
+      allow read: if userExists() && gereMarketing(userData());
       allow read: if resource.data.ativo == true ? (
-          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+          userExists() && unidadeMarketing(userData())
         ) : false;
       allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereMarketing(userData())
           && isValidCampanhaMkt(request.resource.data)
           && autoriaMarketing(request.resource.data, userData())
@@ -2261,7 +2261,7 @@ service cloud.firestore {
     // Pedido de peça da unidade para a franqueadora.
     function isValidSolicitacaoMkt(data) {
       return data.keys().hasOnly(['uid', 'nome', 'unidadeId', 'unidadeNome', 'titulo', 'tipoPeca', 'descricao', 'medidas', 'prazoDesejado', 'referenciaUrl', 'campanhaId', 'status', 'complemento', 'resposta', 'entregaUrl', 'geradoPorIA', 'iaModelo', 'responsavelNome', 'criadoEm', 'atualizadoEm', 'entregueEm'])
-        && data.keys().hasAll(['uid', 'nome', 'unidadeId', 'unidadeNome', 'titulo', 'tipoPeca', 'descricao', 'medidas', 'prazoDesejado', 'referenciaUrl', 'campanhaId', 'status', 'complemento', 'resposta', 'entregaUrl', 'geradoPorIA', 'iaModelo', 'responsavelNome', 'criadoEm', 'atualizadoEm', 'entregueEm'])
+        && data.keys().size() == 21
         && data.status in ['aberta', 'em_producao', 'aguardando_unidade', 'entregue', 'cancelada']
         && validShort(data.complemento, 2000)
         && validShort(data.resposta, 2000)
@@ -2298,18 +2298,18 @@ service cloud.firestore {
     }
 
     match /marketingSolicitacoes/{solicitacaoId} {
-      allow read: if signedIn() && exists(userPath()) && gereMarketing(userData());
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereMarketing(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       // Quem pediu lê o próprio pedido; o franqueado lê os pedidos da unidade.
       allow read: if resource.data.uid == request.auth.uid ? (
-          signedIn() && exists(userPath()) && unidadeMarketing(userData())
+          userExists() && unidadeMarketing(userData())
         ) : false;
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists()
         && userData().papel == 'franqueado'
         && daUnidadeMkt(userData(), resource.data.unidadeId);
 
       allow create: if request.resource.data.uid == request.auth.uid && request.resource.data.status == 'aberta' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeMarketing(userData())
           && isValidSolicitacaoMkt(request.resource.data)
           && solicitacaoNovaOk(request.resource.data, userData())
@@ -2317,7 +2317,7 @@ service cloud.firestore {
 
       // Franqueadora: andamento, resposta e entrega (com link e registro de IA).
       allow update: if request.resource.data.status != resource.data.status || request.resource.data.resposta != resource.data.resposta ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereMarketing(userData())
           && resource.data.status in ['aberta', 'em_producao', 'aguardando_unidade']
           && request.resource.data.status in ['em_producao', 'aguardando_unidade', 'entregue', 'cancelada']
@@ -2332,7 +2332,7 @@ service cloud.firestore {
       // Unidade: cancela enquanto não começou, ou responde quando a franqueadora pediu informação.
       allow update: if (request.resource.data.status == 'cancelada' && resource.data.status == 'aberta')
           || (request.resource.data.status == 'aberta' && resource.data.status == 'aguardando_unidade') ? (
-          signedIn() && exists(userPath())
+          userExists()
           && daUnidadeMkt(userData(), resource.data.unidadeId)
           && (resource.data.uid == request.auth.uid || userData().papel == 'franqueado')
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'complemento', 'atualizadoEm'])
@@ -2362,7 +2362,7 @@ service cloud.firestore {
 
     function isValidModeloChecklist(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'frequencia', 'itens', 'totalItens', 'pesoTotal', 'versao', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'frequencia', 'itens', 'totalItens', 'pesoTotal', 'versao', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 17
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.tipo in ['abertura', 'fechamento', 'limpeza', 'inauguracao', 'vistoria', 'outro']
@@ -2401,7 +2401,7 @@ service cloud.firestore {
 
     function execucaoNovaOk(data, dados) {
       return data.keys().hasOnly(['modeloId', 'modeloTitulo', 'modeloVersao', 'tipo', 'frequencia', 'unidadeId', 'unidadeNome', 'uid', 'nome', 'respostas', 'totalItens', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'obsGeral', 'obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm', 'criadoEm'])
-        && data.keys().hasAll(['modeloId', 'modeloTitulo', 'modeloVersao', 'tipo', 'frequencia', 'unidadeId', 'unidadeNome', 'uid', 'nome', 'respostas', 'totalItens', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'obsGeral', 'obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm', 'criadoEm'])
+        && data.keys().size() == 23
         && data.nome == dados.nome
         && data.unidadeId == dados.unidadeId
         && data.unidadeNome == dados.get('unidade', '')
@@ -2427,18 +2427,18 @@ service cloud.firestore {
     }
 
     match /checklistModelos/{modeloId} {
-      allow read: if signedIn() && exists(userPath()) && gereChecklist(userData());
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereChecklist(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       // Unidade: só modelos ativos, da rede toda ou direcionados à própria unidade.
       allow read: if resource.data.ativo == true && resource.data.publico == true ? (
-          signedIn() && exists(userPath()) && unidadeChecklist(userData())
+          userExists() && unidadeChecklist(userData())
         ) : false;
       allow read: if resource.data.ativo == true ? (
-          signedIn() && exists(userPath()) && unidadeChecklist(userData())
+          userExists() && unidadeChecklist(userData())
           && userData().unidadeId in resource.data.unidades
         ) : false;
       allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereChecklist(userData())
           && isValidModeloChecklist(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2447,7 +2447,7 @@ service cloud.firestore {
         ) : false;
       // Edição: itens, título, tipo, frequência ou peso total novos sobem a versão (execuções antigas guardam a versão que usaram).
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereChecklist(userData())
           && isValidModeloChecklist(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2464,19 +2464,19 @@ service cloud.firestore {
     }
 
     match /checklistExecucoes/{execucaoId} {
-      allow read: if signedIn() && exists(userPath()) && gereChecklist(userData());
+      allow read: if userExists() && gereChecklist(userData());
       // Auditoria (Módulo 8): o auditor lê execuções para referenciar e recalcular o score.
-      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
+      allow read: if userExists() && gereAuditoria(userData());
       // Acompanhamento (Módulo 9): média e atrasos por unidade.
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       // Unidade: o histórico da própria unidade.
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists()
         && unidadeChecklist(userData())
         && resource.data.unidadeId == userData().unidadeId;
 
       allow create: if request.resource.data.uid == request.auth.uid
           && exists(/databases/$(database)/documents/checklistModelos/$(request.resource.data.modeloId)) ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeChecklist(userData())
           && execucaoNovaOk(request.resource.data, userData())
           && modeloServeExecucao(request.resource.data, get(/databases/$(database)/documents/checklistModelos/$(request.resource.data.modeloId)).data)
@@ -2485,7 +2485,7 @@ service cloud.firestore {
 
       // Só a observação do proprietário (franqueado da unidade) muda depois do envio.
       allow update: if request.resource.data.obsProprietarioPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && userData().papel == 'franqueado'
           && unidadeChecklist(userData())
           && resource.data.unidadeId == userData().unidadeId
@@ -2523,7 +2523,7 @@ service cloud.firestore {
 
     function isValidModeloAuditoria(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'itens', 'totalItens', 'pesoTotal', 'notaMinima', 'versao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'itens', 'totalItens', 'pesoTotal', 'notaMinima', 'versao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 14
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 80
@@ -2540,7 +2540,7 @@ service cloud.firestore {
 
     function isValidAuditoria(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'modeloId', 'modeloTitulo', 'modeloVersao', 'modalidade', 'dataVisita', 'auditorUid', 'auditorNome', 'respostas', 'totalItens', 'pesoTotal', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'criadoEm', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'modeloId', 'modeloTitulo', 'modeloVersao', 'modalidade', 'dataVisita', 'auditorUid', 'auditorNome', 'respostas', 'totalItens', 'pesoTotal', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'criadoEm', 'atualizadoEm'])
+        && data.keys().size() == 35
         && data.unidadeId is string && data.unidadeId.size() > 0 && data.unidadeId.size() <= 64
         && validName(data.unidadeNome)
         && data.modeloId is string && data.modeloId.size() > 0 && data.modeloId.size() <= 64
@@ -2593,7 +2593,7 @@ service cloud.firestore {
 
     function isValidAcao(data) {
       return data.keys().hasOnly(['auditoriaId', 'unidadeId', 'itemId', 'itemTexto', 'descricao', 'responsavel', 'prazo', 'status', 'evidenciaUrl', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['auditoriaId', 'unidadeId', 'itemId', 'itemTexto', 'descricao', 'responsavel', 'prazo', 'status', 'evidenciaUrl', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 15
         && validShort(data.itemId, 64)
         && validShort(data.itemTexto, 300)
         && data.descricao is string && data.descricao.size() >= 2 && data.descricao.size() <= 1000
@@ -2609,9 +2609,9 @@ service cloud.firestore {
     }
 
     match /auditoriaModelos/{modeloId} {
-      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
+      allow read: if userExists() && gereAuditoria(userData());
       allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAuditoria(userData())
           && isValidModeloAuditoria(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2619,7 +2619,7 @@ service cloud.firestore {
           && request.resource.data.criadoEm == request.time
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAuditoria(userData())
           && isValidModeloAuditoria(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2634,17 +2634,17 @@ service cloud.firestore {
     }
 
     match /auditorias/{auditoriaId} {
-      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
+      allow read: if userExists() && gereAuditoria(userData());
       // Acompanhamento (Módulo 9): só auditorias já assinadas pelo auditor (rascunho fica com a auditoria).
-      allow read: if resource.data.status in ['aguardando_ciencia', 'concluida'] ? (signedIn() && exists(userPath()) && gereAcompanhamento(userData())) : false;
+      allow read: if resource.data.status in ['aguardando_ciencia', 'concluida'] ? (userExists() && gereAcompanhamento(userData())) : false;
       // Unidade (franqueado e equipe, só leitura): auditorias assinadas pelo auditor, da própria unidade.
       allow read: if resource.data.status in ['aguardando_ciencia', 'concluida'] ? (
-          signedIn() && exists(userPath())
+          userExists()
           && daUnidadeAuditada(userData(), resource.data.unidadeId)
         ) : false;
 
       allow create: if request.resource.data.auditorUid == request.auth.uid && request.resource.data.status == 'rascunho' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAuditoria(userData())
           && isValidAuditoria(request.resource.data)
           && request.resource.data.auditorNome == userData().nome
@@ -2659,7 +2659,7 @@ service cloud.firestore {
 
       // Auditor: edita o rascunho e assina (a assinatura congela o conteúdo).
       allow update: if resource.data.status == 'rascunho' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAuditoria(userData())
           && (resource.data.auditorUid == request.auth.uid || userData().papel == 'admin')
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['modalidade', 'dataVisita', 'respostas', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'atualizadoEm'])
@@ -2675,7 +2675,7 @@ service cloud.firestore {
 
       // Franqueado da unidade: assina a ciência (com contestação opcional). Depois disso, nada muda.
       allow update: if resource.data.status == 'aguardando_ciencia' && request.resource.data.cienciaUid == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && userData().papel == 'franqueado'
           && daUnidadeAuditada(userData(), resource.data.unidadeId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'atualizadoEm'])
@@ -2689,13 +2689,13 @@ service cloud.firestore {
     }
 
     match /auditoriaAcoes/{acaoId} {
-      allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
-      allow read: if signedIn() && exists(userPath()) && daUnidadeAuditada(userData(), resource.data.unidadeId);
+      allow read: if userExists() && gereAuditoria(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
+      allow read: if userExists() && daUnidadeAuditada(userData(), resource.data.unidadeId);
 
       // Franqueadora: cria o plano para uma auditoria já assinada pelo auditor.
       allow create: if request.resource.data.atualizadoPor == request.auth.uid && request.resource.data.status == 'aberta' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAuditoria(userData())
           && isValidAcao(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2709,7 +2709,7 @@ service cloud.firestore {
 
       // Franqueadora: ajusta o plano e valida ou reabre o que a unidade concluiu.
       allow update: if resource.data.status != 'validada' && request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAuditoria(userData())
           && isValidAcao(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2722,7 +2722,7 @@ service cloud.firestore {
       allow update: if resource.data.status in ['aberta', 'em_andamento', 'reaberta']
           && request.resource.data.status in ['em_andamento', 'concluida_unidade']
           && request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && userData().papel == 'franqueado'
           && daUnidadeAuditada(userData(), resource.data.unidadeId)
           && isValidAcao(request.resource.data)
@@ -2757,7 +2757,7 @@ service cloud.firestore {
 
     function isValidRegistroAc(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'data', 'tipo', 'notas', 'compartilhado', 'geradoPorIA', 'iaModelo', 'autorUid', 'autorNome', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'data', 'tipo', 'notas', 'compartilhado', 'geradoPorIA', 'iaModelo', 'autorUid', 'autorNome', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 14
         && data.unidadeId is string && data.unidadeId.size() > 0 && data.unidadeId.size() <= 64
         && validName(data.unidadeNome)
         && data.data is timestamp
@@ -2778,7 +2778,7 @@ service cloud.firestore {
 
     function isValidPassoAc(data) {
       return data.keys().hasOnly(['registroId', 'unidadeId', 'descricao', 'responsavel', 'prazo', 'status', 'compartilhado', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['registroId', 'unidadeId', 'descricao', 'responsavel', 'prazo', 'status', 'compartilhado', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 13
         && data.registroId is string && data.registroId.size() > 0 && data.registroId.size() <= 64
         && data.descricao is string && data.descricao.size() >= 2 && data.descricao.size() <= 1000
         && validName(data.responsavel)
@@ -2793,14 +2793,14 @@ service cloud.firestore {
     }
 
     match /acompanhamentoRegistros/{registroId} {
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       // Unidade (franqueado e equipe): só os registros marcados para compartilhar.
       allow read: if resource.data.compartilhado == true ? (
-          signedIn() && exists(userPath())
+          userExists()
           && daUnidadeAcompanhada(userData(), resource.data.unidadeId)
         ) : false;
       allow create: if request.resource.data.autorUid == request.auth.uid && request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAcompanhamento(userData())
           && isValidRegistroAc(request.resource.data)
           && request.resource.data.autorNome == userData().nome
@@ -2809,7 +2809,7 @@ service cloud.firestore {
           && exists(unidadePath(request.resource.data.unidadeId))
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAcompanhamento(userData())
           && isValidRegistroAc(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2819,17 +2819,17 @@ service cloud.firestore {
     }
 
     match /acompanhamentoPassos/{passoId} {
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      allow read: if userExists() && gereAcompanhamento(userData());
       // Unidade: o passo e o registro-pai precisam estar compartilhados e ser da mesma unidade.
       allow read: if resource.data.compartilhado == true ? (
-          signedIn() && exists(userPath())
+          userExists()
           && daUnidadeAcompanhada(userData(), resource.data.unidadeId)
           && registroCompartilhadoCom(resource.data.registroId, resource.data.unidadeId)
         ) : false;
 
       // Franqueadora: cria o passo combinado; a visibilidade acompanha o registro (inclusive em lote).
       allow create: if request.resource.data.atualizadoPor == request.auth.uid && request.resource.data.status == 'aberto' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAcompanhamento(userData())
           && isValidPassoAc(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2842,7 +2842,7 @@ service cloud.firestore {
 
       // Franqueadora: ajusta, valida ou reabre o que a unidade concluiu. Passo validado só acompanha o compartilhamento do registro.
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereAcompanhamento(userData())
           && isValidPassoAc(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2860,7 +2860,7 @@ service cloud.firestore {
           && resource.data.status in ['aberto', 'reaberto']
           && request.resource.data.status == 'concluido_unidade'
           && request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && userData().papel == 'franqueado'
           && daUnidadeAcompanhada(userData(), resource.data.unidadeId)
           && registroCompartilhadoCom(resource.data.registroId, resource.data.unidadeId)
@@ -2903,7 +2903,7 @@ service cloud.firestore {
 
     function isValidItemEstoque(data) {
       return data.keys().hasOnly(['nome', 'codigo', 'categoria', 'unidadeMedida', 'estoqueMinimo', 'precoSugeridoCentavos', 'descricao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['nome', 'codigo', 'categoria', 'unidadeMedida', 'estoqueMinimo', 'precoSugeridoCentavos', 'descricao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 14
         && validName(data.nome)
         && validShort(data.codigo, 40)
         && data.categoria in ['insumos', 'cadeados', 'caixas', 'embalagens', 'limpeza', 'uniformes', 'outro']
@@ -2921,7 +2921,7 @@ service cloud.firestore {
     // Movimento novo: autoria, unidade e sinal do saldo (entrada soma, saída/venda subtraem, ajuste tem sinal).
     function movimentoOk(data, dados) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itemId', 'itemNome', 'unidadeMedida', 'tipo', 'quantidade', 'delta', 'motivo', 'origem', 'origemId', 'indice', 'uid', 'nome', 'criadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itemId', 'itemNome', 'unidadeMedida', 'tipo', 'quantidade', 'delta', 'motivo', 'origem', 'origemId', 'indice', 'uid', 'nome', 'criadoEm'])
+        && data.keys().size() == 15
         && data.unidadeId == dados.unidadeId
         && data.unidadeNome == dados.get('unidade', '')
         && data.itemId is string && data.itemId.size() > 0 && data.itemId.size() <= 64
@@ -2950,7 +2950,7 @@ service cloud.firestore {
 
     function isValidContagem(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 16
         && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 60
         && data.totalItens == data.itens.size()
         && data.totalDivergencias is int && data.totalDivergencias >= 0 && data.totalDivergencias <= data.totalItens
@@ -2963,7 +2963,7 @@ service cloud.firestore {
 
     function isValidPedidoEstoque(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'status', 'obsUnidade', 'obsFranqueadora', 'solicitanteUid', 'solicitanteNome', 'criadoEm', 'aprovadoEm', 'enviadoEm', 'recebidoEm', 'canceladoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'status', 'obsUnidade', 'obsFranqueadora', 'solicitanteUid', 'solicitanteNome', 'criadoEm', 'aprovadoEm', 'enviadoEm', 'recebidoEm', 'canceladoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 17
         && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 40
         && data.totalItens == data.itens.size()
         && data.status in ['aberto', 'aprovado', 'enviado', 'recebido', 'cancelado']
@@ -2975,18 +2975,18 @@ service cloud.firestore {
     }
 
     match /estoqueItens/{itemId} {
-      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
+      allow read: if userExists() && gereEstoque(userData());
       // Unidade: o catálogo da rede (inclusive inativos, para o saldo que sobrou continuar visível).
-      allow read: if signedIn() && exists(userPath()) && unidadeEstoque(userData());
+      allow read: if userExists() && unidadeEstoque(userData());
       allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereEstoque(userData())
           && isValidItemEstoque(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
           && request.resource.data.criadoEm == request.time
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereEstoque(userData())
           && isValidItemEstoque(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -2997,8 +2997,8 @@ service cloud.firestore {
     }
 
     match /estoqueMovimentos/{movimentoId} {
-      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists() && gereEstoque(userData());
+      allow read: if userExists()
         && unidadeEstoque(userData())
         && resource.data.unidadeId == userData().unidadeId;
 
@@ -3007,7 +3007,7 @@ service cloud.firestore {
           request.resource.data.tipo in ['entrada', 'saida', 'venda']
           && request.resource.data.origemId == ''
           && request.resource.data.indice == 0
-          && signedIn() && exists(userPath())
+          && userExists()
           && unidadeEstoque(userData())
           && movimentoOk(request.resource.data, userData())
           && get(itemEstoquePath(request.resource.data.itemId)).data.nome == request.resource.data.itemNome
@@ -3018,7 +3018,7 @@ service cloud.firestore {
       allow create: if request.resource.data.origem == 'contagem' && request.resource.data.uid == request.auth.uid
           && movimentoId == request.resource.data.origemId + '_' + string(request.resource.data.indice) ? (
           request.resource.data.tipo == 'ajuste'
-          && signedIn() && exists(userPath())
+          && userExists()
           && userData().papel == 'franqueado'
           && unidadeEstoque(userData())
           && movimentoOk(request.resource.data, userData())
@@ -3033,7 +3033,7 @@ service cloud.firestore {
       allow create: if request.resource.data.origem == 'pedido' && request.resource.data.uid == request.auth.uid
           && movimentoId == request.resource.data.origemId + '_' + string(request.resource.data.indice) ? (
           request.resource.data.tipo == 'entrada'
-          && signedIn() && exists(userPath())
+          && userExists()
           && userData().papel == 'franqueado'
           && unidadeEstoque(userData())
           && movimentoOk(request.resource.data, userData())
@@ -3049,13 +3049,13 @@ service cloud.firestore {
     }
 
     match /estoqueContagens/{contagemId} {
-      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists() && gereEstoque(userData());
+      allow read: if userExists()
         && unidadeEstoque(userData())
         && resource.data.unidadeId == userData().unidadeId;
 
       allow create: if request.resource.data.criadoPor == request.auth.uid && request.resource.data.status == 'aberta' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeEstoque(userData())
           && isValidContagem(request.resource.data)
           && request.resource.data.unidadeId == userData().unidadeId
@@ -3070,7 +3070,7 @@ service cloud.firestore {
 
       // Enquanto aberta: a equipe e o franqueado da unidade atualizam a contagem.
       allow update: if resource.data.status == 'aberta' && request.resource.data.status == 'aberta' && request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeEstoque(userData())
           && resource.data.unidadeId == userData().unidadeId
           && isValidContagem(request.resource.data)
@@ -3080,7 +3080,7 @@ service cloud.firestore {
 
       // Só o franqueado confirma (gerando os ajustes no mesmo lote) ou cancela.
       allow update: if resource.data.status == 'aberta' && request.resource.data.status in ['confirmada', 'cancelada'] && request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && userData().papel == 'franqueado'
           && unidadeEstoque(userData())
           && resource.data.unidadeId == userData().unidadeId
@@ -3097,14 +3097,14 @@ service cloud.firestore {
     }
 
     match /estoquePedidos/{pedidoId} {
-      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists() && gereEstoque(userData());
+      allow read: if userExists()
         && unidadeEstoque(userData())
         && resource.data.unidadeId == userData().unidadeId;
 
       // Só o franqueado envia o pedido.
       allow create: if request.resource.data.solicitanteUid == request.auth.uid && request.resource.data.status == 'aberto' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && userData().papel == 'franqueado'
           && unidadeEstoque(userData())
           && isValidPedidoEstoque(request.resource.data)
@@ -3122,7 +3122,7 @@ service cloud.firestore {
 
       // Franqueado: edita enquanto aberto, cancela enquanto aberto, confirma o recebimento (com as entradas no mesmo lote).
       allow update: if request.resource.data.atualizadoPor == request.auth.uid && resource.data.status in ['aberto', 'enviado'] ? (
-          signedIn() && exists(userPath())
+          userExists()
           && userData().papel == 'franqueado'
           && unidadeEstoque(userData())
           && resource.data.unidadeId == userData().unidadeId
@@ -3142,7 +3142,7 @@ service cloud.firestore {
 
       // Franqueadora: aprova, envia (com a quantidade enviada por item) ou cancela com justificativa.
       allow update: if request.resource.data.atualizadoPor == request.auth.uid && resource.data.status in ['aberto', 'aprovado'] ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereEstoque(userData())
           && isValidPedidoEstoque(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -3209,15 +3209,28 @@ service cloud.firestore {
 
     // Responsável: pessoa ativa da mesma unidade com o módulo, com o nome exatamente igual ao do perfil.
     function responsavelCrmOk(uid, nome, unidadeId) {
-      return exists(/databases/$(database)/documents/usuarios/$(uid))
-        && get(/databases/$(database)/documents/usuarios/$(uid)).data.unidadeId == unidadeId
-        && get(/databases/$(database)/documents/usuarios/$(uid)).data.nome == nome
-        && unidadeCrm(get(/databases/$(database)/documents/usuarios/$(uid)).data);
+      let caminho = /databases/$(database)/documents/usuarios/$(uid);
+      return exists(caminho) && perfilCrmOk(get(caminho).data, nome, unidadeId);
+    }
+
+    function perfilCrmOk(u, nome, unidadeId) {
+      return u.unidadeId == unidadeId && u.nome == nome && unidadeCrm(u);
+    }
+
+    function contatoCrmOk(d) {
+      return validName(d.nome)
+        && d.telefone is string && d.telefone.matches('^[0-9 ()+.-]{0,30}$')
+        && d.email is string && d.email.size() <= 120
+        && (d.email == '' || d.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+        && validShort(d.interesseTamanho, 60)
+        && validShort(d.interessePeriodo, 60)
+        && validShort(d.interesseUso, 200)
+        && d.atualizadoEm == request.time;
     }
 
     function isValidLeadCrm(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 17
         && data.origem is string && data.origem.size() >= 1 && data.origem.size() <= 40
         && (data.valorEstimadoCentavos == null || (data.valorEstimadoCentavos is int && data.valorEstimadoCentavos >= 0 && data.valorEstimadoCentavos <= 100000000))
         && data.etapa in ['novo', 'contato', 'visita', 'proposta', 'ganho', 'perdido']
@@ -3237,12 +3250,12 @@ service cloud.firestore {
     }
 
     match /crmConfig/{configId} {
-      allow read: if signedIn() && exists(userPath()) && (gereCrm(userData()) || unidadeCrm(userData()));
+      allow read: if userExists() && (gereCrm(userData()) || unidadeCrm(userData()));
       allow create, update: if configId == 'rede' && request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && gereCrm(userData())
           && request.resource.data.keys().hasOnly(['origens', 'motivosPerda', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['origens', 'motivosPerda', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 5
           && listaTextosCrm(request.resource.data.origens)
           && listaTextosCrm(request.resource.data.motivosPerda)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -3253,13 +3266,13 @@ service cloud.firestore {
 
     match /crmLeads/{leadId} {
       // Franqueadora: só KPIs (o doc não tem nome, telefone nem e-mail).
-      allow read: if signedIn() && exists(userPath()) && gereCrm(userData());
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists() && gereCrm(userData());
+      allow read: if userExists()
         && unidadeCrm(userData())
         && resource.data.unidadeId == userData().unidadeId;
 
       allow create: if request.resource.data.atualizadoPor == request.auth.uid && request.resource.data.etapa == 'novo' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeCrm(userData())
           && isValidLeadCrm(request.resource.data)
           && request.resource.data.unidadeId == userData().unidadeId
@@ -3278,7 +3291,7 @@ service cloud.firestore {
       // Lead aberto: qualquer pessoa da unidade com o módulo move no funil, reatribui e agenda o próximo contato.
       // Lead fechado (ganho/perdido): só arquivar/desarquivar.
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeCrm(userData())
           && resource.data.unidadeId == userData().unidadeId
           && isValidLeadCrm(request.resource.data)
@@ -3304,52 +3317,38 @@ service cloud.firestore {
 
     // Dados pessoais do cliente e o interesse em texto livre (tamanho, período, uso): só a unidade (nem a franqueadora lê).
     match /crmContatos/{leadId} {
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists()
         && unidadeCrm(userData())
         && resource.data.unidadeId == userData().unidadeId;
       allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeCrm(userData())
           && request.resource.data.keys().hasOnly(['unidadeId', 'nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['unidadeId', 'nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 9
           && request.resource.data.unidadeId == userData().unidadeId
-          && validName(request.resource.data.nome)
-          && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
-          && request.resource.data.email is string && request.resource.data.email.size() <= 120
-          && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
-          && validShort(request.resource.data.interesseTamanho, 60)
-          && validShort(request.resource.data.interessePeriodo, 60)
-          && validShort(request.resource.data.interesseUso, 200)
-          && request.resource.data.atualizadoEm == request.time
+          && contatoCrmOk(request.resource.data)
           && getAfter(crmLeadPath(leadId)).data.unidadeId == request.resource.data.unidadeId
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeCrm(userData())
           && resource.data.unidadeId == userData().unidadeId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
-          && validName(request.resource.data.nome)
-          && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
-          && request.resource.data.email is string && request.resource.data.email.size() <= 120
-          && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
-          && validShort(request.resource.data.interesseTamanho, 60)
-          && validShort(request.resource.data.interessePeriodo, 60)
-          && validShort(request.resource.data.interesseUso, 200)
-          && request.resource.data.atualizadoEm == request.time
+          && contatoCrmOk(request.resource.data)
         ) : false;
       allow delete: if false;
     }
 
     // Histórico do lead: imutável, só a unidade (o texto pode ter dados do cliente).
     match /crmAtividades/{atividadeId} {
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists()
         && unidadeCrm(userData())
         && resource.data.unidadeId == userData().unidadeId;
       allow create: if request.resource.data.uid == request.auth.uid ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeCrm(userData())
           && request.resource.data.keys().hasOnly(['leadId', 'unidadeId', 'tipo', 'texto', 'uid', 'nome', 'geradoPorIA', 'iaModelo', 'criadoEm'])
-          && request.resource.data.keys().hasAll(['leadId', 'unidadeId', 'tipo', 'texto', 'uid', 'nome', 'geradoPorIA', 'iaModelo', 'criadoEm'])
+          && request.resource.data.keys().size() == 9
           && request.resource.data.unidadeId == userData().unidadeId
           && request.resource.data.nome == userData().nome
           && request.resource.data.tipo in ['ligacao', 'whatsapp', 'visita', 'email', 'nota']
@@ -3364,14 +3363,14 @@ service cloud.firestore {
 
     // Propostas: box, preço, validade e status. Só a unidade.
     match /crmPropostas/{propostaId} {
-      allow read: if signedIn() && exists(userPath())
+      allow read: if userExists()
         && unidadeCrm(userData())
         && resource.data.unidadeId == userData().unidadeId;
       allow create: if request.resource.data.atualizadoPor == request.auth.uid && request.resource.data.status == 'enviada' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeCrm(userData())
           && request.resource.data.keys().hasOnly(['leadId', 'unidadeId', 'box', 'precoMensalCentavos', 'periodoMeses', 'validade', 'status', 'obs', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['leadId', 'unidadeId', 'box', 'precoMensalCentavos', 'periodoMeses', 'validade', 'status', 'obs', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 14
           && request.resource.data.unidadeId == userData().unidadeId
           && request.resource.data.box is string && request.resource.data.box.size() >= 1 && request.resource.data.box.size() <= 60
           && request.resource.data.precoMensalCentavos is int && request.resource.data.precoMensalCentavos > 0 && request.resource.data.precoMensalCentavos <= 100000000
@@ -3387,7 +3386,7 @@ service cloud.firestore {
         ) : false;
       // Só o status muda: enviada → aceita, recusada ou expirada (e não volta).
       allow update: if request.resource.data.atualizadoPor == request.auth.uid && resource.data.status == 'enviada' ? (
-          signedIn() && exists(userPath())
+          userExists()
           && unidadeCrm(userData())
           && resource.data.unidadeId == userData().unidadeId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])

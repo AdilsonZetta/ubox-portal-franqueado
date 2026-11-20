@@ -91,14 +91,14 @@ exigir(rules.includes('match /auditoriaAcoes/{acaoId}'), 'coleção auditoriaAco
 exigir(rules.includes("data.resultado == ((data.score >= data.notaMinima && (data.checklistScore == null || data.checklistScore >= data.notaMinima)) ? 'aprovada' : 'reprovada')"), 'resultado da auditoria sem amarrar à pontuação')
 exigir(rules.includes("affectedKeys().hasOnly(['status', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'atualizadoEm'])"), 'ciência da auditoria editável além da assinatura e contestação')
 exigir(rules.includes('request.resource.data.assinaturaAuditorEm == request.time'), 'assinatura do auditor sem horário do servidor')
-exigir(rules.includes("allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());"), 'auditor sem leitura limitada por gereAuditoria')
+exigir(rules.includes("allow read: if userExists() && gereAuditoria(userData());"), 'auditor sem leitura limitada por gereAuditoria')
 exigir(/match \/checklistExecucoes\/\{execucaoId\}[\s\S]*?gereAuditoria\(userData\(\)\)/.test(rules), 'auditor sem leitura do checklist de referência')
 
 exigir(rules.includes('match /acompanhamentoRegistros/{registroId}'), 'coleção acompanhamentoRegistros ausente')
 exigir(rules.includes('match /acompanhamentoPassos/{passoId}'), 'coleção acompanhamentoPassos ausente')
 exigir(rules.includes("dados.papel == 'equipe_franqueadora' && temLista(dados, 'acompanhamento')"), 'acompanhamento sem exigir o módulo para a equipe da franqueadora')
 exigir(rules.includes("allow read: if resource.data.compartilhado == true ? ("), 'unidade lendo acompanhamento sem exigir compartilhamento')
-exigir(rules.includes("allow read: if resource.data.status in ['aguardando_ciencia', 'concluida'] ? (signedIn() && exists(userPath()) && gereAcompanhamento(userData())) : false;"), 'acompanhamento lendo rascunho de auditoria')
+exigir(rules.includes("allow read: if resource.data.status in ['aguardando_ciencia', 'concluida'] ? (userExists() && gereAcompanhamento(userData())) : false;"), 'acompanhamento lendo rascunho de auditoria')
 exigir(!/match \/acessos\/\{acessoId\}[^}]*gereAcompanhamento/.test(rules), 'acompanhamento não pode ler o cofre de acessos')
 exigir(!/match \/usuarios\/\{uid\}[^}]*gereAcompanhamento/.test(rules), 'acompanhamento não pode listar usuários')
 
@@ -127,7 +127,7 @@ exigir(rules.includes("dados.papel == 'equipe_franqueadora' && temLista(dados, '
   const lead = rules.slice(rules.indexOf('function isValidLeadCrm'), rules.indexOf('match /crmConfig'))
   exigir(!/'(nome|telefone|email)'/.test(lead), 'PII voltou para o doc do lead (lido pela franqueadora)')
   exigir(!lead.includes('interesse'), 'interesse em texto livre no lead do CRM (deve ficar em crmContatos)')
-  exigir(rules.includes('.data.nome == nome') && rules.includes('function responsavelCrmOk(uid, nome, unidadeId)'), 'responsavelNome do CRM sem conferir o perfil')
+  exigir(rules.includes('u.nome == nome') && rules.includes('function responsavelCrmOk(uid, nome, unidadeId)'), 'responsavelNome do CRM sem conferir o perfil')
   const ativ = rules.slice(rules.indexOf('match /crmAtividades/{atividadeId}'), rules.indexOf('match /crmPropostas/{propostaId}'))
   exigir(!ativ.includes('gereCrm') && ativ.includes('allow update, delete: if false;'), 'atividades do CRM legíveis pela franqueadora ou editáveis')
 }
