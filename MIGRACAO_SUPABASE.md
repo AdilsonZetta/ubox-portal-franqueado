@@ -235,3 +235,21 @@ Se a confirmação de e-mail estiver ligada, a alternativa é uma Edge Function 
   - O Vitest cobre os mapeadores.
 
 Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
+
+## 13. O que a fase 4 entregou (Universidade)
+
+- **Migrações** (aplicadas):
+  - **`20261120145236_fase4_universidade`** cria `cursos`, `provas`, `provas_gabarito`, `tentativas_prova` e `tentativas_prova_folha`, com RLS igual às rules.
+    - O aluno nunca lê o gabarito.
+    - O franqueado vê o resultado da equipe, mas não a folha de respostas.
+    - A correção é validada por um gatilho, que compara com o gabarito sem expor o gabarito ao aluno.
+    - Prova e gabarito, e também tentativa e folha, só valem juntos (FKs adiadas).
+  - **`20261120151359_fase4_rpcs`** cria `salvar_prova_universidade` e `enviar_tentativa_universidade`. As duas são `security invoker`, então o RLS e os gatilhos continuam decidindo, e gravam o par numa transação só.
+- **Reestudo:** o servidor define `iniciado_em` na criação e em cada reinício. Um valor enviado pelo app é ignorado, e o app deixou de enviar esse campo.
+- **App:** com `VITE_BACKEND=supabase`, `universidadeApi.ts` passa pelo Supabase (`src/lib/universidadeSupabase.ts`), inclusive certificados de curso e reestudos.
+- **Testes:**
+  - 106 casos em `fase4_universidade` e 13 em `fase4_rpcs`.
+  - O teste da fase 3 agora usa as tabelas reais da Universidade.
+  - No total são 375 casos, no local e no projeto, com rollback.
+
+Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
