@@ -145,7 +145,8 @@ exigir(!/match \/crm\w+\/\{\w+\}[^}]*allow delete: if (?!false)/.test(rules), 'e
 exigir(rules.includes('match /clientes/{clienteId}') && rules.includes('match /clientePaineis/{token}'), 'coleções do Painel do Cliente ausentes')
 {
   const ini = rules.indexOf('// ===== Módulo 12: Painel do Cliente =====')
-  const bloco = rules.slice(ini)
+  const fim = rules.indexOf('// ===== Módulo 13:')
+  const bloco = rules.slice(ini, fim > ini ? fim : undefined)
   exigir(ini > 0 && !bloco.includes('isAdmin') && !bloco.includes('equipe_franqueadora'), 'Painel do Cliente acessível pela franqueadora')
   const painel = bloco.slice(bloco.indexOf('function painelOk'), bloco.indexOf('match /clientes/{clienteId}'))
   exigir(!/'(nome|telefone|email|obs)'/.test(painel), 'dado pessoal do cliente no painel público')
@@ -157,6 +158,19 @@ exigir(rules.includes('match /clientes/{clienteId}') && rules.includes('match /c
   exigir(pn.includes('allow list: if unidadeCli()') && !/allow (read|list): if resource\.data\.ativo/.test(pn), 'painel público listável')
   exigir(!/allow delete: if (?!false)/.test(bloco), 'exclusão liberada no Painel do Cliente')
   for (const sub of ['cobrancas', 'visitas', 'recados']) exigir(bloco.includes(`match /clientePaineis/{token}/${sub}/{id} {\n      allow read: if itemLe(token);`), `itens do painel (${sub}) sem a leitura condicionada ao painel ativo`)
+}
+
+// Módulo 13: Armazenamento em Nuvem (só links do Drive; área privada da unidade fora do alcance da franqueadora)
+exigir(rules.includes('match /nuvemLinks/{id}'), 'coleção do Armazenamento em Nuvem ausente')
+{
+  const ini = rules.indexOf('// ===== Módulo 13: Armazenamento em Nuvem =====')
+  const bloco = rules.slice(ini)
+  const le = bloco.slice(bloco.indexOf('function nuvemLe'), bloco.indexOf('function nuvemGrava'))
+  exigir(ini > 0 && le.includes(": (unidadeNuvem(u) && d.dono == u.unidadeId)") && !bloco.includes('isAdmin'), 'área privada da unidade legível pela franqueadora')
+  exigir(bloco.includes("d.url.matches('https://(drive|docs)[.]google[.]com/[^ ]*')"), 'link da nuvem sem exigir https do Google Drive/Docs')
+  exigir(bloco.includes('iaOk(d)') && bloco.includes('d.keys().size() == 16'), 'link da nuvem sem chaves fixas ou sem autoria de IA')
+  exigir(bloco.includes("!request.resource.data.diff(resource.data).affectedKeys().hasAny(['dono', 'criadoPor', 'criadoPorNome', 'criadoEm'])"), 'dono ou autoria do link editáveis')
+  exigir(!/allow (read|list): if (true|signedIn\(\))/.test(bloco), 'links da nuvem abertos')
 }
 
 if (erros.length) {

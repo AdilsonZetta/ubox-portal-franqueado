@@ -2290,6 +2290,109 @@ await caso('cli: link do contrato encerrado não abre', assertFails(getDoc(doc(a
 await caso('cli: ninguém apaga cliente', assertFails(deleteDoc(doc(frCli, 'clientes', 'cl-1'))))
 await caso('cli: ninguém apaga painel', assertFails(deleteDoc(doc(frCli, 'clientePaineis', TKX))))
 
+// ===== Módulo 13: Armazenamento em Nuvem =====
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  for (const id of ['un-nv', 'un-nv2']) {
+    await setDoc(doc(banco, 'unidades', id), {
+      nome: id, cidade: 'Uberaba', responsavel: 'Dono', email: `${id}@ubox.test`, uid: null,
+      modulosLiberados: ['nuvem'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+    })
+  }
+  await setDoc(doc(banco, 'usuarios', 'fr-nv'), usuario('fr-nv', { unidadeId: 'un-nv', unidade: 'un-nv', modulos: ['nuvem'], nome: 'Dono Nuvem' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-nv'), usuario('eq-nv', { papel: 'equipe_franqueado', unidadeId: 'un-nv', unidade: 'un-nv', modulos: ['nuvem'], criadoPor: 'fr-nv', nome: 'Equipe Nuvem' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-nv-sem'), usuario('eq-nv-sem', { papel: 'equipe_franqueado', unidadeId: 'un-nv', unidade: 'un-nv', modulos: ['manuais'], criadoPor: 'fr-nv', nome: 'Equipe Sem Nuvem' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-nv2'), usuario('fr-nv2', { unidadeId: 'un-nv2', unidade: 'un-nv2', modulos: ['nuvem'], nome: 'Dono Nuvem Dois' }))
+  await setDoc(doc(banco, 'usuarios', 'rede-nv'), usuario('rede-nv', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['nuvem-rede'], nome: 'Rede Nuvem' }))
+  await setDoc(doc(banco, 'usuarios', 'rede-nv-sem'), usuario('rede-nv-sem', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['nuvem'], nome: 'Rede Sem Nuvem' }))
+  const base = { descricao: '', url: 'https://drive.google.com/drive/folders/abc', pasta: 'Contratos', tags: 'modelo', unidades: [], geradoPorIA: false, iaModelo: '', criadoEm: criado, atualizadoEm: criado }
+  await setDoc(doc(banco, 'nuvemLinks', 'nv-rede'), { ...base, titulo: 'Manual da marca', visibilidade: 'rede', dono: '', criadoPor: 'rede-nv', criadoPorNome: 'Rede Nuvem', atualizadoPor: 'rede-nv', atualizadoPorNome: 'Rede Nuvem' })
+  await setDoc(doc(banco, 'nuvemLinks', 'nv-uns'), { ...base, titulo: 'Planilha regional', visibilidade: 'unidades', unidades: ['un-nv'], dono: '', criadoPor: 'rede-nv', criadoPorNome: 'Rede Nuvem', atualizadoPor: 'rede-nv', atualizadoPorNome: 'Rede Nuvem' })
+  await setDoc(doc(banco, 'nuvemLinks', 'nv-fq'), { ...base, titulo: 'Interno da franqueadora', visibilidade: 'franqueadora', dono: '', criadoPor: 'rede-nv', criadoPorNome: 'Rede Nuvem', atualizadoPor: 'rede-nv', atualizadoPorNome: 'Rede Nuvem' })
+  await setDoc(doc(banco, 'nuvemLinks', 'nv-priv'), { ...base, titulo: 'Escala da unidade', visibilidade: 'privada', dono: 'un-nv', criadoPor: 'fr-nv', criadoPorNome: 'Dono Nuvem', atualizadoPor: 'fr-nv', atualizadoPorNome: 'Dono Nuvem' })
+  await setDoc(doc(banco, 'nuvemLinks', 'nv-priv2'), { ...base, titulo: 'Escala da outra', visibilidade: 'privada', dono: 'un-nv2', criadoPor: 'fr-nv2', criadoPorNome: 'Dono Nuvem Dois', atualizadoPor: 'fr-nv2', atualizadoPorNome: 'Dono Nuvem Dois' })
+})
+const nvCtx = (uid) => ambiente.authenticatedContext(uid, { email: `${uid}@ubox.test` }).firestore()
+const frNv = nvCtx('fr-nv'), eqNv = nvCtx('eq-nv'), eqNvSem = nvCtx('eq-nv-sem'), frNv2 = nvCtx('fr-nv2'), redeNv = nvCtx('rede-nv'), redeNvSem = nvCtx('rede-nv-sem')
+const NOMES_NV = { 'fr-nv': 'Dono Nuvem', 'eq-nv': 'Equipe Nuvem', 'fr-nv2': 'Dono Nuvem Dois', 'rede-nv': 'Rede Nuvem', 'admin-1': 'Admin Rede', 'eq-nv-sem': 'Equipe Sem Nuvem', 'rede-nv-sem': 'Rede Sem Nuvem' }
+const lk = (uid, extra = {}) => ({
+  titulo: 'Contrato padrão', descricao: 'Modelo atualizado', url: 'https://docs.google.com/document/d/xyz/edit', pasta: 'Contratos', tags: 'contrato,modelo',
+  visibilidade: 'privada', unidades: [], dono: 'un-nv', geradoPorIA: false, iaModelo: '',
+  criadoPor: uid, criadoPorNome: NOMES_NV[uid], criadoEm: serverTimestamp(), atualizadoPor: uid, atualizadoPorNome: NOMES_NV[uid], atualizadoEm: serverTimestamp(), ...extra,
+})
+const lkRede = (uid, extra = {}) => lk(uid, { dono: '', visibilidade: 'rede', ...extra })
+const novoLk = (db, id, dados) => setDoc(doc(db, 'nuvemLinks', id), dados)
+const atLk = (uid, extra = {}) => ({ atualizadoPor: uid, atualizadoPorNome: NOMES_NV[uid], atualizadoEm: serverTimestamp(), ...extra })
+const qRede = (db) => getDocs(query(collection(db, 'nuvemLinks'), where('dono', '==', '')))
+const qVisRede = (db) => getDocs(query(collection(db, 'nuvemLinks'), where('dono', '==', ''), where('visibilidade', '==', 'rede')))
+const qMinhas = (db, un) => getDocs(query(collection(db, 'nuvemLinks'), where('dono', '==', ''), where('unidades', 'array-contains', un)))
+const qPriv = (db, un) => getDocs(query(collection(db, 'nuvemLinks'), where('dono', '==', un)))
+
+// Leitura e privacidade
+await caso('nv: unidade lê link da rede toda', assertSucceeds(getDoc(doc(eqNv, 'nuvemLinks', 'nv-rede'))))
+await caso('nv: unidade escolhida lê link compartilhado com ela', assertSucceeds(getDoc(doc(frNv, 'nuvemLinks', 'nv-uns'))))
+await caso('nv: unidade não escolhida não lê', assertFails(getDoc(doc(frNv2, 'nuvemLinks', 'nv-uns'))))
+await caso('nv: unidade não lê a pasta só da franqueadora', assertFails(getDoc(doc(frNv, 'nuvemLinks', 'nv-fq'))))
+await caso('nv: unidade lê a própria área privada', assertSucceeds(getDoc(doc(eqNv, 'nuvemLinks', 'nv-priv'))))
+await caso('nv: outra unidade não lê a área privada', assertFails(getDoc(doc(frNv2, 'nuvemLinks', 'nv-priv'))))
+await caso('nv: franqueadora não lê a área privada da unidade', assertFails(getDoc(doc(redeNv, 'nuvemLinks', 'nv-priv'))))
+await caso('nv: admin não lê a área privada da unidade', assertFails(getDoc(doc(admin, 'nuvemLinks', 'nv-priv'))))
+await caso('nv: equipe sem o módulo não lê', assertFails(getDoc(doc(eqNvSem, 'nuvemLinks', 'nv-rede'))))
+await caso('nv: franqueadora sem nuvem-rede não lê', assertFails(getDoc(doc(redeNvSem, 'nuvemLinks', 'nv-fq'))))
+await caso('nv: anônimo não lê', assertFails(getDoc(doc(anonimo, 'nuvemLinks', 'nv-rede'))))
+await caso('nv: franqueadora lista os links da rede', assertSucceeds(qRede(redeNv)))
+await caso('nv: unidade lista links da rede toda', assertSucceeds(qVisRede(frNv)))
+await caso('nv: unidade lista links compartilhados com ela', assertSucceeds(qMinhas(frNv, 'un-nv')))
+await caso('nv: unidade não lista links de outra unidade escolhida', assertFails(qMinhas(frNv, 'un-nv2')))
+await caso('nv: unidade lista a própria área', assertSucceeds(qPriv(eqNv, 'un-nv')))
+await caso('nv: unidade não lista a área de outra', assertFails(qPriv(frNv, 'un-nv2')))
+await caso('nv: unidade não lista tudo da franqueadora', assertFails(qRede(frNv)))
+await caso('nv: franqueadora não lista área de unidade', assertFails(qPriv(redeNv, 'un-nv')))
+
+// Gravação
+await caso('nv: unidade guarda link do Drive na área privada', assertSucceeds(novoLk(eqNv, 'n1', lk('eq-nv'))))
+await caso('nv: franqueadora publica para a rede', assertSucceeds(novoLk(redeNv, 'n2', lkRede('rede-nv'))))
+await caso('nv: franqueadora compartilha com unidades escolhidas', assertSucceeds(novoLk(redeNv, 'n3', lkRede('rede-nv', { visibilidade: 'unidades', unidades: ['un-nv', 'un-nv2'] }))))
+await caso('nv: franqueadora guarda na pasta só dela', assertSucceeds(novoLk(redeNv, 'n4', lkRede('rede-nv', { visibilidade: 'franqueadora' }))))
+await caso('nv: admin publica para a rede', assertSucceeds(novoLk(admin, 'n5', lkRede('admin-1'))))
+await caso('nv: descrição com IA e modelo registrado', assertSucceeds(novoLk(frNv, 'n6', lk('fr-nv', { geradoPorIA: true, iaModelo: 'Grok Bot' }))))
+await caso('nv: IA sem o modelo é recusada', assertFails(novoLk(frNv, 'n7', lk('fr-nv', { geradoPorIA: true, iaModelo: '' }))))
+await caso('nv: link http (sem https) é recusado', assertFails(novoLk(frNv, 'n8', lk('fr-nv', { url: 'http://drive.google.com/x' }))))
+await caso('nv: link fora do Google Drive é recusado', assertFails(novoLk(frNv, 'n9', lk('fr-nv', { url: 'https://dropbox.com/s/x' }))))
+await caso('nv: domínio parecido com o do Drive é recusado', assertFails(novoLk(frNv, 'n10', lk('fr-nv', { url: 'https://drive.google.com.evil.io/x' }))))
+await caso('nv: link com espaço é recusado', assertFails(novoLk(frNv, 'n11', lk('fr-nv', { url: 'https://drive.google.com/a b' }))))
+await caso('nv: mais de 10 tags é recusado', assertFails(novoLk(frNv, 'n12', lk('fr-nv', { tags: 'a,b,c,d,e,f,g,h,i,j,k' }))))
+await caso('nv: tag acima de 30 caracteres é recusada', assertFails(novoLk(frNv, 'n13', lk('fr-nv', { tags: 'x'.repeat(31) }))))
+await caso('nv: descrição acima de 1000 caracteres é recusada', assertFails(novoLk(frNv, 'n14', lk('fr-nv', { descricao: 'x'.repeat(1001) }))))
+await caso('nv: campo extra (telefone) é recusado', assertFails(novoLk(frNv, 'n15', lk('fr-nv', { telefone: '34999990000' }))))
+await caso('nv: unidade não publica para a rede', assertFails(novoLk(frNv, 'n16', lkRede('fr-nv'))))
+await caso('nv: unidade não grava na área de outra', assertFails(novoLk(frNv, 'n17', lk('fr-nv', { dono: 'un-nv2' }))))
+await caso('nv: unidade não compartilha com outras unidades', assertFails(novoLk(frNv, 'n18', lk('fr-nv', { visibilidade: 'unidades', unidades: ['un-nv2'] }))))
+await caso('nv: franqueadora não grava na área privada da unidade', assertFails(novoLk(redeNv, 'n19', lk('rede-nv'))))
+await caso('nv: "unidades escolhidas" sem unidade é recusado', assertFails(novoLk(redeNv, 'n20', lkRede('rede-nv', { visibilidade: 'unidades' }))))
+await caso('nv: rede toda com lista de unidades é recusado', assertFails(novoLk(redeNv, 'n21', lkRede('rede-nv', { unidades: ['un-nv'] }))))
+await caso('nv: autor forjado é recusado', assertFails(novoLk(frNv, 'n22', lk('fr-nv', { criadoPor: 'eq-nv' }))))
+await caso('nv: nome do autor forjado é recusado', assertFails(novoLk(frNv, 'n23', lk('fr-nv', { criadoPorNome: 'Outra Pessoa' }))))
+await caso('nv: data de criação forjada é recusada', assertFails(novoLk(frNv, 'n24', lk('fr-nv', { criadoEm: criado }))))
+await caso('nv: equipe sem o módulo não grava', assertFails(novoLk(eqNvSem, 'n25', lk('eq-nv-sem'))))
+await caso('nv: franqueadora sem nuvem-rede não grava', assertFails(novoLk(redeNvSem, 'n26', lkRede('rede-nv-sem'))))
+await caso('nv: anônimo não grava', assertFails(novoLk(anonimo, 'n27', lk('fr-nv'))))
+
+// Edição e exclusão
+await caso('nv: colega da unidade edita link da área', assertSucceeds(updateDoc(doc(frNv, 'nuvemLinks', 'n1'), atLk('fr-nv', { titulo: 'Contrato 2027', tags: 'contrato' }))))
+await caso('nv: autor original não muda', assertFails(updateDoc(doc(frNv, 'nuvemLinks', 'n1'), atLk('fr-nv', { criadoPor: 'fr-nv' }))))
+await caso('nv: link não muda de dono', assertFails(updateDoc(doc(frNv, 'nuvemLinks', 'n1'), atLk('fr-nv', { dono: 'un-nv2' }))))
+await caso('nv: link privado não vira da rede', assertFails(updateDoc(doc(frNv, 'nuvemLinks', 'n1'), atLk('fr-nv', { visibilidade: 'rede' }))))
+await caso('nv: outra unidade não edita', assertFails(updateDoc(doc(frNv2, 'nuvemLinks', 'n1'), atLk('fr-nv2', { titulo: 'Invadido' }))))
+await caso('nv: franqueadora restringe link a unidades', assertSucceeds(updateDoc(doc(redeNv, 'nuvemLinks', 'n2'), atLk('rede-nv', { visibilidade: 'unidades', unidades: ['un-nv'] }))))
+await caso('nv: unidade não edita link da franqueadora', assertFails(updateDoc(doc(frNv, 'nuvemLinks', 'nv-rede'), atLk('fr-nv', { titulo: 'Mudado' }))))
+await caso('nv: edição sem carimbo do servidor é recusada', assertFails(updateDoc(doc(frNv, 'nuvemLinks', 'n1'), { titulo: 'Sem carimbo', atualizadoPor: 'fr-nv', atualizadoPorNome: 'Dono Nuvem', atualizadoEm: criado })))
+await caso('nv: outra unidade não apaga', assertFails(deleteDoc(doc(frNv2, 'nuvemLinks', 'n1'))))
+await caso('nv: franqueadora não apaga link da unidade', assertFails(deleteDoc(doc(redeNv, 'nuvemLinks', 'n1'))))
+await caso('nv: unidade não apaga link da franqueadora', assertFails(deleteDoc(doc(frNv, 'nuvemLinks', 'nv-rede'))))
+await caso('nv: unidade remove link da própria área', assertSucceeds(deleteDoc(doc(eqNv, 'nuvemLinks', 'n1'))))
+await caso('nv: franqueadora remove link dela', assertSucceeds(deleteDoc(doc(redeNv, 'nuvemLinks', 'n4'))))
+
 void manual
 await ambiente.cleanup()
 
