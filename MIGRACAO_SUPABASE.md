@@ -213,3 +213,25 @@ Se a confirmação de e-mail estiver ligada, a alternativa é uma Edge Function 
   - `supabase/tests/fase2_gestao.test.sql` tem 46 casos pgTAP. Desses, 31 foram portados de `tests/regras.mjs` (marcados `[regras]`) e 15 cobrem as funções novas.
   - Com a fase 1, são 121 casos no local e no projeto (com rollback).
   - O Vitest cobre o mapeamento e o ensaio de importação.
+
+## 12. O que a fase 3 entregou (manuais, documentos e avisos)
+
+- **Migração `20261120140950_fase3_manuais`** (aplicada): cria 16 tabelas.
+  - Conteúdo: `categorias`, `documentos`, `documento_versoes`, `trilhas`, `quizzes`, `quiz_gabaritos`, `gabaritos`, `avisos`.
+  - Registros de estudo: `leituras`, `aceites`, `tentativas`, `certificados`, `avisos_leituras`.
+  - Trilha de manuais: `manuais_trilha`, `progresso_manuais`, `reestudos`.
+- **Regras:** o RLS, os grants por verbo e os gatilhos repetem as rules.
+  - O servidor carimba as datas, e os gatilhos protegem os campos imutáveis e o cronômetro dos manuais.
+  - O público é materializado em `uids`, como no Firestore.
+  - **Os gabaritos são lidos só pelo admin.**
+  - Os rascunhos também ficam só para o admin.
+  - Leituras, aceites, certificados e confirmações de aviso só aceitam inserção.
+  - `tentativas` (legado) não aceita nem inserção.
+- **Dependência da fase 4:** o certificado de curso e o reestudo dependem das tabelas da Universidade. Enquanto elas não existem, as funções auxiliares recusam essas gravações.
+- **App:** com `VITE_BACKEND=supabase`, `api.ts` e `manuaisApi.ts` passam pelo Supabase (`src/lib/manuaisSupabase.ts`). O caminho do Firebase continua igual.
+- **Testes:**
+  - `supabase/tests/fase3_manuais.test.sql` tem 123 casos pgTAP, sendo 63 portados de `tests/regras.mjs` (marcados `[regras]`).
+  - No total são 256 casos, no local e no projeto, com rollback.
+  - O Vitest cobre os mapeadores.
+
+Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).

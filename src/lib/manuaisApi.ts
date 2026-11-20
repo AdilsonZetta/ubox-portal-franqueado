@@ -11,9 +11,18 @@ import {
   writeBatch,
   type DocumentData,
 } from 'firebase/firestore'
+import { BACKEND } from './backend'
 import { requireDb } from './firebase'
 import { encadearTrilha, idProgresso, limitarTempo, type ItemTrilhaManual, type ProgressoManual } from './manuaisTrilha'
 import type { Usuario } from '../types'
+import {
+  listarTrilhaManuaisSb,
+  listarMeuProgressoSb,
+  listarProgressoVisivelSb,
+  salvarTrilhaManuaisSb,
+  iniciarOuReiniciarSb,
+  concluirManualSb,
+} from './manuaisSupabase'
 
 function texto(valor: unknown, padrao = ''): string {
   return typeof valor === 'string' ? valor : padrao
@@ -57,17 +66,20 @@ export function mapProgresso(id: string, data: DocumentData): ProgressoManual {
 }
 
 export async function listarTrilhaManuais(): Promise<ItemTrilhaManual[]> {
+  if (BACKEND === 'supabase') return listarTrilhaManuaisSb()
   const snap = await getDocs(collection(requireDb(), 'manuaisTrilha'))
   return snap.docs.map((d) => mapItemTrilha(d.id, d.data()))
 }
 
 export async function listarMeuProgresso(uid: string): Promise<ProgressoManual[]> {
+  if (BACKEND === 'supabase') return listarMeuProgressoSb(uid)
   const snap = await getDocs(query(collection(requireDb(), 'progressoManuais'), where('uid', '==', uid)))
   return snap.docs.map((d) => mapProgresso(d.id, d.data()))
 }
 
 /** Franqueadora: todo o progresso da rede. Franqueado: só o da própria unidade. */
 export async function listarProgressoVisivel(usuario: Usuario): Promise<ProgressoManual[]> {
+  if (BACKEND === 'supabase') return listarProgressoVisivelSb(usuario)
   const base = collection(requireDb(), 'progressoManuais')
   const rede = usuario.papel === 'admin' || usuario.papel === 'equipe_franqueadora'
   if (!rede && !usuario.unidadeId) return []
@@ -86,6 +98,7 @@ export interface ItemTrilhaEdicao {
 
 /** Grava a trilha inteira na ordem recebida, recalculando ordem e anterior num só lote. */
 export async function salvarTrilhaManuais(autor: Usuario, itens: ItemTrilhaEdicao[]): Promise<void> {
+  if (BACKEND === 'supabase') return salvarTrilhaManuaisSb(autor, itens)
   if (itens.length > 450) throw new Error('A trilha aceita até 450 manuais por vez.')
   const banco = requireDb()
   const lote = writeBatch(banco)
@@ -113,6 +126,7 @@ export async function salvarTrilhaManuais(autor: Usuario, itens: ItemTrilhaEdica
  * Concluídos não mudam.
  */
 export async function iniciarOuReiniciar(usuario: Usuario, item: ItemTrilhaManual): Promise<ProgressoManual | null> {
+  if (BACKEND === 'supabase') return iniciarOuReiniciarSb(usuario, item)
   const banco = requireDb()
   const ref = doc(banco, 'progressoManuais', idProgresso(usuario.uid, item.documentoId))
   const atual = await getDoc(ref)
@@ -145,6 +159,7 @@ export async function iniciarOuReiniciar(usuario: Usuario, item: ItemTrilhaManua
 }
 
 export async function concluirManual(usuario: Usuario, documentoId: string): Promise<void> {
+  if (BACKEND === 'supabase') return concluirManualSb(usuario, documentoId)
   const ref = doc(requireDb(), 'progressoManuais', idProgresso(usuario.uid, documentoId))
   await updateDoc(ref, {
     status: 'concluido',

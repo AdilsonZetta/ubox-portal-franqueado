@@ -47,6 +47,28 @@ import { aplicarGabarito, extrairItensTrilha, extrairPerguntas, publicadoNoDado 
 import { htmlParaTexto, limitar, textoParaIndice } from './text'
 import { BACKEND } from './backend'
 import { atualizarUsuarioSb, listarUsuariosSb } from './gestaoSupabase'
+import {
+  carregarPortalSb,
+  salvarCategoriaSb,
+  excluirCategoriaSb,
+  salvarDocumentoSb,
+  excluirDocumentoSb,
+  listarVersoesSb,
+  salvarTrilhaSb,
+  excluirTrilhaSb,
+  obterQuizSb,
+  listarQuizzesDaTrilhaSb,
+  listarQuizzesSb,
+  reidratarAcessosSb,
+  registrarLeituraSb,
+  registrarAceiteSb,
+  registrarTentativaSb,
+  emitirCertificadoSb,
+  carregarMeuProgressoSb,
+  carregarRegistrosAdminSb,
+  carregarAvisosSb,
+  marcarAvisoLidoSb,
+} from './manuaisSupabase'
 
 function texto(valor: unknown, fallback = ''): string {
   return typeof valor === 'string' ? valor : fallback
@@ -224,6 +246,7 @@ export async function carregarPortal(usuario: Usuario): Promise<{
   documentos: Documento[]
   trilhas: Trilha[]
 }> {
+  if (BACKEND === 'supabase') return carregarPortalSb(usuario)
   const banco = requireDb()
   const manuais = deveCarregar(usuario, 'manuais')
   const universidade = deveCarregar(usuario, 'universidade')
@@ -310,6 +333,7 @@ export interface RascunhoCategoria {
 }
 
 export async function salvarCategoria(rascunho: RascunhoCategoria, usuarios: Usuario[], id?: string): Promise<string> {
+  if (BACKEND === 'supabase') return salvarCategoriaSb(rascunho, usuarios, id)
   const banco = requireDb()
   const ref = id ? doc(banco, 'categorias', id) : doc(collection(banco, 'categorias'))
   const anterior = id ? await getDoc(ref) : null
@@ -331,6 +355,7 @@ export async function salvarCategoria(rascunho: RascunhoCategoria, usuarios: Usu
 }
 
 export async function excluirCategoria(id: string): Promise<void> {
+  if (BACKEND === 'supabase') return excluirCategoriaSb(id)
   await deleteDoc(doc(requireDb(), 'categorias', id))
 }
 
@@ -352,6 +377,7 @@ export interface RascunhoDocumento {
 }
 
 export async function salvarDocumento(rascunho: RascunhoDocumento, autor: Usuario, usuarios: Usuario[], id?: string): Promise<string> {
+  if (BACKEND === 'supabase') return salvarDocumentoSb(rascunho, autor, usuarios, id)
   const banco = requireDb()
   const ref = id ? doc(banco, 'documentos', id) : doc(collection(banco, 'documentos'))
   const anteriorSnap = id ? await getDoc(ref) : null
@@ -429,6 +455,7 @@ export async function salvarDocumento(rascunho: RascunhoDocumento, autor: Usuari
 }
 
 export async function excluirDocumento(id: string): Promise<void> {
+  if (BACKEND === 'supabase') return excluirDocumentoSb(id)
   const banco = requireDb()
   const versoes = await getDocs(collection(banco, 'documentos', id, 'versoes'))
   await Promise.all(versoes.docs.map((item) => deleteDoc(item.ref)))
@@ -436,6 +463,7 @@ export async function excluirDocumento(id: string): Promise<void> {
 }
 
 export async function listarVersoes(documentoId: string): Promise<VersaoDocumento[]> {
+  if (BACKEND === 'supabase') return listarVersoesSb(documentoId)
   const snap = await getDocs(collection(requireDb(), 'documentos', documentoId, 'versoes'))
   return snap.docs
     .map((item) => {
@@ -477,6 +505,7 @@ export interface RascunhoTrilha {
 }
 
 export async function salvarTrilha(rascunho: RascunhoTrilha, usuarios: Usuario[], id?: string): Promise<string> {
+  if (BACKEND === 'supabase') return salvarTrilhaSb(rascunho, usuarios, id)
   const banco = requireDb()
   const ref = id ? doc(banco, 'trilhas', id) : doc(collection(banco, 'trilhas'))
   const anterior = id ? await getDoc(ref) : null
@@ -519,6 +548,7 @@ export async function salvarTrilha(rascunho: RascunhoTrilha, usuarios: Usuario[]
 }
 
 export async function excluirTrilha(id: string): Promise<void> {
+  if (BACKEND === 'supabase') return excluirTrilhaSb(id)
   const banco = requireDb()
   const quizzes = await getDocs(query(collection(banco, 'quizzes'), where('trilhaId', '==', id)))
   await Promise.all(quizzes.docs.map((item) => deleteDoc(item.ref)))
@@ -542,6 +572,7 @@ async function lerGabarito(id: string): Promise<unknown> {
 }
 
 export async function obterQuiz(id: string): Promise<Quiz | null> {
+  if (BACKEND === 'supabase') return obterQuizSb(id)
   const snap = await getDoc(doc(requireDb(), 'quizzes', id))
   if (!snap.exists()) return null
   const quiz = mapQuiz(snap.id, snap.data())
@@ -550,17 +581,18 @@ export async function obterQuiz(id: string): Promise<Quiz | null> {
 }
 
 export async function listarQuizzesDaTrilha(trilhaId: string): Promise<Quiz[]> {
+  if (BACKEND === 'supabase') return listarQuizzesDaTrilhaSb(trilhaId)
   const snap = await getDocs(query(collection(requireDb(), 'quizzes'), where('trilhaId', '==', trilhaId)))
   return snap.docs.map((item) => mapQuiz(item.id, item.data()))
 }
 
 export async function listarQuizzes(): Promise<Quiz[]> {
+  if (BACKEND === 'supabase') return listarQuizzesSb()
   return lerColecao('quizzes', mapQuiz)
 }
 
 export async function reidratarAcessos(): Promise<void> {
-  // Público dos conteúdos (uids) só migra na fase 3; no Supabase não há nada a recalcular ainda.
-  if (BACKEND === 'supabase') return
+  if (BACKEND === 'supabase') return reidratarAcessosSb()
   const banco = requireDb()
   const usuarios = await listarUsuarios()
   for (const nome of ['categorias', 'documentos', 'trilhas', 'quizzes'] as const) {
@@ -598,6 +630,7 @@ export async function atualizarMeuNome(uid: string, nome: string): Promise<void>
 }
 
 export async function registrarLeitura(usuario: Usuario, documento: Pick<Documento, 'id' | 'versao' | 'titulo'>): Promise<void> {
+  if (BACKEND === 'supabase') return registrarLeituraSb(usuario, documento)
   const ref = doc(requireDb(), 'leituras', idLeitura(usuario.uid, documento.id, documento.versao))
   const snap = await getDoc(ref)
   if (snap.exists()) return
@@ -611,6 +644,7 @@ export async function registrarLeitura(usuario: Usuario, documento: Pick<Documen
 }
 
 export async function registrarAceite(usuario: Usuario, documento: Pick<Documento, 'id' | 'versao' | 'titulo'>): Promise<void> {
+  if (BACKEND === 'supabase') return registrarAceiteSb(usuario, documento)
   const banco = requireDb()
   const ref = doc(banco, 'aceites', idLeitura(usuario.uid, documento.id, documento.versao))
   const snap = await getDoc(ref)
@@ -630,12 +664,14 @@ export async function registrarAceite(usuario: Usuario, documento: Pick<Document
 }
 
 export async function registrarTentativa(dados: Omit<Tentativa, 'id' | 'respondidoEm'>): Promise<string> {
+  if (BACKEND === 'supabase') return registrarTentativaSb(dados)
   const ref = doc(collection(requireDb(), 'tentativas'))
   await setDoc(ref, { ...dados, respondidoEm: serverTimestamp() })
   return ref.id
 }
 
 export async function emitirCertificado(dados: Omit<Certificado, 'id' | 'emitidoEm'>): Promise<string> {
+  if (BACKEND === 'supabase') return emitirCertificadoSb(dados)
   const id = idCertificado(dados.uid, dados.trilhaId)
   const ref = doc(requireDb(), 'certificados', id)
   const snap = await getDoc(ref)
@@ -721,6 +757,7 @@ export async function carregarMeuProgresso(usuario: Usuario): Promise<{
   certificados: Certificado[]
   avisosLidos: AvisoLeitura[]
 }> {
+  if (BACKEND === 'supabase') return carregarMeuProgressoSb(usuario)
   const uid = usuario.uid
   const manuais = deveCarregar(usuario, 'manuais')
   const universidade = deveCarregar(usuario, 'universidade')
@@ -751,6 +788,7 @@ export async function carregarRegistrosAdmin(): Promise<{
   tentativas: Tentativa[]
   certificados: Certificado[]
 }> {
+  if (BACKEND === 'supabase') return carregarRegistrosAdminSb()
   const [leituras, aceites, tentativas, certificados] = await Promise.all([
     lerColecao('leituras', mapLeitura),
     lerColecao('aceites', mapAceite),
@@ -761,6 +799,7 @@ export async function carregarRegistrosAdmin(): Promise<{
 }
 
 export async function carregarAvisos(usuario: Usuario): Promise<Aviso[]> {
+  if (BACKEND === 'supabase') return carregarAvisosSb(usuario)
   const banco = requireDb()
   if (!deveCarregar(usuario, 'manuais')) return []
   if (usuario.papel === 'admin') return seguro(lerColecao('avisos', mapAviso), [])
@@ -775,6 +814,7 @@ export async function carregarAvisos(usuario: Usuario): Promise<Aviso[]> {
 }
 
 export async function marcarAvisoLido(uid: string, avisoId: string): Promise<void> {
+  if (BACKEND === 'supabase') return marcarAvisoLidoSb(uid, avisoId)
   const ref = doc(requireDb(), 'avisosLeituras', idAvisoLeitura(uid, avisoId))
   const snap = await getDoc(ref)
   if (snap.exists()) return
