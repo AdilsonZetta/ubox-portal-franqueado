@@ -39,30 +39,7 @@ jobs:
           VITE_BACKEND: ${{ vars.VITE_BACKEND || 'firebase' }}
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
-        run: |
-          node <<'NODE'
-          const backend = process.env.VITE_BACKEND?.trim().toLowerCase()
-          const url = process.env.VITE_SUPABASE_URL?.trim()
-          const chave = process.env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim() ?? ''
-
-          function papelDoJwt(valor) {
-            const partes = valor.split('.')
-            if (partes.length !== 3) return null
-            try {
-              return JSON.parse(Buffer.from(partes[1], 'base64url').toString('utf8'))?.role
-            } catch {
-              return null
-            }
-          }
-
-          if (/^sb_secret_/i.test(chave) || papelDoJwt(chave) === 'service_role') {
-            console.error('Use apenas uma chave publicável do Supabase no build do Pages.')
-            process.exitCode = 1
-          } else if (backend === 'supabase' && (!url || !chave)) {
-            console.error('Configure VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY para o backend Supabase.')
-            process.exitCode = 1
-          }
-          NODE
+        run: node scripts/validar-config-pages.mjs
 
       - name: Build
         run: npm run build

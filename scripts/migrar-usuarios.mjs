@@ -216,15 +216,15 @@ function imprimirPlano(plano, dados, log) {
   for (const aviso of plano.avisos) log(mascararEmails(aviso))
 }
 
-async function vincularContas(admin, preliminar, auth, log) {
+async function vincularContas(admin, preliminar) {
   const existentes = await listarContas(admin)
   const mapa = new Map()
   const uidPorId = new Map(Object.entries(preliminar.mapaUids).map(([uid, id]) => [id, uid]))
-  const desativadas = new Set(auth.filter(conta => conta.disabled === true).map(conta => conta.uid))
+  const desativadas = new Set(preliminar.idsDesativados)
   let criadas = 0
   for (const { id, email } of preliminar.authUsers) {
     const uid = uidPorId.get(id)
-    const desativada = desativadas.has(uid)
+    const desativada = desativadas.has(id)
     let destino = existentes.get(email)
     if (!destino) {
       try {
@@ -239,7 +239,12 @@ async function vincularContas(admin, preliminar, auth, log) {
         throw new ErroMigracao(`Falha ao criar a conta ${mascararEmails(email)}.`)
       }
     } else if (desativada) {
-      log(`Aviso — conta reutilizada ${mascararEmails(email)} estava desativada no Firebase. Confira o bloqueio no Supabase.`)
+      try {
+        const { error } = await admin.updateUserById(destino, { ban_duration: '876000h' })
+        if (error) throw error
+      } catch {
+        throw new ErroMigracao(`Falha ao bloquear a conta ${mascararEmails(email)}.`)
+      }
     }
     mapa.set(uid, destino)
   }
@@ -254,6 +259,9 @@ export async function carregarPerfis(db, plano) {
       if (rows.length && unidade.uid !== null) novas.push(unidade)
     }
     for (const usuario of plano.usuarios) await inserir(tx, 'public.usuarios', usuario, true)
+    if (plano.idsDesativados.length) {
+      await tx.query('update public.usuarios set ativo = false where id = any($1) and ativo', [plano.idsDesativados])
+    }
     for (const { id, uid } of novas) {
       await tx.query('update public.unidades set uid = $1 where id = $2', [uid, id])
     }
@@ -297,7 +305,7 @@ export async function aplicar({
   const db = await abrirBanco(conexao)
   try {
     const cliente = criarCliente(url, chave, opcoesAuth)
-    const { mapa, criadas } = await vincularContas(cliente.auth.admin, preliminar, dados.auth, log)
+    const { mapa, criadas } = await vincularContas(cliente.auth.admin, preliminar)
     const plano = planejarImportacao(dados, { gerarId: uid => mapa.get(uid) })
     await carregarPerfis(db, plano)
     // Publica apenas os vínculos com perfil após a transação. A retomada relê as contas por e-mail.

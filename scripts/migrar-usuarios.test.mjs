@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { PGlite } from '@electric-sql/pglite'
 import { afterEach, expect, it, vi } from 'vitest'
 import { aplicar, aplicarEsquema, enviarSenha } from './migrar-usuarios.mjs'
+import { ErroMigracao } from './migracao/arquivosLocais.mjs'
 
 let pasta, db
 afterEach(async () => {
@@ -51,11 +52,12 @@ it('reutiliza conta paginada, retoma depois de interrupção e mantém a carga S
     if (interromper && usuarios.length === 3) throw new Error(`Falha em ${email}`)
     return { data: { user } }
   })
+  const updateUserById = vi.fn(async () => ({}))
   const listUsers = vi.fn(async ({ page }) => ({
     data: { users: usuarios.slice(page - 1, page), nextPage: page < usuarios.length ? page + 1 : null },
   }))
   Object.assign(opcoes, {
-    criarCliente: () => ({ auth: { admin: { createUser, listUsers } } }),
+    criarCliente: () => ({ auth: { admin: { createUser, listUsers, updateUserById } } }),
     abrirBanco: async () => db,
   })
   await expect(aplicar(opcoes)).rejects.toThrow('c***@ubox.test')
@@ -65,7 +67,8 @@ it('reutiliza conta paginada, retoma depois de interrupção e mantém a carga S
   await aplicar(opcoes)
   await aplicar(opcoes)
   expect(createUser).toHaveBeenCalledTimes(6)
-  expect(opcoes.log).toHaveBeenCalledWith(expect.stringMatching(/b\*\*\*@ubox.test.*desativada/))
+  const bruno = usuarios.find(conta => conta.email === 'bruno@ubox.test')
+  expect(updateUserById.mock.calls).toEqual([[bruno.id, { ban_duration: '876000h' }], [bruno.id, { ban_duration: '876000h' }]])
   const mapa = JSON.parse(await readFile(join(opcoes.dir, 'mapa-usuarios.json')))
   expect(mapa.ana).toBe(existente.id)
   expect(Object.values(mapa).sort()).toEqual(
@@ -131,3 +134,58 @@ it('ignora todas as contas quando o mapa de perfis ainda não existe', async () 
   })
   expect(criarCliente).not.toHaveBeenCalled()
 })
+
+it('bloqueia a conta reutilizada e desativa seu perfil uma única vez no banco', async () => {
+  const opcoes = await preparar()
+  db = new PGlite()
+  await aplicarEsquema(db)
+  const arquivoAuth = join(opcoes.dir, 'auth.json')
+  const exportadas = JSON.parse(await readFile(arquivoAuth))
+  const contas = []
+  for (const conta of exportadas) {
+    if (conta.uid === 'bruno') conta.disabled = true
+    const id = crypto.randomUUID()
+    await db.query('insert into auth.users values ($1, $2)', [id, conta.email])
+    contas.push({ id, email: conta.email })
+  }
+  await writeFile(arquivoAuth, JSON.stringify(exportadas))
+  const bruno = contas.find(conta => conta.email === 'bruno@ubox.test')
+  const ana = contas.find(conta => conta.email === 'ana@ubox.test')
+  await db.query(
+    `insert into public.usuarios (id, firebase_uid, email, nome, papel, ativo)
+      values ($1, 'bruno', $2, 'Bruno', 'franqueado', true),
+             ($3, 'ana', $4, 'Ana', 'admin', false)`,
+    [bruno.id, bruno.email, ana.id, ana.email],
+  )
+  const consultar = () => db.query('select *, xmin::text as versao from public.usuarios order by id')
+  const updateUserById = vi.fn(async () => ({}))
+  const transaction = vi.fn(db.transaction.bind(db))
+  Object.assign(opcoes, {
+    criarCliente: () => ({ auth: { admin: {
+      listUsers: async () => ({ data: { users: contas } }),
+      updateUserById,
+    } } }),
+    abrirBanco: async () => ({ transaction }),
+  })
+
+  const antes = await consultar()
+  updateUserById.mockResolvedValueOnce({ error: new Error('bruno@ubox.test detalhe privado') })
+  const falha = aplicar(opcoes)
+  await expect(falha).rejects.toBeInstanceOf(ErroMigracao)
+  await expect(falha).rejects.toMatchObject({ message: 'Falha ao bloquear a conta b***@ubox.test.' })
+  expect(updateUserById).toHaveBeenCalledExactlyOnceWith(bruno.id, { ban_duration: '876000h' })
+  expect(transaction).not.toHaveBeenCalled()
+  expect(await consultar()).toEqual(antes)
+
+  await aplicar(opcoes)
+  const depois = await consultar()
+  expect(depois.rows.find(perfil => perfil.id === bruno.id).ativo).toBe(false)
+  expect(depois.rows.find(perfil => perfil.id === ana.id)).toEqual(
+    antes.rows.find(perfil => perfil.id === ana.id),
+  )
+  await aplicar(opcoes)
+  expect(await consultar()).toEqual(depois)
+  expect(updateUserById.mock.calls).toEqual(
+    Array.from({ length: 3 }, () => [bruno.id, { ban_duration: '876000h' }]),
+  )
+}, 30000)

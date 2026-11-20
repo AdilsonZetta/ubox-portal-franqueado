@@ -1,11 +1,12 @@
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, updateProfile, type User } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { mapUsuario } from './api'
 import { BACKEND } from './backend'
 import { requireAuth, requireDb } from './firebase'
 import { tratarLinkSenha } from './linkSenha'
+import { concluirRecuperacao, iniciarRecuperacao, limparRecuperacao, restaurarRecuperacao } from './marcadorRecuperacao'
 import { requireSupabase } from './supabase'
 import { cadastrarSupabase, carregarEstado, definirNovaSenha, entrarSupabase, gravarPerfilProprio, recuperarSupabase, sairSupabase } from './supabaseAuth'
 import type { Usuario } from '../types'
@@ -35,7 +36,10 @@ const AuthContext = createContext<AuthValue | null>(null)
 
 // Uma verificação por abertura do app, inclusive com StrictMode.
 const linkSenhaInicial = BACKEND === 'supabase' && typeof window !== 'undefined'
-  ? tratarLinkSenha(window, requireSupabase)
+  ? tratarLinkSenha(window, requireSupabase).then(resultado => {
+    if (resultado === 'recuperacao') iniciarRecuperacao()
+    return resultado
+  })
   : undefined
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -48,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const verificandoLinkSenha = linkSenhaInicial !== undefined && resultadoLinkSenha === undefined
   const [erro, setErro] = useState('')
   const [versao, setVersao] = useState(0)
+  const sessaoInicialVerificada = useRef(false)
 
   useEffect(() => {
     if (!linkSenhaInicial) return
@@ -85,13 +90,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('error')
         })
     }
-    const sessaoInicial = linkSenhaInicial
-      ? linkSenhaInicial.then(() => sb.auth.getSession())
-      : sb.auth.getSession()
-    void sessaoInicial.then(({ data }) => vivo && aplicar(data.session))
     const { data: assinatura } = sb.auth.onAuthStateChange((evento, sessao) => {
-      if (evento === 'PASSWORD_RECOVERY') setRecuperandoSenha(true)
-      if (evento === 'SIGNED_IN' || evento === 'SIGNED_OUT' || evento === 'USER_UPDATED') setTimeout(() => vivo && aplicar(sessao), 0)
+      if (evento === 'INITIAL_SESSION' && !sessaoInicialVerificada.current) {
+        sessaoInicialVerificada.current = true
+        setRecuperandoSenha(restaurarRecuperacao(sessao))
+      }
+      if (evento === 'PASSWORD_RECOVERY') {
+        iniciarRecuperacao()
+        setRecuperandoSenha(true)
+      }
+      if (evento === 'SIGNED_OUT') {
+        limparRecuperacao()
+        setRecuperandoSenha(false)
+      }
+      if (evento === 'INITIAL_SESSION' || evento === 'PASSWORD_RECOVERY' ||
+          evento === 'SIGNED_IN' || evento === 'SIGNED_OUT' || evento === 'USER_UPDATED') {
+        setTimeout(() => vivo && aplicar(sessao), 0)
+      }
     })
     return () => {
       vivo = false
@@ -164,6 +179,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       linkSenhaInvalido: resultadoLinkSenha === 'invalido',
       definirSenha: async (senha) => {
         await definirNovaSenha(senha)
+        const { data: { session } } = await requireSupabase().auth.getSession()
+        concluirRecuperacao(session)
         setRecuperandoSenha(false)
       },
       erro,
@@ -223,7 +240,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await sendPasswordResetEmail(requireAuth(), email.trim())
       },
       sair: async () => {
-        if (BACKEND === 'supabase') return sairSupabase()
+        if (BACKEND === 'supabase') {
+          await sairSupabase()
+          limparRecuperacao()
+          setRecuperandoSenha(false)
+          return
+        }
         await signOut(requireAuth())
       },
     }),
