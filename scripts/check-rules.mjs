@@ -1,6 +1,14 @@
 import { readFileSync } from 'node:fs'
 
+// As checagens leem o texto expandido: os atalhos novo()/velho()/uid()/autorOk()/mudou()/carimbo(x)
+// voltam a ser request.resource.data, resource.data etc. (troca textual idêntica, só para encurtar as regras).
 const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8')
+  .replace(/\bautorOk\(\)/g, 'request.resource.data.atualizadoPor == request.auth.uid')
+  .replace(/\bcarimbo\((\w+)\)/g, '$1.atualizadoPor == request.auth.uid && $1.atualizadoEm == request.time')
+  .replace(/\bmudou\(\)/g, 'request.resource.data.diff(resource.data).affectedKeys()')
+  .replace(/\bnovo\(\)/g, 'request.resource.data')
+  .replace(/\bvelho\(\)/g, 'resource.data')
+  .replace(/\buid\(\)/g, 'request.auth.uid')
 const erros = []
 
 function exigir(condicao, mensagem) {
