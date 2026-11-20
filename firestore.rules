@@ -3482,7 +3482,7 @@ service cloud.firestore {
     function recOk(r) {
       return r.keys().hasOnly(['texto', 'criadoEm', 'autor', 'geradoPorIA', 'iaModelo']) && r.keys().size() == 5
         && r.texto is string && r.texto.size() >= 2 && r.texto.size() <= 500
-        && r.criadoEm is timestamp && r.criadoEm <= request.time && validShort(r.autor, 40) && iaOk(r);
+        && r.criadoEm is timestamp && r.criadoEm <= request.time && r.autor is string && r.autor.matches('^[^ ]{1,40}$') && iaOk(r);
     }
 
     // Itens: o público lê enquanto o painel está ativo; a unidade lê e grava os do seu painel (getAfter: vale no lote da troca de link).
