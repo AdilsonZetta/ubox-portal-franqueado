@@ -1,6 +1,6 @@
 // Edge Function criar-conta: cria o login de uma pessoa nova (equipe ou responsável de unidade) e grava o perfil.
 // - A service_role só existe aqui, no servidor (variável SUPABASE_SERVICE_ROLE_KEY do próprio Supabase); nunca no app.
-// - Ela só cria/apaga o login. O perfil é gravado COM O TOKEN DE QUEM CHAMOU: o RLS e os gatilhos decidem
+// - Ela registra as tentativas e cria/apaga o login. O perfil é gravado COM O TOKEN DE QUEM CHAMOU: o RLS e os gatilhos decidem
 //   (usuarios_admin_cria, usuarios_franqueado_cria_equipe, criar_unidade_com_responsavel).
 // - Se o perfil for recusado, o login recém-criado é apagado (igual ao criarLoginEGravar do Firebase).
 // Feito por Grok Bot no Cursor (Antigravity sem cota).
@@ -65,18 +65,22 @@ Deno.serve(async (req) => {
   if (tipo === 'equipe' && !PAPEIS_CRIAVEIS.includes(String(corpo.papel))) return resposta(req, 400, { erro: 'Papel inválido.' })
 
   const admin = createClient(url, servico, { auth: { persistSession: false, autoRefreshToken: false } })
+  const { data: tentativaPermitida, error: erroLimite } = await admin.rpc('registrar_criacao_conta', { p_uid: sessao.user.id })
+  if (erroLimite || tentativaPermitida !== true) {
+    return resposta(req, 429, { erro: 'Muitas contas criadas em pouco tempo. Tente de novo em alguns minutos.' })
+  }
+
   const nome = texto(tipo === 'unidade' ? corpo.responsavel : corpo.nome, 120)
-  const { data: criado, error: erroLogin } = await admin.auth.admin.createUser({
+  const criacao = await admin.auth.admin.createUser({
     email,
     password: senha,
     email_confirm: true,
     user_metadata: { nome },
-  })
-  if (erroLogin || !criado.user) {
-    const jaExiste = /already|registered|exists/i.test(erroLogin?.message ?? '')
-    return resposta(req, jaExiste ? 409 : 400, { erro: jaExiste ? 'Já existe um login com esse e-mail.' : 'Não foi possível criar o login.' })
+  }).catch(() => null)
+  if (!criacao || criacao.error || !criacao.data?.user) {
+    return resposta(req, 400, { erro: 'Não foi possível criar o login. Confira os dados ou fale com a franqueadora.' })
   }
-  const novoId = criado.user.id
+  const novoId = criacao.data.user.id
 
   const gravacao = tipo === 'unidade'
     ? await comoQuemChamou.rpc('criar_unidade_com_responsavel', {
@@ -103,11 +107,12 @@ Deno.serve(async (req) => {
       })
 
   if (gravacao.error) {
-    const { error: erroApagar } = await admin.auth.admin.deleteUser(novoId)
-    const limpeza = erroApagar
-      ? 'Não foi possível apagar o login provisório. Use outro e-mail ou peça para remover essa conta antes de tentar de novo.'
-      : 'O login provisório foi apagado.'
-    return resposta(req, 403, { erro: `Não foi possível concluir o cadastro. ${limpeza} ${gravacao.error.message}` })
+    const exclusao = await admin.auth.admin.deleteUser(novoId).catch(() => null)
+    return resposta(req, 403, {
+      erro: !exclusao || exclusao.error
+        ? 'Não foi possível apagar o login provisório. Use outro e-mail ou peça para remover essa conta antes de tentar de novo.'
+        : 'Não foi possível concluir o cadastro. O login provisório foi apagado.',
+    })
   }
   return resposta(req, 200, { uid: novoId })
 })

@@ -197,6 +197,7 @@ Se a confirmação de e-mail estiver ligada, a alternativa é uma Edge Function 
   - O perfil é gravado com o token de quem chamou, então o RLS decide. Se a gravação for recusada, o login recém-criado é apagado.
   - Sem sessão válida, a função responde 401.
   - Foi publicada com `verify_jwt: false` porque ela mesma valida a sessão com `auth.getUser()`.
+  - Revisão (LOW): toda falha ao criar o login devolve a mesma mensagem, sem dizer se o e-mail já existe; a falha na gravação do perfil devolve uma frase fixa, sem o texto do Postgres; e há um limite de 10 criações por pessoa a cada 10 minutos (`registrar_criacao_conta`, só para a service_role; a tabela `criar_conta_tentativas` fica sem acesso pelo app e o aviso INFO do advisor é intencional).
 - **App:** com `VITE_BACKEND=supabase`, `gestao.ts` e `api.ts` usam o Supabase em:
   - listar usuários, unidades e equipe;
   - criar unidade e equipe;
