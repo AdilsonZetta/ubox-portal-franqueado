@@ -26,11 +26,6 @@ alter policy documento_versoes_ler on public.documento_versoes
   using ((select app.fase3_gere('manuais')));
 alter policy documento_versoes_criar on public.documento_versoes
   with check ((select app.fase3_gere('manuais')) and autor_id = (select auth.uid()));
-grant update (titulo, formato, conteudo_html, conteudo_texto, html_conteudo, html_url, autor_id, autor_nome)
-  on public.documento_versoes to authenticated;
-create policy documento_versoes_editar on public.documento_versoes for update to authenticated
-  using ((select app.fase3_gere('manuais')))
-  with check ((select app.fase3_gere('manuais')) and autor_id = (select auth.uid()));
 
 alter policy avisos_ler on public.avisos
   using ((select app.eh_admin()) or (
@@ -46,8 +41,3 @@ alter policy avisos_criar on public.avisos
       select 1 from public.documentos d where d.id = avisos.documento_id and d.status = 'publicado'
     )
   ));
-grant update (titulo, mensagem, publico, unidades, papeis, uids_extra, uids)
-  on public.avisos to authenticated;
-create policy avisos_editar on public.avisos for update to authenticated
-  using ((select app.fase3_gere('manuais')) and tipo in ('novo', 'atualizado') and documento_id <> '')
-  with check ((select app.fase3_gere('manuais')) and tipo in ('novo', 'atualizado') and documento_id <> '');

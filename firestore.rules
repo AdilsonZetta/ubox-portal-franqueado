@@ -802,11 +802,7 @@ service cloud.firestore {
         allow create: if gereTrilhaManuais(userData())
           && isValidVersao(novo())
           && criadoAgora();
-        allow update: if gereTrilhaManuais(userData())
-          && isValidVersao(novo())
-          && novo().criadoEm == velho().criadoEm
-          && novo().versao == velho().versao;
-        allow delete: if isAdmin();
+        allow update, delete: if false;
       }
     }
 
@@ -873,12 +869,7 @@ service cloud.firestore {
         && (isAdmin() || (gereTrilhaManuais(userData())
           && avisoDeDocumento(novo())
           && docAtual(novo().documentoId).status == 'publicado'));
-      allow update: if gereTrilhaManuais(userData())
-        && isValidAviso(novo())
-        && avisoDeDocumento(velho())
-        && novo().tipo == velho().tipo
-        && novo().documentoId == velho().documentoId
-        && novo().criadoEm == velho().criadoEm;
+      allow update: if false;
       allow delete: if isAdmin();
     }
 

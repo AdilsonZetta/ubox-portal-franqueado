@@ -195,7 +195,12 @@ for (const [indice, [caminho, criar, editar]] of gravacoesManuais.entries()) {
     })))
   }
   await caso(`gestor cria ${caminho}/${id}`, assertSucceeds(setDoc(ref, criar('eq-rede'))))
-  await caso(`gestor edita ${caminho}/${id}`, assertSucceeds(updateDoc(ref, editar('eq-rede'))))
+  if (caminho === 'categorias' || caminho === 'documentos') {
+    await caso(`gestor edita ${caminho}/${id}`, assertSucceeds(updateDoc(ref, editar('eq-rede'))))
+  } else {
+    await caso(`gestor não edita ${caminho}/${id}`, assertFails(updateDoc(ref, editar('eq-rede'))))
+    await caso(`admin não edita ${caminho}/${id}`, assertFails(updateDoc(doc(admin, caminho, id), editar('admin-1'))))
+  }
   await caso(`gestor não exclui ${caminho}/${id}`, assertFails(deleteDoc(ref)))
   await caso(`gestor não cria payload inválido em ${caminho}/${id}`, assertFails(setDoc(doc(equipeRede, caminho, `invalido-${id}`), {
     ...criar('eq-rede'), campoInvalido: true,
@@ -221,7 +226,8 @@ await caso('gestor não cria aviso de rascunho', assertFails(setDoc(doc(equipeRe
   ...gravacoesManuais.at(-1)[1](), documentoId: 'gestao-html',
 })))
 await caso('gestor não troca o número da versão', assertFails(updateDoc(doc(equipeRede, 'documentos', 'gestao-richtext', 'versoes', '1'), { versao: 2 })))
-await caso('admin exclui a versão antes de excluir o documento', assertSucceeds(deleteDoc(doc(admin, 'documentos', 'gestao-richtext', 'versoes', '1'))))
+await caso('admin não exclui a versão', assertFails(deleteDoc(doc(admin, 'documentos', 'gestao-richtext', 'versoes', '1'))))
+await caso('admin exclui o aviso', assertSucceeds(deleteDoc(doc(admin, 'avisos', 'gestao-aviso'))))
 await caso('admin exclui o documento', assertSucceeds(deleteDoc(doc(admin, 'documentos', 'gestao-richtext'))))
 await caso('admin exclui a categoria', assertSucceeds(deleteDoc(doc(admin, 'categorias', 'gestao-cat'))))
 
