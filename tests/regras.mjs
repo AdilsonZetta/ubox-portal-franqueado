@@ -1545,6 +1545,7 @@ await ambiente.withSecurityRulesDisabled(async (contexto) => {
   await setDoc(doc(banco, 'progressoManuais', 'x_doc-1'), { uid: 'x', documentoId: 'doc-1', unidadeId: 'un-ac', status: 'concluido' })
   await setDoc(doc(banco, 'manuaisTrilha', 'doc-1'), { titulo: 'Abertura', ordem: 1 })
   await setDoc(doc(banco, 'cursos', 'curso-1'), { titulo: 'Atendimento', publicado: true })
+  await setDoc(doc(banco, 'cursos', 'curso-rasc'), { titulo: 'Em preparo', publicado: false })
   await setDoc(doc(banco, 'marketingSolicitacoes', 'mk-ac'), { uid: 'fr-ac', unidadeId: 'un-ac', status: 'aberta' })
   const reg = (unidadeId, compartilhado) => ({
     unidadeId, unidadeNome: unidadeId === 'un-ac' ? 'Unidade Ac' : 'Outra Ac', data: criado, tipo: 'visita', notas: 'Visita de rotina.', compartilhado,
@@ -1561,6 +1562,9 @@ await ambiente.withSecurityRulesDisabled(async (contexto) => {
   await setDoc(doc(banco, 'acompanhamentoPassos', 'p-pub2'), passo('reg-pub', true))
   await setDoc(doc(banco, 'acompanhamentoPassos', 'p-priv'), passo('reg-priv', false))
   await setDoc(doc(banco, 'acompanhamentoPassos', 'p-val'), passo('reg-pub', true, 'validado'))
+  await setDoc(doc(banco, 'acompanhamentoRegistros', 'reg-solo'), reg('un-ac', true))
+  await setDoc(doc(banco, 'acompanhamentoPassos', 'p-solo'), passo('reg-solo', true))
+  await setDoc(doc(banco, 'acompanhamentoPassos', 'p-cruz'), passo('reg-outra', true))
 })
 const frAc = ambiente.authenticatedContext('fr-ac', { email: 'fr-ac@ubox.test' }).firestore()
 const eqAc = ambiente.authenticatedContext('eq-ac', { email: 'eq-ac@ubox.test' }).firestore()
@@ -1585,7 +1589,9 @@ await caso('ac: consultor não lê modelos de auditoria', assertFails(getDocs(co
 await caso('ac: consultor lê tentativas da Universidade', assertSucceeds(getDocs(collection(redeAc, 'tentativasProva'))))
 await caso('ac: consultor não lê a folha de respostas', assertFails(getDoc(doc(redeAc, 'tentativasProva', 'x_curso-1', 'folha', 'f'))))
 await caso('ac: consultor não lê gabaritos', assertFails(getDocs(collection(redeAc, 'provasGabarito'))))
-await caso('ac: consultor lê cursos', assertSucceeds(getDocs(collection(redeAc, 'cursos'))))
+await caso('ac: consultor lê cursos publicados', assertSucceeds(getDocs(query(collection(redeAc, 'cursos'), where('publicado', '==', true)))))
+await caso('ac: consultor não lista cursos sem filtrar publicados', assertFails(getDocs(collection(redeAc, 'cursos'))))
+await caso('ac: consultor não lê curso em preparo', assertFails(getDoc(doc(redeAc, 'cursos', 'curso-rasc'))))
 await caso('ac: consultor lê progresso e trilha de manuais', assertSucceeds(Promise.all([getDocs(collection(redeAc, 'progressoManuais')), getDocs(collection(redeAc, 'manuaisTrilha'))])))
 await caso('ac: consultor lê pedidos de marketing', assertSucceeds(getDocs(collection(redeAc, 'marketingSolicitacoes'))))
 await caso('ac: consultor não lista usuários', assertFails(getDocs(collection(redeAc, 'usuarios'))))
@@ -1633,9 +1639,11 @@ await caso('ac: passo de outra unidade que a do registro é recusado', assertFai
 await caso('ac: passo já nasce concluído é recusado', assertFails(setDoc(doc(redeAc, 'acompanhamentoPassos', 'p-x'), passoAc('reg-1', { status: 'concluido_unidade' }))))
 await caso('ac: passo sem registro é recusado', assertFails(setDoc(doc(redeAc, 'acompanhamentoPassos', 'p-x'), passoAc('reg-nao-existe'))))
 await caso('ac: franqueado não cria passo', assertFails(setDoc(doc(frAc, 'acompanhamentoPassos', 'p-x'), passoAc('reg-1', { atualizadoPor: 'fr-ac', atualizadoPorNome: 'Dono Ac' }))))
-const passosUn = (db, un) => getDocs(query(collection(db, 'acompanhamentoPassos'), where('unidadeId', '==', un), where('compartilhado', '==', true)))
+const passosUn = (db, un, registroId = 'reg-pub') => getDocs(query(collection(db, 'acompanhamentoPassos'), where('unidadeId', '==', un), where('compartilhado', '==', true), where('registroId', '==', registroId)))
 await caso('ac: franqueado lista passos compartilhados', assertSucceeds(passosUn(frAc, 'un-ac')))
 await caso('ac: unidade não lê passo interno', assertFails(getDoc(doc(frAc, 'acompanhamentoPassos', 'p-priv'))))
+await caso('ac: unidade não lê passo pendurado em registro de outra unidade', assertFails(getDoc(doc(frAc, 'acompanhamentoPassos', 'p-cruz'))))
+await caso('ac: franqueado lê passo de registro compartilhado', assertSucceeds(getDoc(doc(frAc, 'acompanhamentoPassos', 'p-solo'))))
 await caso('ac: outra unidade não lista os passos', assertFails(passosUn(frAc2, 'un-ac')))
 const feitoUn = (extra = {}) => ({ status: 'concluido_unidade', comentarioUnidade: 'Escala revisada e publicada.', atualizadoPor: 'fr-ac', atualizadoPorNome: 'Dono Ac', atualizadoEm: serverTimestamp(), ...extra })
 await caso('ac: franqueado não conclui sem comentário', assertFails(updateDoc(doc(frAc, 'acompanhamentoPassos', 'p-pub'), feitoUn({ comentarioUnidade: '' }))))
@@ -1646,6 +1654,7 @@ await caso('ac: outra unidade não conclui', assertFails(updateDoc(doc(frAc2, 'a
 await caso('ac: franqueado marca como feito com comentário', assertSucceeds(updateDoc(doc(frAc, 'acompanhamentoPassos', 'p-pub'), feitoUn())))
 await caso('ac: franqueadora não valida o que a unidade não concluiu', assertFails(updateDoc(doc(redeAc, 'acompanhamentoPassos', 'p-pub2'), atualRede({ status: 'validado' }))))
 await caso('ac: franqueadora não reescreve o comentário da unidade', assertFails(updateDoc(doc(redeAc, 'acompanhamentoPassos', 'p-pub'), atualRede({ comentarioUnidade: 'outro' }))))
+await caso('ac: franqueadora não reabre sem comentário', assertFails(updateDoc(doc(redeAc, 'acompanhamentoPassos', 'p-pub'), atualRede({ status: 'reaberto', comentarioFranqueadora: ' ' }))))
 await caso('ac: franqueadora reabre com comentário', assertSucceeds(updateDoc(doc(redeAc, 'acompanhamentoPassos', 'p-pub'), atualRede({ status: 'reaberto', comentarioFranqueadora: 'Falta a escala de domingo.' }))))
 await caso('ac: franqueado conclui de novo', assertSucceeds(updateDoc(doc(frAc, 'acompanhamentoPassos', 'p-pub'), feitoUn({ comentarioUnidade: 'Domingo incluído.' }))))
 await caso('ac: franqueadora valida', assertSucceeds(updateDoc(doc(redeAc, 'acompanhamentoPassos', 'p-pub'), atualRede({ status: 'validado' }))))
@@ -1659,6 +1668,11 @@ await caso('ac: passo não muda de visibilidade sozinho', assertFails(updateDoc(
   await caso('ac: deixar de compartilhar leva os passos junto (inclusive validados)', assertSucceeds(lote.commit()))
 }
 await caso('ac: unidade deixa de ver o registro descompartilhado', assertFails(getDoc(doc(frAc, 'acompanhamentoRegistros', 'reg-pub'))))
+// Registro descompartilhado sozinho (sem o lote dos passos): a unidade perde o acesso aos passos mesmo assim.
+await caso('ac: só o registro deixa de ser compartilhado', assertSucceeds(updateDoc(doc(redeAc, 'acompanhamentoRegistros', 'reg-solo'), atualRede({ compartilhado: false }))))
+await caso('ac: unidade não lê passo de registro descompartilhado', assertFails(getDoc(doc(frAc, 'acompanhamentoPassos', 'p-solo'))))
+await caso('ac: unidade não lista passos de registro descompartilhado', assertFails(passosUn(frAc, 'un-ac', 'reg-solo')))
+await caso('ac: franqueado não conclui passo de registro descompartilhado', assertFails(updateDoc(doc(frAc, 'acompanhamentoPassos', 'p-solo'), feitoUn())))
 await caso('ac: ninguém apaga passo', assertFails(deleteDoc(doc(adminAu, 'acompanhamentoPassos', 'p-pub'))))
 
 void manual

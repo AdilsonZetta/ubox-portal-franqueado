@@ -1967,7 +1967,8 @@ service cloud.firestore {
     match /cursos/{cursoId} {
       allow read: if isActive() && podeModulo('universidade') && resource.data.publicado == true;
       allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
-      allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      // Acompanhamento (Módulo 9): só cursos publicados (a consulta filtra publicado == true).
+      allow read: if resource.data.publicado == true ? (signedIn() && exists(userPath()) && gereAcompanhamento(userData())) : false;
       allow create, update: if request.resource.data.atualizadoPor == request.auth.uid ? (
           signedIn() && exists(userPath())
           && gereUniversidade(userData())
@@ -2770,6 +2771,11 @@ service cloud.firestore {
         && data.atualizadoEm == request.time;
     }
 
+    function registroCompartilhadoCom(registroId, unidadeId) {
+      return get(registroAcPath(registroId)).data.compartilhado == true
+        && get(registroAcPath(registroId)).data.unidadeId == unidadeId;
+    }
+
     function isValidPassoAc(data) {
       return data.keys().hasOnly(['registroId', 'unidadeId', 'descricao', 'responsavel', 'prazo', 'status', 'compartilhado', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
         && data.keys().hasAll(['registroId', 'unidadeId', 'descricao', 'responsavel', 'prazo', 'status', 'compartilhado', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
@@ -2814,9 +2820,11 @@ service cloud.firestore {
 
     match /acompanhamentoPassos/{passoId} {
       allow read: if signedIn() && exists(userPath()) && gereAcompanhamento(userData());
+      // Unidade: o passo e o registro-pai precisam estar compartilhados e ser da mesma unidade.
       allow read: if resource.data.compartilhado == true ? (
           signedIn() && exists(userPath())
           && daUnidadeAcompanhada(userData(), resource.data.unidadeId)
+          && registroCompartilhadoCom(resource.data.registroId, resource.data.unidadeId)
         ) : false;
 
       // Franqueadora: cria o passo combinado; a visibilidade acompanha o registro (inclusive em lote).
@@ -2843,7 +2851,8 @@ service cloud.firestore {
             ? request.resource.data.diff(resource.data).affectedKeys().hasOnly(['compartilhado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
             : (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'responsavel', 'prazo', 'compartilhado', 'comentarioFranqueadora', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
               && (request.resource.data.status == resource.data.status
-                || (resource.data.status == 'concluido_unidade' && request.resource.data.status in ['validado', 'reaberto']))))
+                || (resource.data.status == 'concluido_unidade' && request.resource.data.status in ['validado', 'reaberto']))
+              && (request.resource.data.status != 'reaberto' || resource.data.status == 'reaberto' || request.resource.data.comentarioFranqueadora.size() >= 2)))
         ) : false;
 
       // Franqueado da unidade: marca como feito, com comentário (a equipe só lê).
@@ -2854,6 +2863,7 @@ service cloud.firestore {
           signedIn() && exists(userPath())
           && userData().papel == 'franqueado'
           && daUnidadeAcompanhada(userData(), resource.data.unidadeId)
+          && registroCompartilhadoCom(resource.data.registroId, resource.data.unidadeId)
           && isValidPassoAc(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'comentarioUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])

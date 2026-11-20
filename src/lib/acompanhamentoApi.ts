@@ -105,7 +105,8 @@ export async function carregarAcompanhamento(unidadeId?: string): Promise<DadosA
       ),
     ),
     seguro(ler('tentativasProva').then((s) => s.docs.map((d) => mapTentativa(d.id, d.data())))),
-    seguro(getDocs(collection(banco, 'cursos')).then((s) => s.docs.filter((d) => d.data().publicado === true).length)),
+    // O consultor só lê cursos publicados (as rules exigem este filtro).
+    seguro(getDocs(query(collection(banco, 'cursos'), where('publicado', '==', true))).then((s) => s.size)),
     seguro(ler('progressoManuais').then((s) => s.docs.map((d) => mapProgresso(d.id, d.data())))),
     seguro(getDocs(collection(banco, 'manuaisTrilha')).then((s) => s.docs.filter((d) => d.data().ativo === true).length)),
     seguro(ler('marketingSolicitacoes').then((s) => s.docs.map((d) => mapPedido(d.id, d.data())))),
@@ -212,13 +213,15 @@ export async function decidirPasso(autor: Usuario, passo: PassoAc, status: 'vali
 export async function listarCompartilhados(unidadeId: string): Promise<{ registros: RegistroAc[]; passos: PassoAc[] }> {
   const banco = requireDb()
   const filtros = [where('unidadeId', '==', unidadeId), where('compartilhado', '==', true)]
-  const [r, p] = await Promise.all([
-    getDocs(query(collection(banco, 'acompanhamentoRegistros'), ...filtros)),
-    getDocs(query(collection(banco, 'acompanhamentoPassos'), ...filtros)),
-  ])
+  const r = await getDocs(query(collection(banco, 'acompanhamentoRegistros'), ...filtros))
+  const registros = r.docs.map((d) => mapRegistro(d.id, d.data())).sort((a, b) => b.dataMs - a.dataMs)
+  // Passos por registro compartilhado: as rules conferem o registro-pai, e o filtro por registroId deixa isso provável.
+  const listas = await Promise.all(
+    registros.map((reg) => getDocs(query(collection(banco, 'acompanhamentoPassos'), ...filtros, where('registroId', '==', reg.id)))),
+  )
   return {
-    registros: r.docs.map((d) => mapRegistro(d.id, d.data())).sort((a, b) => b.dataMs - a.dataMs),
-    passos: p.docs.map((d) => mapPasso(d.id, d.data())).sort((a, b) => a.prazoMs - b.prazoMs),
+    registros,
+    passos: listas.flatMap((p) => p.docs.map((d) => mapPasso(d.id, d.data()))).sort((a, b) => a.prazoMs - b.prazoMs),
   }
 }
 
