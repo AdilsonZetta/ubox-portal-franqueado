@@ -1,3 +1,13 @@
+import { BACKEND } from './backend'
+import {
+  enviarExecucaoSb,
+  lerExecucaoSb,
+  lerModeloSb,
+  listarExecucoesSb,
+  listarModelosSb,
+  salvarModeloSb,
+  salvarObsProprietarioSb,
+} from './checklistSupabase'
 import {
   collection,
   doc,
@@ -116,6 +126,7 @@ export function mapExecucao(id: string, d: DocumentData): ExecucaoChecklist {
 
 /** A franqueadora lê todos; a unidade junta os modelos da rede e os direcionados a ela. */
 export async function listarModelos(usuario: Pick<Usuario, 'unidadeId'>, gestor: boolean): Promise<ModeloChecklist[]> {
+  if (BACKEND === 'supabase') return listarModelosSb(usuario, gestor)
   const base = collection(requireDb(), 'checklistModelos')
   if (gestor) {
     const snap = await getDocs(base)
@@ -132,11 +143,13 @@ export async function listarModelos(usuario: Pick<Usuario, 'unidadeId'>, gestor:
 }
 
 export async function lerModelo(id: string): Promise<ModeloChecklist | null> {
+  if (BACKEND === 'supabase') return lerModeloSb(id)
   const snap = await getDoc(doc(requireDb(), 'checklistModelos', id))
   return snap.exists() ? mapModelo(snap.id, snap.data()) : null
 }
 
 export async function salvarModelo(autor: Usuario, existente: ModeloChecklist | null, f: ModeloForm): Promise<string> {
+  if (BACKEND === 'supabase') return salvarModeloSb(existente, f)
   const banco = requireDb()
   const ref = existente ? doc(banco, 'checklistModelos', existente.id) : doc(collection(banco, 'checklistModelos'))
   const itens = f.itens.map(normalizarItem)
@@ -175,6 +188,7 @@ export interface ConsultaExecucoes {
 
 /** Franqueadora: toda a rede (filtro opcional por unidade e datas). Unidade: só o próprio histórico. */
 export async function listarExecucoes(usuario: Pick<Usuario, 'unidadeId'>, gestor: boolean, c: ConsultaExecucoes = {}): Promise<ExecucaoChecklist[]> {
+  if (BACKEND === 'supabase') return listarExecucoesSb(usuario, gestor, c)
   const base = collection(requireDb(), 'checklistExecucoes')
   const filtros: QueryConstraint[] = []
   const unidade = gestor ? c.unidadeId : usuario.unidadeId
@@ -188,11 +202,13 @@ export async function listarExecucoes(usuario: Pick<Usuario, 'unidadeId'>, gesto
 }
 
 export async function lerExecucao(id: string): Promise<ExecucaoChecklist | null> {
+  if (BACKEND === 'supabase') return lerExecucaoSb(id)
   const snap = await getDoc(doc(requireDb(), 'checklistExecucoes', id))
   return snap.exists() ? mapExecucao(snap.id, snap.data()) : null
 }
 
 export async function enviarExecucao(autor: Usuario, modelo: ModeloChecklist, respostas: Resposta[], obsGeral: string): Promise<string> {
+  if (BACKEND === 'supabase') return enviarExecucaoSb(autor, modelo, respostas, obsGeral)
   const ref = doc(collection(requireDb(), 'checklistExecucoes'))
   const limpas = respostas.map((r) => ({
     itemId: r.itemId,
@@ -227,6 +243,7 @@ export async function enviarExecucao(autor: Usuario, modelo: ModeloChecklist, re
 }
 
 export async function salvarObsProprietario(autor: Usuario, id: string, textoObs: string): Promise<void> {
+  if (BACKEND === 'supabase') return salvarObsProprietarioSb(id, textoObs)
   await updateDoc(doc(requireDb(), 'checklistExecucoes', id), {
     obsProprietario: textoObs.trim().slice(0, 2000),
     obsProprietarioPor: autor.uid,
