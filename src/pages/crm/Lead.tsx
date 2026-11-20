@@ -20,7 +20,7 @@ import {
   type Proposta,
   type TipoAtividade,
 } from '../../lib/crm'
-import { atualizarLead, carregarDetalhe, criarProposta, mudarStatusProposta, registrarAtividade, salvarContato } from '../../lib/crmApi'
+import { type ContatoEditavel, atualizarLead, carregarDetalhe, criarProposta, mudarStatusProposta, registrarAtividade, salvarContato } from '../../lib/crmApi'
 import { EtapaSelo, RodapeModulo11, useCrm, useResponsaveis } from './partes'
 
 const dia = (ms: number) => (ms ? new Date(ms - new Date(ms).getTimezoneOffset() * 60_000).toISOString().slice(0, 10) : '')
@@ -38,7 +38,7 @@ export function LeadPage() {
   const [salvando, setSalvando] = useState(false)
   const [tique, setTique] = useState(0)
   const [motivo, setMotivo] = useState('')
-  const [editContato, setEditContato] = useState<{ nome: string; telefone: string; email: string } | null>(null)
+  const [editContato, setEditContato] = useState<ContatoEditavel | null>(null)
   const [at, setAt] = useState<{ tipo: TipoAtividade; texto: string; proximo: string; ia: boolean; iaModelo: string }>({ tipo: 'ligacao', texto: '', proximo: '', ia: false, iaModelo: '' })
   const [pr, setPr] = useState({ box: '', preco: '', periodoMeses: 1, validade: dia(Date.now() + 7 * 86_400_000), obs: '', ia: false, iaModelo: '' })
 
@@ -47,7 +47,7 @@ export function LeadPage() {
     if (!lead || dados.gestor || dados.simulando) return
     void carregarDetalhe(lead.unidadeId, lead.id).then((d) => { setAtividades(d.atividades); setPropostas(d.propostas) }).catch((f) => setErro(mensagemErro(f)))
   }, [lead?.id, lead?.unidadeId, dados.gestor, dados.simulando, tique]) // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => { if (lead) setPr((p) => (p.box ? p : { ...p, box: lead.interesseTamanho })) }, [lead])
+  useEffect(() => { if (contato) setPr((p) => (p.box ? p : { ...p, box: contato.interesseTamanho })) }, [contato])
 
   if (dados.gestor) return <Navigate to="/crm/gestao" replace />
   if (dados.carregando) return <Carregando texto="Carregando o lead…" />
@@ -86,7 +86,7 @@ export function LeadPage() {
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Lead · {lead.origem} · criado em {formatarData(lead.criadoEmMs)}</p>
           <h1 className="text-2xl font-black text-ink">{contato?.nome || 'Contato restrito à unidade'}</h1>
-          <p className="text-sm text-ink/65">{[lead.interesseTamanho, lead.interessePeriodo, lead.interesseUso].filter(Boolean).join(' · ') || 'Interesse não informado'}{lead.valorEstimadoCentavos ? ` · ${formatarReais(lead.valorEstimadoCentavos)}/mês` : ''}</p>
+          <p className="text-sm text-ink/65">{contato ? ([contato.interesseTamanho, contato.interessePeriodo, contato.interesseUso].filter(Boolean).join(' · ') || 'Interesse não informado') : ''}{lead.valorEstimadoCentavos ? ` · ${formatarReais(lead.valorEstimadoCentavos)}/mês` : ''}</p>
         </div>
         <div className="flex items-center gap-2"><EtapaSelo etapa={lead.etapa} />{lead.arquivado ? <Selo>Arquivado</Selo> : null}</div>
       </header>
@@ -177,12 +177,15 @@ export function LeadPage() {
         <div className="space-y-5">
           <section className="space-y-2 rounded-3xl border border-line bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold">Contato</h2>
-            <p className="text-xs text-ink/50">Visível só para a unidade.</p>
+            <p className="text-xs text-ink/50">Visível só para a unidade (inclui o interesse do cliente).</p>
             {editContato ? (
               <>
                 <Campo label="Nome"><input className={inputClass} maxLength={120} value={editContato.nome} onChange={(e) => setEditContato({ ...editContato, nome: e.target.value })} /></Campo>
                 <Campo label="Telefone"><input className={inputClass} maxLength={30} value={editContato.telefone} onChange={(e) => setEditContato({ ...editContato, telefone: e.target.value })} /></Campo>
                 <Campo label="E-mail"><input className={inputClass} maxLength={120} value={editContato.email} onChange={(e) => setEditContato({ ...editContato, email: e.target.value })} /></Campo>
+                <Campo label="Box / m² de interesse"><input className={inputClass} maxLength={60} value={editContato.interesseTamanho} onChange={(e) => setEditContato({ ...editContato, interesseTamanho: e.target.value })} /></Campo>
+                <Campo label="Período"><input className={inputClass} maxLength={60} value={editContato.interessePeriodo} onChange={(e) => setEditContato({ ...editContato, interessePeriodo: e.target.value })} /></Campo>
+                <Campo label="Uso"><input className={inputClass} maxLength={200} value={editContato.interesseUso} onChange={(e) => setEditContato({ ...editContato, interesseUso: e.target.value })} /></Campo>
                 <div className="flex gap-2">
                   <Button type="button" disabled={salvando} onClick={() => {
                     const erros = validarContato(editContato)
@@ -196,7 +199,7 @@ export function LeadPage() {
               <>
                 <p className="text-sm">{contato.telefone || 'sem telefone'}</p>
                 <p className="text-sm">{contato.email || 'sem e-mail'}</p>
-                <Button type="button" variant="secondary" disabled={bloqueado} onClick={() => setEditContato({ nome: contato.nome, telefone: contato.telefone, email: contato.email })}>Editar contato</Button>
+                <Button type="button" variant="secondary" disabled={bloqueado} onClick={() => { const { id: _id, ...resto } = contato; void _id; setEditContato(resto) }}>Editar contato</Button>
               </>
             ) : <p className="text-sm text-ink/50">Sem acesso aos dados pessoais nesta visão.</p>}
           </section>

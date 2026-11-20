@@ -91,7 +91,7 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
   const [erro, setErro] = useState('')
   const responsaveis = useResponsaveis(dados.pessoa, dados.leads)
   const filtrados = dados.leads.filter((l) => (!responsavel || l.responsavelUid === responsavel)
-    && (!busca.trim() || `${nomeDo(dados.contatos, l)} ${l.interesseTamanho} ${l.origem}`.toLowerCase().includes(busca.trim().toLowerCase())))
+    && (!busca.trim() || `${nomeDo(dados.contatos, l)} ${dados.contatos.get(l.id)?.interesseTamanho ?? ''} ${l.origem}`.toLowerCase().includes(busca.trim().toLowerCase())))
   const grupos = porEtapa(filtrados, mostrarArquivados)
   const colunas = mostrarFechados ? ETAPAS : ETAPAS_ABERTAS
 
@@ -136,7 +136,7 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
               return (
                 <article key={l.id} className={cx('space-y-1 rounded-xl border bg-white p-3 text-sm shadow-sm', atrasado(l, agora) ? 'border-red-300' : 'border-line', l.arquivado && 'opacity-60')}>
                   <Link to={`/crm/lead/${l.id}`} className="block font-semibold text-ink hover:text-brand-dark hover:underline">{nomeDo(dados.contatos, l)}</Link>
-                  <p className="text-xs text-ink/55">{l.origem}{l.interesseTamanho ? ` · ${l.interesseTamanho}` : ''}{l.valorEstimadoCentavos ? ` · ${formatarReais(l.valorEstimadoCentavos)}` : ''}</p>
+                  <p className="text-xs text-ink/55">{l.origem}{dados.contatos.get(l.id)?.interesseTamanho ? ` · ${dados.contatos.get(l.id)?.interesseTamanho}` : ''}{l.valorEstimadoCentavos ? ` · ${formatarReais(l.valorEstimadoCentavos)}` : ''}</p>
                   <p className="text-xs text-ink/55">Resp.: {l.responsavelNome}</p>
                   {l.etapa === 'perdido' ? <p className="text-xs text-red-700">Motivo: {l.motivoPerda}</p> : null}
                   {l.proximoContatoMs && !l.arquivado && ETAPAS_ABERTAS.includes(l.etapa) ? (

@@ -20,7 +20,7 @@ const DIA = 86_400_000
 const AGORA = new Date('2026-11-19T15:00:00').getTime()
 let n = 0
 const lead = (etapa: Etapa, extra: Partial<Lead> = {}): Lead => ({
-  id: `l${++n}`, unidadeId: 'u1', unidadeNome: 'U1', origem: 'Site', interesseTamanho: '', interessePeriodo: '', interesseUso: '', valorEstimadoCentavos: null,
+  id: `l${++n}`, unidadeId: 'u1', unidadeNome: 'U1', origem: 'Site', valorEstimadoCentavos: null,
   etapa, motivoPerda: etapa === 'perdido' ? 'Preço' : '', responsavelUid: 'a', responsavelNome: 'A', proximoContatoMs: 0, ultimaAtividadeMs: 0, arquivado: false,
   criadoEmMs: AGORA - 10 * DIA, etapaEmMs: 0, fechadoEmMs: etapa === 'ganho' || etapa === 'perdido' ? AGORA - 4 * DIA : 0, atualizadoPorNome: '', ...extra,
 })

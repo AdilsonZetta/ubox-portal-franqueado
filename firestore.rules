@@ -3207,20 +3207,18 @@ service cloud.firestore {
         : motivo in ['Preço', 'Sem box do tamanho', 'Escolheu concorrente', 'Desistiu', 'Sem retorno', 'Outro'];
     }
 
-    // Responsável: pessoa ativa da mesma unidade com o módulo.
-    function responsavelCrmOk(uid, unidadeId) {
+    // Responsável: pessoa ativa da mesma unidade com o módulo, com o nome exatamente igual ao do perfil.
+    function responsavelCrmOk(uid, nome, unidadeId) {
       return exists(/databases/$(database)/documents/usuarios/$(uid))
         && get(/databases/$(database)/documents/usuarios/$(uid)).data.unidadeId == unidadeId
+        && get(/databases/$(database)/documents/usuarios/$(uid)).data.nome == nome
         && unidadeCrm(get(/databases/$(database)/documents/usuarios/$(uid)).data);
     }
 
     function isValidLeadCrm(data) {
-      return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'origem', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'origem', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+      return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
         && data.origem is string && data.origem.size() >= 1 && data.origem.size() <= 40
-        && validShort(data.interesseTamanho, 60)
-        && validShort(data.interessePeriodo, 60)
-        && validShort(data.interesseUso, 200)
         && (data.valorEstimadoCentavos == null || (data.valorEstimadoCentavos is int && data.valorEstimadoCentavos >= 0 && data.valorEstimadoCentavos <= 100000000))
         && data.etapa in ['novo', 'contato', 'visita', 'proposta', 'ganho', 'perdido']
         && validShort(data.motivoPerda, 60)
@@ -3272,7 +3270,7 @@ service cloud.firestore {
           && request.resource.data.etapaEm == request.time
           && request.resource.data.ultimaAtividadeEm == null
           && origemCrmOk(request.resource.data.origem)
-          && responsavelCrmOk(request.resource.data.responsavelUid, request.resource.data.unidadeId)
+          && responsavelCrmOk(request.resource.data.responsavelUid, request.resource.data.responsavelNome, request.resource.data.unidadeId)
           // O contato (PII) nasce no mesmo lote, com o mesmo id.
           && getAfter(/databases/$(database)/documents/crmContatos/$(leadId)).data.unidadeId == request.resource.data.unidadeId
         ) : false;
@@ -3285,7 +3283,7 @@ service cloud.firestore {
           && resource.data.unidadeId == userData().unidadeId
           && isValidLeadCrm(request.resource.data)
           && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['origem', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
           && (resource.data.etapa in ['ganho', 'perdido']
             ? request.resource.data.diff(resource.data).affectedKeys().hasOnly(['arquivado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
             : (
@@ -3296,13 +3294,15 @@ service cloud.firestore {
               && (request.resource.data.ultimaAtividadeEm == resource.data.ultimaAtividadeEm || request.resource.data.ultimaAtividadeEm == request.time)
               && (request.resource.data.origem == resource.data.origem || origemCrmOk(request.resource.data.origem))
               && (request.resource.data.etapa != 'perdido' || motivoPerdaOk(request.resource.data.motivoPerda))
-              && (request.resource.data.responsavelUid == resource.data.responsavelUid || responsavelCrmOk(request.resource.data.responsavelUid, resource.data.unidadeId))
+              // Trocar o responsável (uid ou nome) sempre confere o perfil.
+              && ((request.resource.data.responsavelUid == resource.data.responsavelUid && request.resource.data.responsavelNome == resource.data.responsavelNome)
+                || responsavelCrmOk(request.resource.data.responsavelUid, request.resource.data.responsavelNome, resource.data.unidadeId))
             ))
         ) : false;
       allow delete: if false;
     }
 
-    // Dados pessoais do cliente: só a unidade (nem a franqueadora lê).
+    // Dados pessoais do cliente e o interesse em texto livre (tamanho, período, uso): só a unidade (nem a franqueadora lê).
     match /crmContatos/{leadId} {
       allow read: if signedIn() && exists(userPath())
         && unidadeCrm(userData())
@@ -3310,13 +3310,16 @@ service cloud.firestore {
       allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
           signedIn() && exists(userPath())
           && unidadeCrm(userData())
-          && request.resource.data.keys().hasOnly(['unidadeId', 'nome', 'telefone', 'email', 'atualizadoPor', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['unidadeId', 'nome', 'telefone', 'email', 'atualizadoPor', 'atualizadoEm'])
+          && request.resource.data.keys().hasOnly(['unidadeId', 'nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
+          && request.resource.data.keys().hasAll(['unidadeId', 'nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
           && request.resource.data.unidadeId == userData().unidadeId
           && validName(request.resource.data.nome)
           && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
           && request.resource.data.email is string && request.resource.data.email.size() <= 120
           && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+          && validShort(request.resource.data.interesseTamanho, 60)
+          && validShort(request.resource.data.interessePeriodo, 60)
+          && validShort(request.resource.data.interesseUso, 200)
           && request.resource.data.atualizadoEm == request.time
           && getAfter(crmLeadPath(leadId)).data.unidadeId == request.resource.data.unidadeId
         ) : false;
@@ -3324,11 +3327,14 @@ service cloud.firestore {
           signedIn() && exists(userPath())
           && unidadeCrm(userData())
           && resource.data.unidadeId == userData().unidadeId
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'email', 'atualizadoPor', 'atualizadoEm'])
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
           && validName(request.resource.data.nome)
           && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
           && request.resource.data.email is string && request.resource.data.email.size() <= 120
           && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+          && validShort(request.resource.data.interesseTamanho, 60)
+          && validShort(request.resource.data.interessePeriodo, 60)
+          && validShort(request.resource.data.interesseUso, 200)
           && request.resource.data.atualizadoEm == request.time
         ) : false;
       allow delete: if false;

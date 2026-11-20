@@ -46,9 +46,6 @@ export function mapLead(id: string, d: DocumentData): Lead {
     unidadeId: texto(d.unidadeId),
     unidadeNome: texto(d.unidadeNome),
     origem: texto(d.origem, 'Outro'),
-    interesseTamanho: texto(d.interesseTamanho),
-    interessePeriodo: texto(d.interessePeriodo),
-    interesseUso: texto(d.interesseUso),
     valorEstimadoCentavos: typeof d.valorEstimadoCentavos === 'number' ? d.valorEstimadoCentavos : null,
     etapa: umDe(ETAPAS, d.etapa, 'novo'),
     motivoPerda: texto(d.motivoPerda),
@@ -64,7 +61,10 @@ export function mapLead(id: string, d: DocumentData): Lead {
   }
 }
 
-const mapContato = (id: string, d: DocumentData): Contato => ({ id, nome: texto(d.nome), telefone: texto(d.telefone), email: texto(d.email) })
+const mapContato = (id: string, d: DocumentData): Contato => ({
+  id, nome: texto(d.nome), telefone: texto(d.telefone), email: texto(d.email),
+  interesseTamanho: texto(d.interesseTamanho), interessePeriodo: texto(d.interessePeriodo), interesseUso: texto(d.interesseUso),
+})
 
 const mapAtividade = (id: string, d: DocumentData): Atividade => ({
   id, leadId: texto(d.leadId), tipo: umDe(TIPOS_ATIVIDADE, d.tipo, 'nota'), texto: texto(d.texto), nome: texto(d.nome),
@@ -134,7 +134,10 @@ export async function carregarDetalhe(unidadeId: string, leadId: string): Promis
 const autoria = (autor: Usuario) => ({ atualizadoPor: autor.uid, atualizadoPorNome: autor.nome, atualizadoEm: serverTimestamp() })
 const dataOuNull = (dia: string) => (dia ? new Date(`${dia}T09:00:00`) : null)
 
-/** Lead (sem PII) e contato (PII) nascem juntos, no mesmo lote e com o mesmo id. */
+/**
+ * Lead (sem PII) e contato (PII + interesse em texto livre) nascem juntos, no mesmo lote e com o mesmo id.
+ * `responsavelNome` tem de ser exatamente o `nome` do perfil do responsável (as rules conferem).
+ */
 export async function criarLead(autor: Usuario, f: LeadForm, responsavelNome: string): Promise<string> {
   const banco = requireDb()
   const ref = doc(collection(banco, 'crmLeads'))
@@ -143,9 +146,6 @@ export async function criarLead(autor: Usuario, f: LeadForm, responsavelNome: st
     unidadeId: autor.unidadeId ?? '',
     unidadeNome: autor.unidade ?? '',
     origem: f.origem,
-    interesseTamanho: f.interesseTamanho.trim().slice(0, 60),
-    interessePeriodo: f.interessePeriodo.trim().slice(0, 60),
-    interesseUso: f.interesseUso.trim().slice(0, 200),
     valorEstimadoCentavos: f.valorEstimado.trim() ? centavos(f.valorEstimado) : null,
     etapa: 'novo',
     motivoPerda: '',
@@ -164,6 +164,7 @@ export async function criarLead(autor: Usuario, f: LeadForm, responsavelNome: st
     nome: f.nome.trim().slice(0, 120),
     telefone: f.telefone.trim().slice(0, 30),
     email: f.email.trim().slice(0, 120),
+    ...interesse(f),
     atualizadoPor: autor.uid,
     atualizadoEm: serverTimestamp(),
   })
@@ -171,9 +172,18 @@ export async function criarLead(autor: Usuario, f: LeadForm, responsavelNome: st
   return ref.id
 }
 
-export async function salvarContato(autor: Usuario, leadId: string, c: Pick<Contato, 'nome' | 'telefone' | 'email'>): Promise<void> {
+const interesse = (c: Pick<Contato, 'interesseTamanho' | 'interessePeriodo' | 'interesseUso'>) => ({
+  interesseTamanho: c.interesseTamanho.trim().slice(0, 60),
+  interessePeriodo: c.interessePeriodo.trim().slice(0, 60),
+  interesseUso: c.interesseUso.trim().slice(0, 200),
+})
+
+export type ContatoEditavel = Omit<Contato, 'id'>
+
+export async function salvarContato(autor: Usuario, leadId: string, c: ContatoEditavel): Promise<void> {
   await updateDoc(doc(requireDb(), 'crmContatos', leadId), {
     nome: c.nome.trim().slice(0, 120), telefone: c.telefone.trim().slice(0, 30), email: c.email.trim().slice(0, 120),
+    ...interesse(c),
     atualizadoPor: autor.uid, atualizadoEm: serverTimestamp(),
   })
 }
@@ -186,9 +196,6 @@ export interface MudancaLead {
   proximoContato?: string | null
   arquivado?: boolean
   origem?: string
-  interesseTamanho?: string
-  interessePeriodo?: string
-  interesseUso?: string
   valorEstimado?: string
 }
 
@@ -200,16 +207,14 @@ export async function atualizarLead(autor: Usuario, lead: Lead, m: MudancaLead):
     dados.motivoPerda = m.etapa === 'perdido' ? (m.motivoPerda ?? '').slice(0, 60) : ''
     dados.fechadoEm = m.etapa === 'ganho' || m.etapa === 'perdido' ? serverTimestamp() : null
   }
-  if (m.responsavelUid && m.responsavelUid !== lead.responsavelUid) {
+  // Uid e nome vão sempre juntos; o nome é o do perfil (as rules conferem os dois).
+  if (m.responsavelUid && (m.responsavelUid !== lead.responsavelUid || (m.responsavelNome ?? '') !== lead.responsavelNome)) {
     dados.responsavelUid = m.responsavelUid
     dados.responsavelNome = m.responsavelNome ?? ''
   }
   if (m.proximoContato !== undefined) dados.proximoContato = m.proximoContato ? dataOuNull(m.proximoContato) : null
   if (m.arquivado !== undefined) dados.arquivado = m.arquivado
   if (m.origem !== undefined) dados.origem = m.origem
-  if (m.interesseTamanho !== undefined) dados.interesseTamanho = m.interesseTamanho.trim().slice(0, 60)
-  if (m.interessePeriodo !== undefined) dados.interessePeriodo = m.interessePeriodo.trim().slice(0, 60)
-  if (m.interesseUso !== undefined) dados.interesseUso = m.interesseUso.trim().slice(0, 200)
   if (m.valorEstimado !== undefined) dados.valorEstimadoCentavos = m.valorEstimado.trim() ? centavos(m.valorEstimado) : null
   await updateDoc(doc(requireDb(), 'crmLeads', lead.id), dados)
 }

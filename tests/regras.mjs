@@ -1963,7 +1963,7 @@ await ambiente.withSecurityRulesDisabled(async (contexto) => {
   await setDoc(doc(banco, 'usuarios', 'eq-rede-crm'), usuario('eq-rede-crm', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['crm'], nome: 'Comercial Rede' }))
   await setDoc(doc(banco, 'usuarios', 'eq-rede-nocrm'), usuario('eq-rede-nocrm', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['checklist'], nome: 'Rede Sem Crm' }))
   const lead = (unidadeId, etapa, extra = {}) => ({
-    unidadeId, unidadeNome: unidadeId === 'un-crm' ? 'Unidade Crm' : 'Outra Crm', origem: 'Site', interesseTamanho: '6 m²', interessePeriodo: '3 meses', interesseUso: 'Mudança',
+    unidadeId, unidadeNome: unidadeId === 'un-crm' ? 'Unidade Crm' : 'Outra Crm', origem: 'Site',
     valorEstimadoCentavos: 28990, etapa, motivoPerda: etapa === 'perdido' ? 'Preço' : '', responsavelUid: 'eq-crm', responsavelNome: 'Vendedora Crm',
     proximoContato: null, ultimaAtividadeEm: null, arquivado: false, criadoEm: criado, etapaEm: criado, fechadoEm: etapa === 'ganho' || etapa === 'perdido' ? criado : null,
     atualizadoPor: 'fr-crm', atualizadoPorNome: 'Dono Crm', atualizadoEm: criado, ...extra,
@@ -1972,7 +1972,7 @@ await ambiente.withSecurityRulesDisabled(async (contexto) => {
   await setDoc(doc(banco, 'crmLeads', 'ld-2'), lead('un-crm', 'proposta'))
   await setDoc(doc(banco, 'crmLeads', 'ld-ganho'), lead('un-crm', 'ganho'))
   await setDoc(doc(banco, 'crmLeads', 'ld-outra'), lead('un-crm2', 'novo', { responsavelUid: 'fr-crm2', responsavelNome: 'Dono Outra Crm' }))
-  const contato = (unidadeId) => ({ unidadeId, nome: 'Maria Cliente', telefone: '(34) 99999-0000', email: 'maria@cliente.test', atualizadoPor: 'fr-crm', atualizadoEm: criado })
+  const contato = (unidadeId) => ({ unidadeId, nome: 'Maria Cliente', telefone: '(34) 99999-0000', email: 'maria@cliente.test', interesseTamanho: '6 m²', interessePeriodo: '3 meses', interesseUso: 'Mudança', atualizadoPor: 'fr-crm', atualizadoEm: criado })
   await setDoc(doc(banco, 'crmContatos', 'ld-1'), contato('un-crm'))
   await setDoc(doc(banco, 'crmContatos', 'ld-outra'), contato('un-crm2'))
   await setDoc(doc(banco, 'crmAtividades', 'at-1'), { leadId: 'ld-1', unidadeId: 'un-crm', tipo: 'ligacao', texto: 'Ligou pedindo preço', uid: 'eq-crm', nome: 'Vendedora Crm', geradoPorIA: false, iaModelo: '', criadoEm: criado })
@@ -2008,19 +2008,25 @@ await caso('crm: unidade e rede leem a configuração', assertSucceeds(Promise.a
 
 // Criação do lead (lead + contato no mesmo lote)
 const novoLead = (extra = {}) => ({
-  unidadeId: 'un-crm', unidadeNome: 'Unidade Crm', origem: 'Instagram', interesseTamanho: '3 m²', interessePeriodo: '1 mês', interesseUso: 'Estoque de loja',
+  unidadeId: 'un-crm', unidadeNome: 'Unidade Crm', origem: 'Instagram',
   valorEstimadoCentavos: null, etapa: 'novo', motivoPerda: '', responsavelUid: 'eq-crm', responsavelNome: 'Vendedora Crm', proximoContato: new Date(Date.now() + 86400000),
   ultimaAtividadeEm: null, arquivado: false, criadoEm: serverTimestamp(), etapaEm: serverTimestamp(), fechadoEm: null,
   atualizadoPor: 'eq-crm', atualizadoPorNome: 'Vendedora Crm', atualizadoEm: serverTimestamp(), ...extra,
 })
-const novoContato = (extra = {}) => ({ unidadeId: 'un-crm', nome: 'João Cliente', telefone: '+55 34 98888-1111', email: 'joao@cliente.test', atualizadoPor: 'eq-crm', atualizadoEm: serverTimestamp(), ...extra })
+const novoContato = (extra = {}) => ({ unidadeId: 'un-crm', nome: 'João Cliente', telefone: '+55 34 98888-1111', email: 'joao@cliente.test', interesseTamanho: '3 m²', interessePeriodo: '1 mês', interesseUso: 'Estoque de loja', atualizadoPor: 'eq-crm', atualizadoEm: serverTimestamp(), ...extra })
 async function criarLeadLote(db, id, l = {}, c = {}) {
   const lote = writeBatch(db)
   lote.set(doc(db, 'crmLeads', id), novoLead(l))
-  lote.set(doc(db, 'crmContatos', id), novoContato(c))
+  // valor undefined = campo ausente (testa chaves obrigatórias sem erro do SDK)
+  lote.set(doc(db, 'crmContatos', id), Object.fromEntries(Object.entries(novoContato(c)).filter(([, v]) => v !== undefined)))
   return lote.commit()
 }
 await caso('crm: equipe cria lead com contato no lote', assertSucceeds(criarLeadLote(eqCrm, 'ld-n1')))
+await caso('crm: responsável com nome inventado na criação é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x14', { responsavelNome: 'Gerente Fantasma' })))
+await caso('crm: interesseUso no lead (sem PII) é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x15', { interesseUso: 'Guardar móveis da separação' })))
+await caso('crm: interesse em texto livre no lead é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x16', { interesseTamanho: '6 m²', interessePeriodo: '3 meses' })))
+await caso('crm: contato sem os campos de interesse é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x17', {}, { interesseUso: undefined, interesseTamanho: undefined, interessePeriodo: undefined })))
+await caso('crm: interesseUso acima de 200 caracteres é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x18', {}, { interesseUso: 'x'.repeat(201) })))
 await caso('crm: lead sem o contato é recusado', assertFails(setDoc(doc(eqCrm, 'crmLeads', 'ld-x'), novoLead())))
 await caso('crm: contato sem o lead é recusado', assertFails(setDoc(doc(eqCrm, 'crmContatos', 'ld-x2'), novoContato())))
 await caso('crm: lead com nome/telefone no doc sem PII é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x3', { nome: 'João', telefone: '3499' })))
@@ -2043,6 +2049,10 @@ await caso('crm: perdido sem motivo é recusado', assertFails(updateDoc(doc(eqCr
 await caso('crm: perdido com motivo fora da lista é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'perdido', motivoPerda: 'Não gostei', etapaEm: serverTimestamp(), fechadoEm: serverTimestamp() }))))
 await caso('crm: ganho sem data de fechamento é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'ganho', etapaEm: serverTimestamp() }))))
 await caso('crm: reatribuir para pessoa de outra unidade é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ responsavelUid: 'fr-crm2', responsavelNome: 'Dono Outra Crm' }))))
+await caso('crm: reescrever o nome do responsável com o mesmo uid é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ responsavelNome: 'Outro Nome Qualquer' }))))
+await caso('crm: reatribuir com nome diferente do perfil é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ responsavelUid: 'fr-crm', responsavelNome: 'Dono Falso' }))))
+await caso('crm: interesseUso não entra no lead por atualização', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ interesseUso: 'Mudança' }))))
+await caso('crm: unidade edita o interesse no contato', assertSucceeds(updateDoc(doc(eqCrm, 'crmContatos', 'ld-1'), { interesseUso: 'Guardar estoque', interessePeriodo: '6 meses', atualizadoPor: 'eq-crm', atualizadoEm: serverTimestamp() })))
 await caso('crm: franqueado reatribui para si', assertSucceeds(updateDoc(doc(frCrm, 'crmLeads', 'ld-1'), { responsavelUid: 'fr-crm', responsavelNome: 'Dono Crm', atualizadoPor: 'fr-crm', atualizadoPorNome: 'Dono Crm', atualizadoEm: serverTimestamp() })))
 await caso('crm: lead não muda de unidade', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ unidadeId: 'un-crm2' }))))
 await caso('crm: lead não muda a data de criação', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ criadoEm: new Date('2020-01-01T00:00:00Z') }))))

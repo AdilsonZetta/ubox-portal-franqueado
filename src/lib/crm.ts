@@ -32,9 +32,6 @@ export interface Lead {
   unidadeId: string
   unidadeNome: string
   origem: string
-  interesseTamanho: string
-  interessePeriodo: string
-  interesseUso: string
   valorEstimadoCentavos: number | null
   etapa: Etapa
   motivoPerda: string
@@ -49,12 +46,15 @@ export interface Lead {
   atualizadoPorNome: string
 }
 
-/** Dados pessoais do cliente: só a unidade lê. */
+/** Dados pessoais do cliente e o interesse em texto livre: só a unidade lê. */
 export interface Contato {
   id: string
   nome: string
   telefone: string
   email: string
+  interesseTamanho: string
+  interessePeriodo: string
+  interesseUso: string
 }
 
 export interface Atividade {

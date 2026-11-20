@@ -126,6 +126,8 @@ exigir(rules.includes("dados.papel == 'equipe_franqueadora' && temLista(dados, '
   exigir(ini > 0 && !bloco.includes('gereCrm') && !bloco.includes('isAdmin'), 'dados pessoais do CRM legíveis pela franqueadora')
   const lead = rules.slice(rules.indexOf('function isValidLeadCrm'), rules.indexOf('match /crmConfig'))
   exigir(!/'(nome|telefone|email)'/.test(lead), 'PII voltou para o doc do lead (lido pela franqueadora)')
+  exigir(!lead.includes('interesse'), 'interesse em texto livre no lead do CRM (deve ficar em crmContatos)')
+  exigir(rules.includes('.data.nome == nome') && rules.includes('function responsavelCrmOk(uid, nome, unidadeId)'), 'responsavelNome do CRM sem conferir o perfil')
   const ativ = rules.slice(rules.indexOf('match /crmAtividades/{atividadeId}'), rules.indexOf('match /crmPropostas/{propostaId}'))
   exigir(!ativ.includes('gereCrm') && ativ.includes('allow update, delete: if false;'), 'atividades do CRM legíveis pela franqueadora ou editáveis')
 }
