@@ -187,6 +187,51 @@ export function RecuperarPage() {
   )
 }
 
+/** Supabase: tela aberta pelo link de redefinição (também o "primeiro acesso" de quem veio do Firebase). */
+export function NovaSenhaPage() {
+  const { definirSenha } = useAuth()
+  const [senha, setSenha] = useState('')
+  const [confirma, setConfirma] = useState('')
+  const [erro, setErro] = useState('')
+  const [ocupado, setOcupado] = useState(false)
+
+  async function enviar(evento: FormEvent) {
+    evento.preventDefault()
+    if (senha !== confirma) {
+      setErro('As senhas não conferem.')
+      return
+    }
+    setOcupado(true)
+    setErro('')
+    try {
+      await definirSenha(senha)
+    } catch (falha) {
+      setErro(mensagemErro(falha))
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  return (
+    <Moldura>
+      <h2 className="text-2xl font-extrabold">Criar nova senha</h2>
+      <p className="mt-2 text-sm text-ink/60">Escolha a senha que você vai usar para entrar no portal.</p>
+      <form onSubmit={enviar} className="mt-6 space-y-4">
+        {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+        <Campo label="Nova senha">
+          <input className={inputClass} type="password" required minLength={6} autoComplete="new-password" value={senha} onChange={(e) => setSenha(e.target.value)} />
+        </Campo>
+        <Campo label="Repita a senha">
+          <input className={inputClass} type="password" required minLength={6} autoComplete="new-password" value={confirma} onChange={(e) => setConfirma(e.target.value)} />
+        </Campo>
+        <Button type="submit" className="w-full" disabled={ocupado}>
+          Salvar senha
+        </Button>
+      </form>
+    </Moldura>
+  )
+}
+
 export function AguardandoPage() {
   const { status, user, sair } = useAuth()
   const navigate = useNavigate()
@@ -211,8 +256,8 @@ export function AguardandoPage() {
 }
 
 export function CompletarPage() {
-  const { status, firebaseUser, completarCadastro } = useAuth()
-  const [form, setForm] = useState({ nome: firebaseUser?.displayName ?? '', unidade: '', cidade: '' })
+  const { status, nomeSugerido, completarCadastro } = useAuth()
+  const [form, setForm] = useState({ nome: nomeSugerido, unidade: '', cidade: '' })
   const [erro, setErro] = useState('')
   if (status === 'ready') return <Navigate to="/" replace />
   if (status === 'signedOut') return <Navigate to="/entrar" replace />
