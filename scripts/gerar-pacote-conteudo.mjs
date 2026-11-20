@@ -124,7 +124,7 @@ async function gerarPacote(origem, geradoEm, { tempoSugeridoSeg, htmlParaTexto }
     categoria('pops', 'POPs — Procedimentos Operacionais Padrão', 2),
     categoria('interativos', 'Interativos', 3),
     ...manuais.map((manual, indice) => categoria(
-      manual.categoriaPops, `POPs — ${manual.documento.titulo}`, indice + 1, 'pops',
+      manual.categoriaPops, `POPs — ${manual.documento.titulo.replace(/\s+—\s+UBOX Self Storage$/, "")}`, indice + 1, 'pops',
     )),
   ]
   const pops = fontesPops.map((material) => {
