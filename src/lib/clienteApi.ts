@@ -1,3 +1,9 @@
+import { BACKEND } from './backend'
+import {
+  agendarVisitaSb, atualizarPainelSb, carregarClientesSb, carregarCobrancasDaUnidadeSb, carregarItensSb,
+  criarClienteSb, lancarCobrancaSb, lerPainelPublicoSb, marcarCobrancaSb, mudarVisitaSb, publicarRecadoSb,
+  salvarClienteSb, trocarLinkSb,
+} from './clienteSupabase'
 import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch, type DocumentData } from 'firebase/firestore'
 import { requireDb } from './firebase'
 import { paraMillis } from './format'
@@ -74,6 +80,7 @@ const mapRecado = (id: string, r: DocumentData): Recado => ({
 
 /** Itens do painel (subcoleções). As rules liberam para o público só enquanto o painel está ativo. */
 export async function carregarItens(token: string): Promise<ItensPainel> {
+  if (BACKEND === 'supabase') return carregarItensSb(token)
   const banco = requireDb()
   const [c, v, r] = await Promise.all(['cobrancas', 'visitas', 'recados'].map((sub) => getDocs(collection(banco, 'clientePaineis', token, sub))))
   return {
@@ -85,6 +92,7 @@ export async function carregarItens(token: string): Promise<ItensPainel> {
 
 /** Cobranças de cada cliente ativo (para os números da unidade). */
 export async function carregarCobrancasDaUnidade(paineis: Map<string, Painel>): Promise<Map<string, Cobranca[]>> {
+  if (BACKEND === 'supabase') return carregarCobrancasDaUnidadeSb(paineis)
   const banco = requireDb()
   const pares = await Promise.all([...paineis.values()].map(async (p) => {
     const snap = await getDocs(collection(banco, 'clientePaineis', p.token, 'cobrancas'))
@@ -94,24 +102,29 @@ export async function carregarCobrancasDaUnidade(paineis: Map<string, Painel>): 
 }
 
 export async function lancarCobranca(painel: Painel, c: Omit<Cobranca, 'id'>): Promise<void> {
+  if (BACKEND === 'supabase') return lancarCobrancaSb(painel, c)
   const ref = doc(requireDb(), 'clientePaineis', painel.token, 'cobrancas', c.competencia)
   if ((await getDoc(ref)).exists()) throw new Error('Já existe cobrança para esse mês.')
   await setDoc(ref, { competencia: c.competencia, valorCentavos: c.valorCentavos, vencimento: c.vencimento, status: c.status, pagoEm: c.pagoEm })
 }
 
 export async function marcarCobranca(painel: Painel, competencia: string, pago: boolean, dia: string): Promise<void> {
+  if (BACKEND === 'supabase') return marcarCobrancaSb(painel, competencia, pago, dia)
   await updateDoc(doc(requireDb(), 'clientePaineis', painel.token, 'cobrancas', competencia), { status: pago ? 'pago' : 'pendente', pagoEm: pago ? dia : '' })
 }
 
 export async function agendarVisita(painel: Painel, v: Omit<Visita, 'id' | 'status'>): Promise<void> {
+  if (BACKEND === 'supabase') return agendarVisitaSb(painel, v)
   await setDoc(doc(collection(requireDb(), 'clientePaineis', painel.token, 'visitas')), { data: v.data, hora: v.hora, motivo: v.motivo.trim().slice(0, 200), status: 'agendada' })
 }
 
 export async function mudarVisita(painel: Painel, id: string, status: Exclude<StatusVisita, 'agendada'>): Promise<void> {
+  if (BACKEND === 'supabase') return mudarVisitaSb(painel, id, status)
   await updateDoc(doc(requireDb(), 'clientePaineis', painel.token, 'visitas', id), { status })
 }
 
 export async function publicarRecado(painel: Painel, r: { texto: string; autor: string; geradoPorIA: boolean; iaModelo: string }): Promise<void> {
+  if (BACKEND === 'supabase') return publicarRecadoSb(painel, r)
   await setDoc(doc(collection(requireDb(), 'clientePaineis', painel.token, 'recados')), {
     texto: r.texto.trim().slice(0, 500), criadoEm: serverTimestamp(), autor: autorRecado(r.autor), geradoPorIA: r.geradoPorIA, iaModelo: r.geradoPorIA ? r.iaModelo.trim().slice(0, 80) : '',
   })
@@ -119,6 +132,7 @@ export async function publicarRecado(painel: Painel, r: { texto: string; autor: 
 
 /** Unidade: clientes (PII) e painéis da própria unidade, sempre com o filtro que as rules exigem. */
 export async function carregarClientes(unidadeId: string): Promise<{ clientes: Cliente[]; paineis: Map<string, Painel> }> {
+  if (BACKEND === 'supabase') return carregarClientesSb(unidadeId)
   const banco = requireDb()
   const [c, p] = await Promise.all([
     getDocs(query(collection(banco, 'clientes'), where('unidadeId', '==', unidadeId))),
@@ -133,6 +147,7 @@ export async function carregarClientes(unidadeId: string): Promise<{ clientes: C
 
 /** Link público: lê só o painel do token (sem login). Desativado/inexistente → null. */
 export async function lerPainelPublico(token: string): Promise<Painel | null> {
+  if (BACKEND === 'supabase') return lerPainelPublicoSb(token)
   if (!tokenValido(token)) return null
   try {
     const snap = await getDoc(doc(requireDb(), 'clientePaineis', token))
@@ -155,6 +170,7 @@ const pessoais = (f: ClienteForm) => ({ nome: f.nome.trim().slice(0, 120), telef
 
 /** Cliente (PII) e painel (sem PII, link desativado) nascem juntos, no mesmo lote. */
 export async function criarCliente(autor: Usuario, f: ClienteForm, contatoUnidade: string): Promise<string> {
+  if (BACKEND === 'supabase') return criarClienteSb(autor, f, contatoUnidade)
   const banco = requireDb()
   const ref = doc(collection(banco, 'clientes'))
   const token = gerarToken()
@@ -170,6 +186,7 @@ export async function criarCliente(autor: Usuario, f: ClienteForm, contatoUnidad
 
 /** Edita o cadastro e espelha no painel só o que o cliente pode ver (primeiro nome e contrato). */
 export async function salvarCliente(autor: Usuario, cliente: Cliente, f: ClienteForm, status: Cliente['status']): Promise<void> {
+  if (BACKEND === 'supabase') return salvarClienteSb(cliente, f, status)
   const banco = requireDb()
   const lote = writeBatch(banco)
   lote.update(doc(banco, 'clientes', cliente.id), { ...pessoais(f), ...contrato(f), status, ...autoria(autor) })
@@ -180,11 +197,13 @@ export async function salvarCliente(autor: Usuario, cliente: Cliente, f: Cliente
 export type MudancaPainel = Partial<Pick<Painel, 'ativo' | 'contatoUnidade'>>
 
 export async function atualizarPainel(painel: Painel, m: MudancaPainel): Promise<void> {
+  if (BACKEND === 'supabase') return atualizarPainelSb(painel, m)
   await updateDoc(doc(requireDb(), 'clientePaineis', painel.token), { ...m, atualizadoEm: serverTimestamp() })
 }
 
 /** Troca o link (ex.: o antigo vazou): painel novo com cópia dos itens, cliente aponta para ele e o antigo é desativado, num lote só. */
 export async function trocarLink(autor: Usuario, cliente: Cliente, painel: Painel, itens: ItensPainel): Promise<string> {
+  if (BACKEND === 'supabase') return trocarLinkSb(cliente, painel)
   const banco = requireDb()
   const token = gerarToken()
   const lote = writeBatch(banco)

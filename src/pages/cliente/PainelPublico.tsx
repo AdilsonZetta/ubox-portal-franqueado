@@ -4,8 +4,17 @@ import { Logo } from '../../components/Logo'
 import { Carregando } from '../../components/ui'
 import { formatarData } from '../../lib/format'
 import { ITENS_VAZIOS, RECADOS_NO_LINK, ROTULO_VISITA, formatarCompetencia, formatarDiaISO, formatarReais, hojeISO, resumoCobrancas, situacao, type ItensPainel, type Painel } from '../../lib/cliente'
+import { BACKEND } from '../../lib/backend'
+import { carregarPainelPublicoSb } from '../../lib/clienteSupabase'
 import { carregarItens, lerPainelPublico } from '../../lib/clienteApi'
 import { RodapeModulo12, SituacaoSelo, diaDe } from './partes'
+
+async function carregarPainelFirebase(token: string) {
+  // Mesmo comportamento de antes: o painel lido volta como veio; itens só se estiver ativo.
+  const painel = await lerPainelPublico(token)
+  const itens = painel?.ativo ? await carregarItens(token).catch(() => ITENS_VAZIOS) : ITENS_VAZIOS
+  return { painel, itens }
+}
 
 /** Página pública do locatário: abre por link secreto, sem login. Só lê o painel do token. */
 export function PainelClientePage() {
@@ -17,11 +26,14 @@ export function PainelClientePage() {
 
   useEffect(() => {
     let ativo = true
-    void lerPainelPublico(token)
-      .then(async (p) => {
-        const i = p?.ativo ? await carregarItens(token).catch(() => ITENS_VAZIOS) : ITENS_VAZIOS
-        if (ativo) { setPainel(p); setItens(i); setCarregando(false) }
-      })
+    const leitura = BACKEND === 'supabase' ? carregarPainelPublicoSb(token) : carregarPainelFirebase(token)
+    void leitura.then((dados) => {
+      if (ativo) {
+        setPainel(dados?.painel ?? null)
+        setItens(dados?.itens ?? ITENS_VAZIOS)
+        setCarregando(false)
+      }
+    })
     return () => { ativo = false }
   }, [token])
 
