@@ -13,9 +13,12 @@
     "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes --project ubox-portal-franqueado",
     "make-admin": "node scripts/make-admin.mjs",
     "migrar-modulos": "node --experimental-strip-types scripts/migrar-modulos.mjs",
-    "seed": "node scripts/seed.mjs"
+    "seed": "node scripts/seed.mjs",
+    "test:supabase": "node scripts/supabase-test.mjs",
+    "test:supabase:remoto": "node scripts/supabase-test-remoto.mjs"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
     "@tiptap/extension-image": "^3.34.0",
     "@tiptap/extension-link": "^3.34.0",
     "@tiptap/extension-placeholder": "^3.34.0",
@@ -40,6 +43,7 @@
     "react-router-dom": "^7.18.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.17",
     "@firebase/rules-unit-testing": "^6.0.0",
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.5",

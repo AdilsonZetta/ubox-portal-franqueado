@@ -13,6 +13,11 @@ interface ImportMetaEnv {
   readonly VITE_STORAGE_ENABLED?: string
   readonly VITE_APPCHECK_SITE_KEY?: string
   readonly VITE_USE_EMULATOR?: string
+  /** 'firebase' (padrão) ou 'supabase'. Migração em andamento: ver MIGRACAO_SUPABASE.md. */
+  readonly VITE_BACKEND?: string
+  readonly VITE_SUPABASE_URL?: string
+  /** Só a chave publicável (sb_publishable_…). Nunca a service_role. */
+  readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string
 }
 
 interface ImportMeta {

@@ -6,7 +6,7 @@ import { firebaseConfigured } from './lib/firebase'
 import { AuthProvider, useAuth } from './lib/auth'
 import { useVisao, VisaoProvider } from './lib/visao'
 import { PortalProvider } from './lib/portal'
-import { AguardandoPage, CadastroPage, CompletarPage, ConfigPendentePage, EntrarPage, RecuperarPage } from './pages/AuthPages'
+import { AguardandoPage, CadastroPage, CompletarPage, ConfigPendentePage, EntrarPage, NovaSenhaPage, RecuperarPage } from './pages/AuthPages'
 import { FranqueadoraPage, GestaoUsuariosPage, MinhaEquipePage } from './pages/GestaoAcessos'
 import { ChamadosPage } from './pages/Chamados'
 import { SenhasPage, SenhasPermissoesPage, SenhasSolicitacoesPage } from './pages/senhas'
@@ -72,7 +72,8 @@ function Admin({ children }: { children: ReactNode }) {
 }
 
 function Area() {
-  const { status } = useAuth()
+  const { status, recuperandoSenha } = useAuth()
+  if (recuperandoSenha) return <NovaSenhaPage />
   if (status === 'loading') {
     return (
       <div className="grid min-h-screen place-items-center">

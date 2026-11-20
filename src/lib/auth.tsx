@@ -2,7 +2,10 @@ import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEm
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { mapUsuario } from './api'
+import { BACKEND } from './backend'
 import { requireAuth, requireDb } from './firebase'
+import { requireSupabase } from './supabase'
+import { cadastrarSupabase, carregarEstado, definirNovaSenha, entrarSupabase, gravarPerfilProprio, recuperarSupabase, sairSupabase } from './supabaseAuth'
 import type { Usuario } from '../types'
 
 export type StatusAuth = 'loading' | 'signedOut' | 'incomplete' | 'pending' | 'rejected' | 'ready' | 'error'
@@ -11,6 +14,11 @@ interface AuthValue {
   status: StatusAuth
   user: Usuario | null
   firebaseUser: User | null
+  /** Nome do login (Firebase displayName ou metadado do Supabase), para a tela de completar cadastro. */
+  nomeSugerido: string
+  /** Supabase: a pessoa chegou pelo link de redefinição e precisa escolher a nova senha. */
+  recuperandoSenha: boolean
+  definirSenha: (senha: string) => Promise<void>
   erro: string
   refresh: () => Promise<void>
   entrar: (email: string, senha: string) => Promise<void>
@@ -26,10 +34,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StatusAuth>('loading')
   const [user, setUser] = useState<Usuario | null>(null)
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null)
+  const [nomeSupabase, setNomeSupabase] = useState('')
+  const [recuperandoSenha, setRecuperandoSenha] = useState(false)
   const [erro, setErro] = useState('')
   const [versao, setVersao] = useState(0)
 
+  // Backend Supabase (migração, atrás de VITE_BACKEND=supabase).
   useEffect(() => {
+    if (BACKEND !== 'supabase') return
+    const sb = requireSupabase()
+    let vivo = true
+    const aplicar = (sessao: Parameters<typeof carregarEstado>[0] | null) => {
+      if (!sessao) {
+        setUser(null)
+        setStatus('signedOut')
+        return
+      }
+      setStatus('loading')
+      void carregarEstado(sessao)
+        .then((estado) => {
+          if (!vivo) return
+          setUser(estado.user)
+          setNomeSupabase(estado.nomeSugerido)
+          setStatus(estado.status)
+        })
+        .catch((falha: unknown) => {
+          if (!vivo) return
+          setErro(falha instanceof Error ? falha.message : 'Falha ao carregar o perfil.')
+          setStatus('error')
+        })
+    }
+    void sb.auth.getSession().then(({ data }) => vivo && aplicar(data.session))
+    const { data: assinatura } = sb.auth.onAuthStateChange((evento, sessao) => {
+      if (evento === 'PASSWORD_RECOVERY') setRecuperandoSenha(true)
+      if (evento === 'SIGNED_IN' || evento === 'SIGNED_OUT' || evento === 'USER_UPDATED') setTimeout(() => vivo && aplicar(sessao), 0)
+    })
+    return () => {
+      vivo = false
+      assinatura.subscription.unsubscribe()
+    }
+  }, [versao])
+
+  useEffect(() => {
+    if (BACKEND !== 'firebase') return
     const auth = requireAuth()
     return onAuthStateChanged(auth, (conta) => {
       setFirebaseUser(conta)
@@ -88,12 +135,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       status,
       user,
       firebaseUser,
+      nomeSugerido: BACKEND === 'supabase' ? nomeSupabase : firebaseUser?.displayName ?? '',
+      recuperandoSenha,
+      definirSenha: async (senha) => {
+        await definirNovaSenha(senha)
+        setRecuperandoSenha(false)
+      },
       erro,
       refresh: async () => setVersao((atual) => atual + 1),
       entrar: async (email, senha) => {
+        if (BACKEND === 'supabase') return entrarSupabase(email, senha)
         await signInWithEmailAndPassword(requireAuth(), email.trim(), senha)
       },
       cadastrar: async ({ nome, email, senha, unidade, cidade }) => {
+        if (BACKEND === 'supabase') {
+          await cadastrarSupabase({ nome, email, senha, unidade, cidade })
+          setVersao((atual) => atual + 1)
+          return
+        }
         const credencial = await createUserWithEmailAndPassword(requireAuth(), email.trim(), senha)
         await updateProfile(credencial.user, { displayName: nome.trim() })
         await setDoc(doc(requireDb(), 'usuarios', credencial.user.uid), {
@@ -112,6 +171,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setVersao((atual) => atual + 1)
       },
       completarCadastro: async ({ nome, unidade, cidade }) => {
+        if (BACKEND === 'supabase') {
+          await gravarPerfilProprio({ nome, unidade, cidade })
+          setVersao((atual) => atual + 1)
+          return
+        }
         const conta = requireAuth().currentUser
         if (!conta?.email) throw new Error('Entre novamente para concluir o cadastro.')
         await setDoc(doc(requireDb(), 'usuarios', conta.uid), {
@@ -130,13 +194,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setVersao((atual) => atual + 1)
       },
       recuperar: async (email) => {
+        if (BACKEND === 'supabase') return recuperarSupabase(email)
         await sendPasswordResetEmail(requireAuth(), email.trim())
       },
       sair: async () => {
+        if (BACKEND === 'supabase') return sairSupabase()
         await signOut(requireAuth())
       },
     }),
-    [status, user, firebaseUser, erro],
+    [status, user, firebaseUser, nomeSupabase, recuperandoSenha, erro],
   )
 
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>
