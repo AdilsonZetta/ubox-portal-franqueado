@@ -43,6 +43,9 @@ import { GestaoAuditoriaPage } from './pages/auditoria/GestaoAuditoria'
 import { EditorAuditoriaPage } from './pages/auditoria/EditorAuditoria'
 import { AuditoriaPage } from './pages/auditoria/Auditoria'
 import { MinhasAuditoriasPage } from './pages/auditoria/MinhasAuditorias'
+import { VisaoRedePage } from './pages/acompanhamento/VisaoRede'
+import { PainelUnidadePage } from './pages/acompanhamento/PainelUnidade'
+import { MeuAcompanhamentoPage } from './pages/acompanhamento/MeuAcompanhamento'
 
 const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ default: mod.PainelPage })))
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
@@ -122,6 +125,9 @@ function Area() {
           <Route path="/auditoria/editar/:id" element={<EditorAuditoriaPage />} />
           <Route path="/auditorias" element={<MinhasAuditoriasPage />} />
           <Route path="/auditorias/:id" element={<AuditoriaPage />} />
+          <Route path="/acompanhamento" element={<VisaoRedePage />} />
+          <Route path="/acompanhamento/unidade/:id" element={<PainelUnidadePage />} />
+          <Route path="/meu-acompanhamento" element={<MeuAcompanhamentoPage />} />
           {/* Trilhas e quizzes antigos corrigiam a nota no aparelho: agora tudo passa pela Universidade. */}
           <Route path="/trilhas/*" element={<Navigate to="/universidade" replace />} />
           <Route path="/certificado/:trilhaId" element={<CertificadoPage />} />

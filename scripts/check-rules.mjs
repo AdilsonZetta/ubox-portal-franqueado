@@ -94,6 +94,14 @@ exigir(rules.includes('request.resource.data.assinaturaAuditorEm == request.time
 exigir(rules.includes("allow read: if signedIn() && exists(userPath()) && gereAuditoria(userData());"), 'auditor sem leitura limitada por gereAuditoria')
 exigir(/match \/checklistExecucoes\/\{execucaoId\}[\s\S]*?gereAuditoria\(userData\(\)\)/.test(rules), 'auditor sem leitura do checklist de referência')
 
+exigir(rules.includes('match /acompanhamentoRegistros/{registroId}'), 'coleção acompanhamentoRegistros ausente')
+exigir(rules.includes('match /acompanhamentoPassos/{passoId}'), 'coleção acompanhamentoPassos ausente')
+exigir(rules.includes("dados.papel == 'equipe_franqueadora' && temLista(dados, 'acompanhamento')"), 'acompanhamento sem exigir o módulo para a equipe da franqueadora')
+exigir(rules.includes("allow read: if resource.data.compartilhado == true ? ("), 'unidade lendo acompanhamento sem exigir compartilhamento')
+exigir(rules.includes("allow read: if resource.data.status in ['aguardando_ciencia', 'concluida'] ? (signedIn() && exists(userPath()) && gereAcompanhamento(userData())) : false;"), 'acompanhamento lendo rascunho de auditoria')
+exigir(!/match \/acessos\/\{acessoId\}[^}]*gereAcompanhamento/.test(rules), 'acompanhamento não pode ler o cofre de acessos')
+exigir(!/match \/usuarios\/\{uid\}[^}]*gereAcompanhamento/.test(rules), 'acompanhamento não pode listar usuários')
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)
