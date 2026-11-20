@@ -4,10 +4,17 @@ import { Table, TableCell, TableHeader, TableRow } from '@tiptap/extension-table
 import TaskItem from '@tiptap/extension-task-item'
 import TaskList from '@tiptap/extension-task-list'
 import Youtube from '@tiptap/extension-youtube'
-import { EditorContent, useEditor } from '@tiptap/react'
+import { EditorContent, Extension, useEditor } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import { useEffect } from 'react'
 import { cx } from './ui'
+
+const AncorasDeTitulo = Extension.create({
+  name: 'ancorasDeTitulo',
+  addGlobalAttributes() {
+    return [{ types: ['heading'], attributes: { id: { default: null } } }]
+  },
+})
 
 export function RichEditor({ value, onChange }: { value: string; onChange: (html: string, texto: string) => void }) {
   const editor = useEditor({
@@ -15,6 +22,7 @@ export function RichEditor({ value, onChange }: { value: string; onChange: (html
     shouldRerenderOnTransaction: true,
     extensions: [
       StarterKit.configure({ link: { openOnClick: false, autolink: true } }),
+      AncorasDeTitulo,
       Image.configure({ allowBase64: true }),
       Table.configure({ resizable: false }),
       TableRow,

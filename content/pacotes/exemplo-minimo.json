@@ -1,0 +1,23 @@
+{
+  "formato": "ubox-pacote-conteudo",
+  "versao": 1,
+  "titulo": "Pacote demonstrativo",
+  "geradoEm": "2026-11-20T12:00:00Z",
+  "categorias": [
+    {"chave":"cat-demo","nome":"Operação demonstrativa","descricao":"","ordem":1,"publico":true}
+  ],
+  "documentos": [
+    {"chave":"doc-manual","titulo":"Manual demonstrativo","categoria":"cat-demo","tipo":"manual","formato":"richtext","status":"publicado","publico":true,"conteudoHtml":"<p>Confira o ambiente antes de abrir.</p>"},
+    {"chave":"doc-pop","titulo":"POP demonstrativo","categoria":"cat-demo","tipo":"pop","formato":"richtext","status":"publicado","publico":true,"conteudoHtml":"<p>Registre a conferência.</p>"},
+    {"chave":"doc-html","titulo":"Interativo demonstrativo","categoria":"cat-demo","tipo":"html","formato":"html","status":"publicado","publico":true,"htmlConteudo":"<h1>Abertura</h1><details><summary>O que conferir?</summary>Iluminação.</details>"}
+  ],
+  "trilha": [
+    {"chave":"trilha-demo","documento":"doc-manual","etapa":"Abertura","tempoMinimoSeg":30,"videoMinutos":0,"ativo":true}
+  ],
+  "cursos": [
+    {"chave":"curso-demo","titulo":"Curso demonstrativo","descricao":"Pratique a abertura da unidade.","ordem":1,"aulas":["doc-manual"],"publicado":true}
+  ],
+  "checklists": [
+    {"chave":"ck-demo","titulo":"Checklist demonstrativo","descricao":"","tipo":"abertura","frequencia":"diaria","publico":true,"ativo":true,"itens":[{"id":"i1","texto":"Conferir iluminação","secao":"","peso":1,"exigeEvidencia":false,"exigeObs":false}]}
+  ]
+}

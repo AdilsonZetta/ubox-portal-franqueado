@@ -9,7 +9,7 @@ import type { RascunhoCategoria, RascunhoDocumento, RascunhoQuiz, RascunhoTrilha
 import { listarUsuariosSb } from './gestaoSupabase'
 import { idAvisoLeitura, idCertificado, idLeitura } from './ids'
 import type { ItemTrilhaEdicao } from './manuaisApi'
-import { encadearTrilha, idProgresso, limitarTempo, type ItemTrilhaManual, type ProgressoManual } from './manuaisTrilha'
+import { alteracoesNaTrilha, encadearTrilha, idProgresso, limitarTempo, type ItemTrilhaManual, type ProgressoManual } from './manuaisTrilha'
 import { deveCarregar } from './portalCarga'
 import { aplicarGabarito, extrairItensTrilha, extrairPerguntas, publicadoNoDado } from './quizSchema'
 import { requireSupabase } from './supabase'
@@ -712,10 +712,12 @@ export async function listarProgressoVisivelSb(usuario: Usuario): Promise<Progre
   return listar('progresso_manuais', mapProgressoSb, ['unidade_id', usuario.unidadeId])
 }
 
-export async function salvarTrilhaManuaisSb(autor: Usuario, itens: ItemTrilhaEdicao[]): Promise<void> {
+export async function salvarTrilhaManuaisSb(autor: Usuario, itens: ItemTrilhaEdicao[], anteriores?: ItemTrilhaManual[]): Promise<void> {
   if (itens.length > 450) throw new Error('A trilha aceita até 450 manuais por vez.')
-  if (!itens.length) return
-  await gravar('manuais_trilha', encadearTrilha(itens).map((item) => itemTrilhaParaLinha(item, autor)))
+  const completos = encadearTrilha(itens)
+  const alterados = anteriores ? alteracoesNaTrilha(completos, anteriores) : completos
+  if (!alterados.length) return
+  await gravar('manuais_trilha', alterados.map((item) => itemTrilhaParaLinha(item, autor)))
 }
 
 export async function iniciarOuReiniciarSb(usuario: Usuario, item: ItemTrilhaManual): Promise<ProgressoManual | null> {

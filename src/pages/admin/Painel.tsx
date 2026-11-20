@@ -43,6 +43,7 @@ export function PainelPage() {
           <Link className="rounded-full bg-paper px-3 py-1 font-semibold" to="/admin/trilhas/nova">Nova trilha</Link>
           <Link className="rounded-full bg-paper px-3 py-1 font-semibold" to="/admin/usuarios">Usuários</Link>
           <Link className="rounded-full bg-paper px-3 py-1 font-semibold" to="/admin/categorias">Categorias</Link>
+          <Link className="rounded-full bg-paper px-3 py-1 font-semibold" to="/admin/importar">Importar pacote de conteúdo</Link>
         </div>
       </section>
     </div>

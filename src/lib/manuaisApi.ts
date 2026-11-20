@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore'
 import { BACKEND } from './backend'
 import { requireDb } from './firebase'
-import { encadearTrilha, idProgresso, limitarTempo, type ItemTrilhaManual, type ProgressoManual } from './manuaisTrilha'
+import { alteracoesNaTrilha, encadearTrilha, idProgresso, limitarTempo, type ItemTrilhaManual, type ProgressoManual } from './manuaisTrilha'
 import type { Usuario } from '../types'
 import {
   listarTrilhaManuaisSb,
@@ -96,14 +96,17 @@ export interface ItemTrilhaEdicao {
   ativo: boolean
 }
 
-/** Grava a trilha inteira na ordem recebida, recalculando ordem e anterior num só lote. */
-export async function salvarTrilhaManuais(autor: Usuario, itens: ItemTrilhaEdicao[]): Promise<void> {
-  if (BACKEND === 'supabase') return salvarTrilhaManuaisSb(autor, itens)
+/** Recalcula ordem e anterior a partir da trilha inteira e grava as mudanças num só lote. */
+export async function salvarTrilhaManuais(autor: Usuario, itens: ItemTrilhaEdicao[], anteriores?: ItemTrilhaManual[]): Promise<void> {
+  if (BACKEND === 'supabase') return salvarTrilhaManuaisSb(autor, itens, anteriores)
   if (itens.length > 450) throw new Error('A trilha aceita até 450 manuais por vez.')
+  const completos = encadearTrilha(itens)
+  const alterados = anteriores ? alteracoesNaTrilha(completos, anteriores) : completos
+  if (!alterados.length) return
   const banco = requireDb()
   const lote = writeBatch(banco)
   const agora = serverTimestamp()
-  for (const item of encadearTrilha(itens)) {
+  for (const item of alterados) {
     lote.set(doc(banco, 'manuaisTrilha', item.documentoId), {
       documentoId: item.documentoId,
       titulo: item.titulo.trim().slice(0, 200) || 'Manual',

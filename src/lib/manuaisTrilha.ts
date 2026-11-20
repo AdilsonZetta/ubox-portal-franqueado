@@ -98,6 +98,17 @@ export function encadearTrilha<T extends Pick<ItemTrilhaManual, 'documentoId' | 
   return saida
 }
 
+/** Seleciona os itens que precisam ser gravados após recalcular a corrente. */
+export function alteracoesNaTrilha<T extends ItemTrilhaManual>(depois: T[], antes: ItemTrilhaManual[]): T[] {
+  const porDocumento = new Map(antes.map((item) => [item.documentoId, item]))
+  return depois.filter((item) => {
+    const anterior = porDocumento.get(item.documentoId)
+    return !anterior || item.ordem !== anterior.ordem || item.anteriorId !== anterior.anteriorId ||
+      item.titulo !== anterior.titulo || item.etapa !== anterior.etapa || item.ativo !== anterior.ativo ||
+      item.tempoMinimoSeg !== anterior.tempoMinimoSeg || item.videoMinutos !== anterior.videoMinutos
+  })
+}
+
 export function estadoDoManual(
   item: Pick<ItemTrilhaManual, 'documentoId' | 'anteriorId'>,
   progressoPorDocumento: Map<string, Pick<ProgressoManual, 'status'>>,

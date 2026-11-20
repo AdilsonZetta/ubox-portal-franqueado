@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { Anexos, DocumentoView } from '../components/DocumentoView'
+import { abrirAncoraDocumento, Anexos, DocumentoView } from '../components/DocumentoView'
 import { Aviso, Button, Selo } from '../components/ui'
 import { listarVersoes, registrarAceite, registrarLeitura } from '../lib/api'
 import { useAuth } from '../lib/auth'
@@ -142,7 +142,7 @@ export function DocumentoPage() {
             <ol className="mt-3 space-y-2">
               {sumario.itens.map((item) => (
                 <li key={item.id} style={{ paddingLeft: `${(item.nivel - 1) * 10}px` }}>
-                  <a href={`#${item.id}`} className="text-sm text-ink/70 hover:text-brand">
+                  <a href={`#${item.id}`} onClick={abrirAncoraDocumento} className="text-sm text-ink/70 hover:text-brand">
                     {item.texto}
                   </a>
                 </li>
