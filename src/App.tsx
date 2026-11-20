@@ -39,6 +39,8 @@ import { PreencherChecklistPage } from './pages/checklist/Preencher'
 import { ExecucaoChecklistPage } from './pages/checklist/Execucao'
 import { HistoricoChecklistPage, NaoConformidadesPage } from './pages/checklist/Historico'
 import { GestaoChecklistPage } from './pages/checklist/GestaoChecklist'
+import { EstoquePage } from './pages/estoque/Estoque'
+import { GestaoEstoquePage } from './pages/estoque/GestaoEstoque'
 import { GestaoAuditoriaPage } from './pages/auditoria/GestaoAuditoria'
 import { EditorAuditoriaPage } from './pages/auditoria/EditorAuditoria'
 import { AuditoriaPage } from './pages/auditoria/Auditoria'
@@ -120,6 +122,8 @@ function Area() {
           <Route path="/checklist/historico" element={<HistoricoChecklistPage />} />
           <Route path="/checklist/nao-conformidades" element={<NaoConformidadesPage />} />
           <Route path="/checklist/gestao" element={<GestaoChecklistPage />} />
+          <Route path="/estoque" element={<EstoquePage />} />
+          <Route path="/estoque/gestao" element={<GestaoEstoquePage />} />
           <Route path="/auditoria" element={<GestaoAuditoriaPage />} />
           <Route path="/auditoria/nova" element={<EditorAuditoriaPage />} />
           <Route path="/auditoria/editar/:id" element={<EditorAuditoriaPage />} />

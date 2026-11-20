@@ -102,6 +102,17 @@ exigir(rules.includes("allow read: if resource.data.status in ['aguardando_cienc
 exigir(!/match \/acessos\/\{acessoId\}[^}]*gereAcompanhamento/.test(rules), 'acompanhamento não pode ler o cofre de acessos')
 exigir(!/match \/usuarios\/\{uid\}[^}]*gereAcompanhamento/.test(rules), 'acompanhamento não pode listar usuários')
 
+exigir(rules.includes('match /estoqueItens/{itemId}'), 'coleção estoqueItens ausente')
+exigir(rules.includes('match /estoqueMovimentos/{movimentoId}'), 'coleção estoqueMovimentos ausente')
+exigir(rules.includes('match /estoqueContagens/{contagemId}'), 'coleção estoqueContagens ausente')
+exigir(rules.includes('match /estoquePedidos/{pedidoId}'), 'coleção estoquePedidos ausente')
+exigir(rules.includes("dados.papel == 'equipe_franqueadora' && temLista(dados, 'estoque')"), 'estoque sem exigir o módulo para a equipe da franqueadora')
+exigir(/match \/estoqueMovimentos\/\{movimentoId\}[\s\S]*?allow update, delete: if false;/.test(rules), 'movimento de estoque editável ou apagável')
+exigir(/match \/estoqueItens\/\{itemId\}[\s\S]*?allow delete: if false;/.test(rules), 'item do catálogo apagável (deve só desativar)')
+exigir(rules.includes("movimentoId == request.resource.data.origemId + '_' + string(request.resource.data.indice)"), 'ajuste/entrada derivados sem id único por linha')
+exigir(rules.includes("get(contagemPath(request.resource.data.origemId)).data.status == 'aberta'"), 'ajuste de contagem sem exigir a confirmação no mesmo lote')
+exigir(rules.includes("get(pedidoEstoquePath(request.resource.data.origemId)).data.status == 'enviado'"), 'entrada de pedido sem exigir o recebimento no mesmo lote')
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)

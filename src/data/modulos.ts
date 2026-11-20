@@ -105,8 +105,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: Package,
-    descricao: 'Materiais de loja, cadeados e enxoval da unidade.',
+    descricao: 'Insumos, cadeados, caixas, embalagens, limpeza e uniformes: saldo, contagem e pedidos de reposição.',
     recursos: ['Saldo', 'Entrada e saída', 'Pedido de reposição', 'Itens críticos'],
+    ativo: true,
+    para: '/estoque',
   },
   {
     slug: 'crm',

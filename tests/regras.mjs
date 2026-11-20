@@ -1675,6 +1675,252 @@ await caso('ac: unidade não lista passos de registro descompartilhado', assertF
 await caso('ac: franqueado não conclui passo de registro descompartilhado', assertFails(updateDoc(doc(frAc, 'acompanhamentoPassos', 'p-solo'), feitoUn())))
 await caso('ac: ninguém apaga passo', assertFails(deleteDoc(doc(adminAu, 'acompanhamentoPassos', 'p-pub'))))
 
+// ===== Módulo 10: Controle de Estoque =====
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  for (const [id, nome] of [['un-es', 'Unidade Es'], ['un-es2', 'Outra Es']]) {
+    await setDoc(doc(banco, 'unidades', id), {
+      nome, cidade: 'Uberaba', responsavel: 'Dono', email: `${id}@ubox.test`, uid: null,
+      modulosLiberados: ['estoque'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+    })
+  }
+  await setDoc(doc(banco, 'usuarios', 'fr-es'), usuario('fr-es', { unidadeId: 'un-es', unidade: 'Unidade Es', modulos: ['estoque'], nome: 'Dono Es' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-es'), usuario('eq-es', { papel: 'equipe_franqueado', unidadeId: 'un-es', unidade: 'Unidade Es', modulos: ['estoque'], criadoPor: 'fr-es', nome: 'Equipe Es' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-es-sem'), usuario('eq-es-sem', { papel: 'equipe_franqueado', unidadeId: 'un-es', unidade: 'Unidade Es', modulos: ['manuais'], criadoPor: 'fr-es', nome: 'Equipe Sem' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-es2'), usuario('fr-es2', { unidadeId: 'un-es2', unidade: 'Outra Es', modulos: ['estoque'], nome: 'Dono Outra Es' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-es'), usuario('eq-rede-es', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['estoque'], nome: 'Suprimentos Rede' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-noes'), usuario('eq-rede-noes', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['checklist'], nome: 'Rede Sem Es' }))
+  const it = (nome, ativo = true) => ({
+    nome, codigo: 'CAD-40', categoria: 'cadeados', unidadeMedida: 'un', estoqueMinimo: 10, precoSugeridoCentavos: 3990, descricao: '', ativo,
+    geradoPorIA: false, iaModelo: '', criadoEm: criado, atualizadoPor: 'admin-1', atualizadoPorNome: 'Admin', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'estoqueItens', 'it-cad'), it('Cadeado 40mm'))
+  await setDoc(doc(banco, 'estoqueItens', 'it-cx'), it('Caixa de mudança M'))
+  await setDoc(doc(banco, 'estoqueItens', 'it-off'), it('Fita antiga', false))
+  await setDoc(doc(banco, 'estoqueMovimentos', 'mv-1'), {
+    unidadeId: 'un-es', unidadeNome: 'Unidade Es', itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', tipo: 'entrada', quantidade: 20, delta: 20,
+    motivo: '', origem: 'manual', origemId: '', indice: 0, uid: 'fr-es', nome: 'Dono Es', criadoEm: criado,
+  })
+  await setDoc(doc(banco, 'estoqueMovimentos', 'mv-2'), {
+    unidadeId: 'un-es2', unidadeNome: 'Outra Es', itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', tipo: 'entrada', quantidade: 5, delta: 5,
+    motivo: '', origem: 'manual', origemId: '', indice: 0, uid: 'fr-es2', nome: 'Dono Outra Es', criadoEm: criado,
+  })
+  const contagem = (status, unidadeId = 'un-es') => ({
+    unidadeId, unidadeNome: unidadeId === 'un-es' ? 'Unidade Es' : 'Outra Es',
+    itens: [{ itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', sistema: 20, contado: 17, diferenca: -3 }, { itemId: 'it-cx', itemNome: 'Caixa de mudança M', unidadeMedida: 'un', sistema: 0, contado: 4, diferenca: 4 }],
+    totalItens: 2, totalDivergencias: 2, obs: '', status, criadoPor: 'eq-es', criadoPorNome: 'Equipe Es', criadoEm: criado,
+    confirmadoPor: '', confirmadoNome: '', confirmadoEm: null, atualizadoPor: 'eq-es', atualizadoPorNome: 'Equipe Es', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'estoqueContagens', 'ct-1'), contagem('aberta'))
+  await setDoc(doc(banco, 'estoqueContagens', 'ct-2'), contagem('aberta'))
+  await setDoc(doc(banco, 'estoqueContagens', 'ct-outra'), contagem('aberta', 'un-es2'))
+  const pedido = (status, unidadeId = 'un-es', enviada = 0) => ({
+    unidadeId, unidadeNome: unidadeId === 'un-es' ? 'Unidade Es' : 'Outra Es',
+    itens: [{ itemId: 'it-cx', itemNome: 'Caixa de mudança M', unidadeMedida: 'un', quantidade: 30, quantidadeEnviada: enviada }],
+    totalItens: 1, status, obsUnidade: '', obsFranqueadora: '', solicitanteUid: 'fr-es', solicitanteNome: 'Dono Es', criadoEm: criado,
+    aprovadoEm: null, enviadoEm: null, recebidoEm: null, canceladoEm: null, atualizadoPor: 'fr-es', atualizadoPorNome: 'Dono Es', atualizadoEm: criado,
+  })
+  await setDoc(doc(banco, 'estoquePedidos', 'pd-aberto'), pedido('aberto'))
+  await setDoc(doc(banco, 'estoquePedidos', 'pd-aberto2'), pedido('aberto'))
+  await setDoc(doc(banco, 'estoquePedidos', 'pd-aprovado'), pedido('aprovado'))
+  await setDoc(doc(banco, 'estoquePedidos', 'pd-enviado'), pedido('enviado', 'un-es', 25))
+  await setDoc(doc(banco, 'estoquePedidos', 'pd-enviado2'), pedido('enviado', 'un-es', 25))
+})
+const frEs = ambiente.authenticatedContext('fr-es', { email: 'fr-es@ubox.test' }).firestore()
+const eqEs = ambiente.authenticatedContext('eq-es', { email: 'eq-es@ubox.test' }).firestore()
+const eqEsSem = ambiente.authenticatedContext('eq-es-sem', { email: 'eq-es-sem@ubox.test' }).firestore()
+const frEs2 = ambiente.authenticatedContext('fr-es2', { email: 'fr-es2@ubox.test' }).firestore()
+const redeEs = ambiente.authenticatedContext('eq-rede-es', { email: 'eq-rede-es@ubox.test' }).firestore()
+const redeNoEs = ambiente.authenticatedContext('eq-rede-noes', { email: 'eq-rede-noes@ubox.test' }).firestore()
+const daUn = (db, col, un = 'un-es') => getDocs(query(collection(db, col), where('unidadeId', '==', un)))
+
+// Catálogo
+const itemEs = (extra = {}) => ({
+  nome: 'Luva de limpeza', codigo: '', categoria: 'limpeza', unidadeMedida: 'par', estoqueMinimo: 4, precoSugeridoCentavos: 0, descricao: 'Par de luvas nitrílicas.', ativo: true,
+  geradoPorIA: false, iaModelo: '', criadoEm: serverTimestamp(), atualizadoPor: 'eq-rede-es', atualizadoPorNome: 'Suprimentos Rede', atualizadoEm: serverTimestamp(), ...extra,
+})
+await caso('es: suprimentos cria item', assertSucceeds(setDoc(doc(redeEs, 'estoqueItens', 'it-luva'), itemEs())))
+await caso('es: item com IA sem o modelo é recusado', assertFails(setDoc(doc(redeEs, 'estoqueItens', 'it-x'), itemEs({ geradoPorIA: true, iaModelo: ' ' }))))
+await caso('es: item com IA registra o modelo', assertSucceeds(setDoc(doc(redeEs, 'estoqueItens', 'it-ia'), itemEs({ geradoPorIA: true, iaModelo: 'Grok Bot' }))))
+await caso('es: categoria desconhecida é recusada', assertFails(setDoc(doc(redeEs, 'estoqueItens', 'it-x'), itemEs({ categoria: 'bebidas' }))))
+await caso('es: mínimo negativo é recusado', assertFails(setDoc(doc(redeEs, 'estoqueItens', 'it-x'), itemEs({ estoqueMinimo: -1 }))))
+await caso('es: preço quebrado é recusado', assertFails(setDoc(doc(redeEs, 'estoqueItens', 'it-x'), itemEs({ precoSugeridoCentavos: 12.5 }))))
+await caso('es: equipe da rede sem o módulo não cria item', assertFails(setDoc(doc(redeNoEs, 'estoqueItens', 'it-x'), itemEs({ atualizadoPor: 'eq-rede-noes', atualizadoPorNome: 'Rede Sem Es' }))))
+await caso('es: franqueado não cria item', assertFails(setDoc(doc(frEs, 'estoqueItens', 'it-x'), itemEs({ atualizadoPor: 'fr-es', atualizadoPorNome: 'Dono Es' }))))
+const atualEs = (extra = {}) => ({ atualizadoPor: 'eq-rede-es', atualizadoPorNome: 'Suprimentos Rede', atualizadoEm: serverTimestamp(), ...extra })
+await caso('es: suprimentos desativa item', assertSucceeds(updateDoc(doc(redeEs, 'estoqueItens', 'it-luva'), atualEs({ ativo: false }))))
+await caso('es: não muda a data de criação', assertFails(updateDoc(doc(redeEs, 'estoqueItens', 'it-luva'), atualEs({ criadoEm: new Date('2020-01-01T00:00:00Z') }))))
+await caso('es: ninguém apaga item', assertFails(deleteDoc(doc(adminAu, 'estoqueItens', 'it-luva'))))
+await caso('es: unidade lê o catálogo', assertSucceeds(getDocs(collection(eqEs, 'estoqueItens'))))
+await caso('es: equipe sem o módulo não lê o catálogo', assertFails(getDocs(collection(eqEsSem, 'estoqueItens'))))
+await caso('es: rede sem o módulo não lê o catálogo', assertFails(getDocs(collection(redeNoEs, 'estoqueItens'))))
+
+// Movimentos manuais
+const movEs = (extra = {}) => ({
+  unidadeId: 'un-es', unidadeNome: 'Unidade Es', itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', tipo: 'saida', quantidade: 2, delta: -2,
+  motivo: 'Troca do cadeado do box 12', origem: 'manual', origemId: '', indice: 0, uid: 'eq-es', nome: 'Equipe Es', criadoEm: serverTimestamp(), ...extra,
+})
+await caso('es: equipe registra saída', assertSucceeds(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-s1'), movEs())))
+await caso('es: equipe registra venda sem motivo', assertSucceeds(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-v1'), movEs({ tipo: 'venda', motivo: '' }))))
+await caso('es: franqueado registra entrada', assertSucceeds(setDoc(doc(frEs, 'estoqueMovimentos', 'mv-e1'), movEs({ tipo: 'entrada', delta: 2, motivo: '', uid: 'fr-es', nome: 'Dono Es' }))))
+await caso('es: saída sem motivo é recusada', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ motivo: '' }))))
+await caso('es: saída com delta positivo é recusada', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ delta: 2 }))))
+await caso('es: entrada com delta diferente é recusada', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ tipo: 'entrada', delta: 20 }))))
+await caso('es: quantidade zero é recusada', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ quantidade: 0, delta: 0 }))))
+await caso('es: quantidade fracionada é recusada', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ quantidade: 1.5, delta: -1.5 }))))
+await caso('es: ajuste manual é recusado (só via contagem)', assertFails(setDoc(doc(frEs, 'estoqueMovimentos', 'mv-x'), movEs({ tipo: 'ajuste', uid: 'fr-es', nome: 'Dono Es' }))))
+await caso('es: movimento em outra unidade é recusado', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ unidadeId: 'un-es2', unidadeNome: 'Outra Es' }))))
+await caso('es: movimento em nome de outra pessoa é recusado', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ nome: 'Dono Es' }))))
+await caso('es: movimento com horário do cliente é recusado', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ criadoEm: new Date() }))))
+await caso('es: item inexistente é recusado', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ itemId: 'it-nao' }))))
+await caso('es: nome do item diferente do catálogo é recusado', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ itemNome: 'Cadeado de ouro' }))))
+await caso('es: entrada de item inativo é recusada', assertFails(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-x'), movEs({ itemId: 'it-off', itemNome: 'Fita antiga', tipo: 'entrada', delta: 2, motivo: '' }))))
+await caso('es: saída de item inativo é aceita (gasta o que sobrou)', assertSucceeds(setDoc(doc(eqEs, 'estoqueMovimentos', 'mv-off'), movEs({ itemId: 'it-off', itemNome: 'Fita antiga' }))))
+await caso('es: equipe sem o módulo não movimenta', assertFails(setDoc(doc(eqEsSem, 'estoqueMovimentos', 'mv-x'), movEs({ uid: 'eq-es-sem', nome: 'Equipe Sem' }))))
+await caso('es: franqueadora não movimenta estoque da unidade', assertFails(setDoc(doc(redeEs, 'estoqueMovimentos', 'mv-x'), movEs({ uid: 'eq-rede-es', nome: 'Suprimentos Rede' }))))
+await caso('es: movimento é imutável', assertFails(updateDoc(doc(frEs, 'estoqueMovimentos', 'mv-1'), { motivo: 'corrigido' })))
+await caso('es: ninguém apaga movimento', assertFails(deleteDoc(doc(adminAu, 'estoqueMovimentos', 'mv-1'))))
+await caso('es: unidade lista os próprios movimentos', assertSucceeds(daUn(eqEs, 'estoqueMovimentos')))
+await caso('es: unidade não lista sem filtrar a unidade', assertFails(getDocs(collection(eqEs, 'estoqueMovimentos'))))
+await caso('es: unidade não lê movimento de outra', assertFails(getDoc(doc(frEs, 'estoqueMovimentos', 'mv-2'))))
+await caso('es: suprimentos lê a rede toda', assertSucceeds(getDocs(collection(redeEs, 'estoqueMovimentos'))))
+await caso('es: rede sem o módulo não lê movimentos', assertFails(getDocs(collection(redeNoEs, 'estoqueMovimentos'))))
+
+// Contagem
+const ctNova = (extra = {}) => ({
+  unidadeId: 'un-es', unidadeNome: 'Unidade Es',
+  itens: [{ itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', sistema: 20, contado: 20, diferenca: 0 }],
+  totalItens: 1, totalDivergencias: 0, obs: '', status: 'aberta', criadoPor: 'eq-es', criadoPorNome: 'Equipe Es', criadoEm: serverTimestamp(),
+  confirmadoPor: '', confirmadoNome: '', confirmadoEm: null, atualizadoPor: 'eq-es', atualizadoPorNome: 'Equipe Es', atualizadoEm: serverTimestamp(), ...extra,
+})
+await caso('es: equipe abre contagem', assertSucceeds(setDoc(doc(eqEs, 'estoqueContagens', 'ct-n'), ctNova())))
+await caso('es: contagem já confirmada na criação é recusada', assertFails(setDoc(doc(eqEs, 'estoqueContagens', 'ct-x'), ctNova({ status: 'confirmada' }))))
+await caso('es: contagem de outra unidade é recusada', assertFails(setDoc(doc(eqEs, 'estoqueContagens', 'ct-x'), ctNova({ unidadeId: 'un-es2', unidadeNome: 'Outra Es' }))))
+const atualCt = (uid, nome, extra = {}) => ({ atualizadoPor: uid, atualizadoPorNome: nome, atualizadoEm: serverTimestamp(), ...extra })
+await caso('es: equipe atualiza contagem aberta', assertSucceeds(updateDoc(doc(eqEs, 'estoqueContagens', 'ct-1'), atualCt('eq-es', 'Equipe Es', { obs: 'Corredor B contado' }))))
+await caso('es: equipe não confirma contagem', assertFails(updateDoc(doc(eqEs, 'estoqueContagens', 'ct-1'), atualCt('eq-es', 'Equipe Es', { status: 'confirmada', confirmadoPor: 'eq-es', confirmadoNome: 'Equipe Es', confirmadoEm: serverTimestamp() }))))
+const confirma = () => atualCt('fr-es', 'Dono Es', { status: 'confirmada', confirmadoPor: 'fr-es', confirmadoNome: 'Dono Es', confirmadoEm: serverTimestamp() })
+const ajuste = (ct, indice, extra = {}) => movEs({
+  origem: 'contagem', origemId: ct, indice, tipo: 'ajuste', uid: 'fr-es', nome: 'Dono Es', motivo: 'Contagem: sistema 20, contado 17',
+  ...(indice === 0 ? { itemId: 'it-cad', itemNome: 'Cadeado 40mm', quantidade: 3, delta: -3 } : { itemId: 'it-cx', itemNome: 'Caixa de mudança M', quantidade: 4, delta: 4 }), ...extra,
+})
+{
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoqueContagens', 'ct-1'), confirma())
+  lote.set(doc(frEs, 'estoqueMovimentos', 'ct-1_0'), ajuste('ct-1', 0))
+  lote.set(doc(frEs, 'estoqueMovimentos', 'ct-1_1'), ajuste('ct-1', 1))
+  await caso('es: franqueado confirma contagem com os ajustes no lote', assertSucceeds(lote.commit()))
+}
+await caso('es: contagem confirmada não muda mais', assertFails(updateDoc(doc(frEs, 'estoqueContagens', 'ct-1'), atualCt('fr-es', 'Dono Es', { obs: 'mudei' }))))
+await caso('es: ajuste extra depois da confirmação é recusado', assertFails(setDoc(doc(frEs, 'estoqueMovimentos', 'ct-1_0x'), ajuste('ct-1', 0))))
+await caso('es: ajuste repetido (mesmo id) é recusado', assertFails(setDoc(doc(frEs, 'estoqueMovimentos', 'ct-1_0'), ajuste('ct-1', 0))))
+await caso('es: ajuste sem confirmar a contagem é recusado', assertFails(setDoc(doc(frEs, 'estoqueMovimentos', 'ct-2_0'), ajuste('ct-2', 0))))
+{
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoqueContagens', 'ct-2'), confirma())
+  lote.set(doc(frEs, 'estoqueMovimentos', 'ct-2_0'), ajuste('ct-2', 0, { quantidade: 30, delta: -30 }))
+  await caso('es: ajuste diferente da contagem é recusado', assertFails(lote.commit()))
+}
+{
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoqueContagens', 'ct-2'), confirma())
+  lote.set(doc(frEs, 'estoqueMovimentos', 'ct-2_0'), ajuste('ct-2', 0, { itemId: 'it-cx', itemNome: 'Caixa de mudança M' }))
+  await caso('es: ajuste em item trocado é recusado', assertFails(lote.commit()))
+}
+{
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoqueContagens', 'ct-2'), confirma())
+  lote.set(doc(frEs, 'estoqueMovimentos', 'qualquer'), ajuste('ct-2', 0))
+  await caso('es: ajuste com id fora do padrão é recusado', assertFails(lote.commit()))
+}
+{
+  const lote = writeBatch(eqEs)
+  lote.update(doc(eqEs, 'estoqueContagens', 'ct-2'), confirma())
+  lote.set(doc(eqEs, 'estoqueMovimentos', 'ct-2_0'), ajuste('ct-2', 0, { uid: 'eq-es', nome: 'Equipe Es' }))
+  await caso('es: equipe não gera ajuste de contagem', assertFails(lote.commit()))
+}
+await caso('es: franqueado não confirma contagem de outra unidade', assertFails(updateDoc(doc(frEs, 'estoqueContagens', 'ct-outra'), confirma())))
+await caso('es: equipe não cancela contagem', assertFails(updateDoc(doc(eqEs, 'estoqueContagens', 'ct-2'), atualCt('eq-es', 'Equipe Es', { status: 'cancelada' }))))
+await caso('es: franqueado cancela contagem', assertSucceeds(updateDoc(doc(frEs, 'estoqueContagens', 'ct-2'), atualCt('fr-es', 'Dono Es', { status: 'cancelada' }))))
+await caso('es: ajuste em contagem cancelada é recusado', assertFails(setDoc(doc(frEs, 'estoqueMovimentos', 'ct-2_0'), ajuste('ct-2', 0))))
+{
+  // Lote grande: 60 linhas divergentes (máximo da contagem) confirmadas de uma vez.
+  const itens = Array.from({ length: 60 }, (_, i) => ({ itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', sistema: 0, contado: i + 1, diferenca: i + 1 }))
+  await setDoc(doc(frEs, 'estoqueContagens', 'ct-grande'), ctNova({ itens, totalItens: 60, totalDivergencias: 60, criadoPor: 'fr-es', criadoPorNome: 'Dono Es', atualizadoPor: 'fr-es', atualizadoPorNome: 'Dono Es' }))
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoqueContagens', 'ct-grande'), confirma())
+  itens.forEach((l, i) => lote.set(doc(frEs, 'estoqueMovimentos', `ct-grande_${i}`), ajuste('ct-grande', i, { itemId: 'it-cad', itemNome: 'Cadeado 40mm', quantidade: l.diferenca, delta: l.diferenca })))
+  await caso('es: contagem com 60 ajustes cabe num lote', assertSucceeds(lote.commit()))
+}
+await caso('es: ninguém apaga contagem', assertFails(deleteDoc(doc(adminAu, 'estoqueContagens', 'ct-1'))))
+await caso('es: unidade lista as próprias contagens', assertSucceeds(daUn(eqEs, 'estoqueContagens')))
+await caso('es: outra unidade não lê a contagem', assertFails(getDoc(doc(frEs2, 'estoqueContagens', 'ct-1'))))
+await caso('es: suprimentos lê contagens', assertSucceeds(getDocs(collection(redeEs, 'estoqueContagens'))))
+
+// Pedidos de reposição
+const pdNovo = (extra = {}) => ({
+  unidadeId: 'un-es', unidadeNome: 'Unidade Es', itens: [{ itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', quantidade: 10, quantidadeEnviada: 0 }],
+  totalItens: 1, status: 'aberto', obsUnidade: 'Urgente', obsFranqueadora: '', solicitanteUid: 'fr-es', solicitanteNome: 'Dono Es', criadoEm: serverTimestamp(),
+  aprovadoEm: null, enviadoEm: null, recebidoEm: null, canceladoEm: null, atualizadoPor: 'fr-es', atualizadoPorNome: 'Dono Es', atualizadoEm: serverTimestamp(), ...extra,
+})
+await caso('es: franqueado envia pedido', assertSucceeds(setDoc(doc(frEs, 'estoquePedidos', 'pd-n'), pdNovo())))
+await caso('es: equipe não envia pedido', assertFails(setDoc(doc(eqEs, 'estoquePedidos', 'pd-x'), pdNovo({ solicitanteUid: 'eq-es', solicitanteNome: 'Equipe Es', atualizadoPor: 'eq-es', atualizadoPorNome: 'Equipe Es' }))))
+await caso('es: pedido já aprovado na criação é recusado', assertFails(setDoc(doc(frEs, 'estoquePedidos', 'pd-x'), pdNovo({ status: 'aprovado' }))))
+await caso('es: pedido para outra unidade é recusado', assertFails(setDoc(doc(frEs, 'estoquePedidos', 'pd-x'), pdNovo({ unidadeId: 'un-es2', unidadeNome: 'Outra Es' }))))
+await caso('es: pedido vazio é recusado', assertFails(setDoc(doc(frEs, 'estoquePedidos', 'pd-x'), pdNovo({ itens: [], totalItens: 0 }))))
+await caso('es: pedido com resposta da franqueadora é recusado', assertFails(setDoc(doc(frEs, 'estoquePedidos', 'pd-x'), pdNovo({ obsFranqueadora: 'ok' }))))
+const atualFr = (extra = {}) => ({ atualizadoPor: 'fr-es', atualizadoPorNome: 'Dono Es', atualizadoEm: serverTimestamp(), ...extra })
+await caso('es: franqueado não aprova o próprio pedido', assertFails(updateDoc(doc(frEs, 'estoquePedidos', 'pd-aberto'), atualFr({ status: 'aprovado', aprovadoEm: serverTimestamp() }))))
+await caso('es: franqueado não recebe pedido que não foi enviado', assertFails(updateDoc(doc(frEs, 'estoquePedidos', 'pd-aprovado'), atualFr({ status: 'recebido', recebidoEm: serverTimestamp() }))))
+await caso('es: franqueado cancela pedido aberto', assertSucceeds(updateDoc(doc(frEs, 'estoquePedidos', 'pd-aberto2'), atualFr({ status: 'cancelado', canceladoEm: serverTimestamp() }))))
+await caso('es: franqueado não cancela pedido aprovado', assertFails(updateDoc(doc(frEs, 'estoquePedidos', 'pd-aprovado'), atualFr({ status: 'cancelado', canceladoEm: serverTimestamp() }))))
+await caso('es: franqueado de outra unidade não mexe no pedido', assertFails(updateDoc(doc(frEs2, 'estoquePedidos', 'pd-aberto'), { status: 'cancelado', canceladoEm: serverTimestamp(), atualizadoPor: 'fr-es2', atualizadoPorNome: 'Dono Outra Es', atualizadoEm: serverTimestamp() })))
+await caso('es: suprimentos aprova pedido', assertSucceeds(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-aberto'), atualEs({ status: 'aprovado', aprovadoEm: serverTimestamp() }))))
+await caso('es: aprovar não pula para enviado', assertFails(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-n'), atualEs({ status: 'enviado', enviadoEm: serverTimestamp() }))))
+await caso('es: aprovar não mexe nos itens', assertFails(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-n'), atualEs({ status: 'aprovado', aprovadoEm: serverTimestamp(), itens: [] }))))
+await caso('es: suprimentos não cancela sem justificativa', assertFails(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-n'), atualEs({ status: 'cancelado', canceladoEm: serverTimestamp() }))))
+await caso('es: suprimentos marca enviado com a quantidade', assertSucceeds(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-aprovado'), atualEs({
+  status: 'enviado', enviadoEm: serverTimestamp(), itens: [{ itemId: 'it-cx', itemNome: 'Caixa de mudança M', unidadeMedida: 'un', quantidade: 30, quantidadeEnviada: 28 }],
+}))))
+await caso('es: suprimentos não marca recebido', assertFails(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-enviado2'), atualEs({ status: 'recebido', recebidoEm: serverTimestamp() }))))
+await caso('es: rede sem o módulo não aprova', assertFails(updateDoc(doc(redeNoEs, 'estoquePedidos', 'pd-n'), { status: 'aprovado', aprovadoEm: serverTimestamp(), atualizadoPor: 'eq-rede-noes', atualizadoPorNome: 'Rede Sem Es', atualizadoEm: serverTimestamp() })))
+await caso('es: suprimentos cancela com justificativa', assertSucceeds(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-n'), atualEs({ status: 'cancelado', canceladoEm: serverTimestamp(), obsFranqueadora: 'Item fora de linha' }))))
+const entradaPd = (pd, extra = {}) => movEs({
+  origem: 'pedido', origemId: pd, indice: 0, tipo: 'entrada', itemId: 'it-cx', itemNome: 'Caixa de mudança M', quantidade: 25, delta: 25,
+  motivo: 'Recebimento do pedido de reposição', uid: 'fr-es', nome: 'Dono Es', ...extra,
+})
+{
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoquePedidos', 'pd-enviado'), atualFr({ status: 'recebido', recebidoEm: serverTimestamp() }))
+  lote.set(doc(frEs, 'estoqueMovimentos', 'pd-enviado_0'), entradaPd('pd-enviado'))
+  await caso('es: recebimento gera a entrada no mesmo lote', assertSucceeds(lote.commit()))
+}
+await caso('es: entrada repetida do pedido é recusada', assertFails(setDoc(doc(frEs, 'estoqueMovimentos', 'pd-enviado_0'), entradaPd('pd-enviado'))))
+await caso('es: entrada de pedido sem receber é recusada', assertFails(setDoc(doc(frEs, 'estoqueMovimentos', 'pd-enviado2_0'), entradaPd('pd-enviado2'))))
+{
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoquePedidos', 'pd-enviado2'), atualFr({ status: 'recebido', recebidoEm: serverTimestamp() }))
+  lote.set(doc(frEs, 'estoqueMovimentos', 'pd-enviado2_0'), entradaPd('pd-enviado2', { quantidade: 250, delta: 250 }))
+  await caso('es: entrada maior que o enviado é recusada', assertFails(lote.commit()))
+}
+{
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoquePedidos', 'pd-enviado2'), atualFr({ status: 'recebido', recebidoEm: serverTimestamp(), itens: [] }))
+  await caso('es: recebimento não mexe nos itens', assertFails(lote.commit()))
+}
+{
+  const lote = writeBatch(eqEs)
+  lote.update(doc(eqEs, 'estoquePedidos', 'pd-enviado2'), { status: 'recebido', recebidoEm: serverTimestamp(), atualizadoPor: 'eq-es', atualizadoPorNome: 'Equipe Es', atualizadoEm: serverTimestamp() })
+  lote.set(doc(eqEs, 'estoqueMovimentos', 'pd-enviado2_0'), entradaPd('pd-enviado2', { uid: 'eq-es', nome: 'Equipe Es' }))
+  await caso('es: equipe não confirma recebimento', assertFails(lote.commit()))
+}
+await caso('es: pedido recebido não muda mais', assertFails(updateDoc(doc(redeEs, 'estoquePedidos', 'pd-enviado'), atualEs({ status: 'cancelado', canceladoEm: serverTimestamp(), obsFranqueadora: 'Desfazer' }))))
+await caso('es: ninguém apaga pedido', assertFails(deleteDoc(doc(adminAu, 'estoquePedidos', 'pd-n'))))
+await caso('es: equipe da unidade lista os pedidos', assertSucceeds(daUn(eqEs, 'estoquePedidos')))
+await caso('es: unidade não lê pedido de outra', assertFails(daUn(frEs2, 'estoquePedidos', 'un-es')))
+await caso('es: suprimentos lê pedidos da rede', assertSucceeds(getDocs(collection(redeEs, 'estoquePedidos'))))
+await caso('es: rede sem o módulo não lê pedidos', assertFails(getDocs(collection(redeNoEs, 'estoquePedidos'))))
+
 void manual
 await ambiente.cleanup()
 
