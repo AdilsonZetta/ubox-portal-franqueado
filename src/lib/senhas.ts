@@ -41,8 +41,22 @@ import {
   type TipoSolicitacaoAcesso,
 } from '../data/senhas'
 import type { Usuario } from '../types'
+import { BACKEND } from './backend'
 import { requireDb } from './firebase'
 import { paraMillis } from './format'
+import {
+  atualizarMetadadosAcessoSb,
+  buscarSegredoSb,
+  criarAcessoSb,
+  criarSolicitacaoAcessoSb,
+  decidirSolicitacaoAcessoSb,
+  gravarEventoAcessoSb,
+  observarAcessosSb,
+  observarEventosAcessoSb,
+  observarSolicitacoesSb,
+  observarSolicitacoesAbertasSb,
+  trocarSenhaAcessoSb,
+} from './senhasSupabase'
 
 export interface Acesso {
   id: string
@@ -196,6 +210,7 @@ export function observarAcessos(
   aoMudar: (acessos: Acesso[]) => void,
   aoErro: (erro: unknown) => void,
 ): () => void {
+  if (BACKEND === 'supabase') return observarAcessosSb(filtro, aoMudar, aoErro)
   const banco = requireDb()
   const base = collection(banco, 'acessos')
 
@@ -263,6 +278,7 @@ export function observarAcessos(
 }
 
 export async function buscarSegredo(acessoId: string): Promise<SegredoAcesso> {
+  if (BACKEND === 'supabase') return buscarSegredoSb(acessoId)
   const banco = requireDb()
   const snap = await getDoc(doc(banco, 'acessos', acessoId, 'segredo', 'atual'))
   if (!snap.exists()) {
@@ -280,6 +296,7 @@ export function observarEventosAcesso(
   aoMudar: (eventos: EventoAcesso[]) => void,
   aoErro: (erro: unknown) => void,
 ): () => void {
+  if (BACKEND === 'supabase') return observarEventosAcessoSb(acessoId, aoMudar, aoErro)
   const banco = requireDb()
   const q = query(collection(banco, 'acessos', acessoId, 'eventos'), orderBy('criadoEm', 'desc'))
   return onSnapshot(
@@ -298,6 +315,7 @@ export async function gravarEventoAcesso(
   tipo: TipoEventoAcesso,
   _textoLegado?: string,
 ): Promise<void> {
+  if (BACKEND === 'supabase') return gravarEventoAcessoSb(acessoId, autor, tipo, _textoLegado)
   const banco = requireDb()
   const ref = doc(collection(banco, 'acessos', acessoId, 'eventos'))
   await setDoc(ref, {
@@ -326,6 +344,7 @@ export interface NovoAcessoDados {
 }
 
 export async function criarAcesso(autor: Usuario, dados: NovoAcessoDados): Promise<string> {
+  if (BACKEND === 'supabase') return criarAcessoSb(autor, dados)
   const banco = requireDb()
   const acessoRef = doc(collection(banco, 'acessos'))
 
@@ -399,6 +418,7 @@ export async function atualizarMetadadosAcesso(
     pendenteTroca?: boolean
   },
 ): Promise<void> {
+  if (BACKEND === 'supabase') return atualizarMetadadosAcessoSb(autor, acesso, patch)
   const banco = requireDb()
   const ref = doc(banco, 'acessos', acesso.id)
   const agora = serverTimestamp()
@@ -444,6 +464,7 @@ export async function trocarSenhaAcesso(
   acessoId: string,
   novosDados: { login: string; senha: string; notas?: string },
 ): Promise<void> {
+  if (BACKEND === 'supabase') return trocarSenhaAcessoSb(autor, acessoId, novosDados)
   const banco = requireDb()
   const agora = serverTimestamp()
   const batch = writeBatch(banco)
@@ -484,6 +505,7 @@ export function observarSolicitacoes(
   aoMudar: (solicitacoes: SolicitacaoAcesso[]) => void,
   aoErro: (erro: unknown) => void,
 ): () => void {
+  if (BACKEND === 'supabase') return observarSolicitacoesSb(filtro, aoMudar, aoErro)
   if (!filtro.rede && !filtro.unidadeId) {
     aoMudar([])
     return () => undefined
@@ -507,6 +529,7 @@ export function observarSolicitacoesAbertas(
   filtro: { rede: boolean; unidadeId?: string | null },
   aoMudar: (total: number) => void,
 ): () => void {
+  if (BACKEND === 'supabase') return observarSolicitacoesAbertasSb(filtro, aoMudar)
   return observarSolicitacoes(
     filtro,
     (itens) => aoMudar(itens.filter((item) => item.status === 'aberta').length),
@@ -527,6 +550,7 @@ export async function criarSolicitacaoAcesso(
     alvoNome?: string
   },
 ): Promise<string> {
+  if (BACKEND === 'supabase') return criarSolicitacaoAcessoSb(autor, dados)
   const banco = requireDb()
   const ref = doc(collection(banco, 'solicitacoesAcesso'))
   const agora = serverTimestamp()
@@ -577,6 +601,7 @@ export async function decidirSolicitacaoAcesso(
   acessoAtual?: Acesso | null,
   dadosRevogacao?: { novaSenha: string; login?: string; notas?: string },
 ): Promise<void> {
+  if (BACKEND === 'supabase') return decidirSolicitacaoAcessoSb(decisor, solicitacao, novoStatus, acessoAtual, dadosRevogacao)
   const banco = requireDb()
   const agora = serverTimestamp()
 
