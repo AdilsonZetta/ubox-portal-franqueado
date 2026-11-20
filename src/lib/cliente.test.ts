@@ -71,6 +71,14 @@ describe('módulo 12: painel do cliente', () => {
     expect(ordenarRecados([{ id: 'x', texto: 'oi', criadoEmMs: 1, autor: '', geradoPorIA: false, iaModelo: '' }, { id: 'y', texto: 'oi', criadoEmMs: 2, autor: '', geradoPorIA: false, iaModelo: '' }]).map((r) => r.id)).toEqual(['y', 'x'])
   })
 
+  it('autor do recado é uma palavra só (primeiro nome) ou "Equipe"', async () => {
+    const { autorRecado } = await import('./cliente')
+    expect(autorRecado('  Ana Paula Souza ')).toBe('Ana')
+    expect(autorRecado('')).toBe('Equipe')
+    expect(autorRecado('x'.repeat(60))).toHaveLength(40)
+    expect(autorRecado('Maria\tdas Dores')).toMatch(/^[^ ]{1,40}$/)
+  })
+
   it('valida o cadastro e o recado com IA', () => {
     const f = { nome: 'Maria Silva', telefone: '(34) 99999-0000', email: '', box: 'Box 1', contratoInicio: '2026-11-01', contratoFim: '', valorMensal: '289,90', diaVencimento: '10', obs: '' }
     expect(validarCliente(f)).toEqual([])

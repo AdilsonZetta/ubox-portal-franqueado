@@ -115,6 +115,11 @@ export function primeiroNomeDe(nome: string): string {
   return (nome.trim().split(/\s+/)[0] ?? '').slice(0, 40)
 }
 
+/** Autor do recado no link: uma palavra só (o primeiro nome), como exigem as regras. */
+export function autorRecado(nome: string): string {
+  return primeiroNomeDe(nome) || 'Equipe'
+}
+
 export function centavos(valor: string): number {
   const limpo = valor.replace(/[^\d,.-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.')
   const n = Number(limpo)

@@ -15,7 +15,7 @@ import {
   type StatusVisita,
   type Visita,
 } from './cliente'
-import { ordenarCobrancas, ordenarRecados, ordenarVisitas } from './cliente'
+import { autorRecado, ordenarCobrancas, ordenarRecados, ordenarVisitas } from './cliente'
 import type { Usuario } from '../types'
 
 const texto = (v: unknown, padrao = '') => (typeof v === 'string' ? v : padrao)
@@ -113,7 +113,7 @@ export async function mudarVisita(painel: Painel, id: string, status: Exclude<St
 
 export async function publicarRecado(painel: Painel, r: { texto: string; autor: string; geradoPorIA: boolean; iaModelo: string }): Promise<void> {
   await setDoc(doc(collection(requireDb(), 'clientePaineis', painel.token, 'recados')), {
-    texto: r.texto.trim().slice(0, 500), criadoEm: serverTimestamp(), autor: r.autor.slice(0, 40), geradoPorIA: r.geradoPorIA, iaModelo: r.geradoPorIA ? r.iaModelo.trim().slice(0, 80) : '',
+    texto: r.texto.trim().slice(0, 500), criadoEm: serverTimestamp(), autor: autorRecado(r.autor), geradoPorIA: r.geradoPorIA, iaModelo: r.geradoPorIA ? r.iaModelo.trim().slice(0, 80) : '',
   })
 }
 
