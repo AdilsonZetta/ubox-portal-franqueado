@@ -315,3 +315,11 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - App: `src/lib/estoqueSupabase.ts` atrás de `VITE_BACKEND=supabase`.
 - `scripts/supabase-test-remoto.mjs`: o `plan()` passa para depois da tabela de saída quando o arquivo o declara antes do `create schema tests`.
 - Testes: `supabase/tests/fase11_estoque.test.sql` — 129 casos (99 `es:` das regras + privacidade, atomicidade do saldo e anon), local e remoto com rollback.
+
+## 21. O que a fase 12 entregou (CRM e Gestão Comercial)
+
+- Migração `20261120180006_fase12_crm` (aplicada no projeto): `crm_config`, `crm_leads` (sem PII), `crm_contatos` (nome, telefone, e-mail), `crm_atividades`, `crm_propostas`. Sem DELETE; anon sem nada.
+- **Privacidade igual às regras:** `crm_contatos`, atividades e propostas são só da própria unidade (com o módulo `crm`, conta e unidade ativas). Admin, equipe da franqueadora e consultor de acompanhamento **não** leem nem gravam contatos. A franqueadora lê só os leads (sem PII) e a configuração da rede.
+- Lead + contato nascem juntos pela RPC invoker `public.criar_lead_crm(...)` (FK/gatilho adiado exige o par); atividade + próximo follow-up também no mesmo lote. Erros com mensagem fixa, sem PII.
+- App: `src/lib/crmSupabase.ts` atrás de `VITE_BACKEND=supabase`.
+- Testes: `supabase/tests/fase12_crm.test.sql` — 119 casos (85 `crm:` das regras + privacidade de contatos, atomicidade e anon), local e remoto com rollback.

@@ -12,6 +12,20 @@ import {
   type DocumentData,
 } from 'firebase/firestore'
 import { requireDb } from './firebase'
+import { BACKEND } from './backend'
+import {
+  lerConfigSb,
+  salvarConfigSb,
+  carregarUnidadeSb,
+  carregarRedeSb,
+  carregarDetalheSb,
+  criarLeadSb,
+  salvarContatoSb,
+  atualizarLeadSb,
+  registrarAtividadeSb,
+  criarPropostaSb,
+  mudarStatusPropostaSb,
+} from './crmSupabase'
 import { paraMillis } from './format'
 import {
   ETAPAS,
@@ -78,6 +92,7 @@ const mapProposta = (id: string, d: DocumentData): Proposta => ({
 })
 
 export async function lerConfig(): Promise<ConfigCrm> {
+  if (BACKEND === 'supabase') return lerConfigSb()
   const snap = await getDoc(doc(requireDb(), 'crmConfig', 'rede'))
   const d = snap.exists() ? snap.data() : {}
   const origens = textos(d.origens)
@@ -91,6 +106,7 @@ export async function lerConfig(): Promise<ConfigCrm> {
 }
 
 export async function salvarConfig(autor: Usuario, origens: string[], motivosPerda: string[]): Promise<void> {
+  if (BACKEND === 'supabase') return salvarConfigSb(origens, motivosPerda)
   await setDoc(doc(requireDb(), 'crmConfig', 'rede'), {
     origens: normalizarLista(origens),
     motivosPerda: normalizarLista(motivosPerda),
@@ -102,6 +118,7 @@ export async function salvarConfig(autor: Usuario, origens: string[], motivosPer
 
 /** Unidade: leads (sem PII) e contatos (PII) da própria unidade, sempre com o filtro que as rules exigem. */
 export async function carregarUnidade(unidadeId: string): Promise<{ leads: Lead[]; contatos: Map<string, Contato> }> {
+  if (BACKEND === 'supabase') return carregarUnidadeSb(unidadeId)
   const banco = requireDb()
   const [l, c] = await Promise.all([
     getDocs(query(collection(banco, 'crmLeads'), where('unidadeId', '==', unidadeId))),
@@ -115,11 +132,13 @@ export async function carregarUnidade(unidadeId: string): Promise<{ leads: Lead[
 
 /** Franqueadora: só crmLeads (campos sem dados pessoais). */
 export async function carregarRede(): Promise<Lead[]> {
+  if (BACKEND === 'supabase') return carregarRedeSb()
   const snap = await getDocs(collection(requireDb(), 'crmLeads'))
   return snap.docs.map((d) => mapLead(d.id, d.data()))
 }
 
 export async function carregarDetalhe(unidadeId: string, leadId: string): Promise<{ atividades: Atividade[]; propostas: Proposta[] }> {
+  if (BACKEND === 'supabase') return carregarDetalheSb(unidadeId, leadId)
   const banco = requireDb()
   const [a, p] = await Promise.all([
     getDocs(query(collection(banco, 'crmAtividades'), where('unidadeId', '==', unidadeId), where('leadId', '==', leadId))),
@@ -139,6 +158,7 @@ const dataOuNull = (dia: string) => (dia ? new Date(`${dia}T09:00:00`) : null)
  * `responsavelNome` tem de ser exatamente o `nome` do perfil do responsável (as rules conferem).
  */
 export async function criarLead(autor: Usuario, f: LeadForm, responsavelNome: string): Promise<string> {
+  if (BACKEND === 'supabase') return criarLeadSb(autor, f, responsavelNome)
   const banco = requireDb()
   const ref = doc(collection(banco, 'crmLeads'))
   const lote = writeBatch(banco)
@@ -181,6 +201,7 @@ const interesse = (c: Pick<Contato, 'interesseTamanho' | 'interessePeriodo' | 'i
 export type ContatoEditavel = Omit<Contato, 'id'>
 
 export async function salvarContato(autor: Usuario, leadId: string, c: ContatoEditavel): Promise<void> {
+  if (BACKEND === 'supabase') return salvarContatoSb(leadId, c)
   await updateDoc(doc(requireDb(), 'crmContatos', leadId), {
     nome: c.nome.trim().slice(0, 120), telefone: c.telefone.trim().slice(0, 30), email: c.email.trim().slice(0, 120),
     ...interesse(c),
@@ -200,6 +221,7 @@ export interface MudancaLead {
 }
 
 export async function atualizarLead(autor: Usuario, lead: Lead, m: MudancaLead): Promise<void> {
+  if (BACKEND === 'supabase') return atualizarLeadSb(lead, m)
   const dados: Record<string, unknown> = { ...autoria(autor) }
   if (m.etapa && m.etapa !== lead.etapa) {
     dados.etapa = m.etapa
@@ -221,6 +243,7 @@ export async function atualizarLead(autor: Usuario, lead: Lead, m: MudancaLead):
 
 /** Atividade imutável + data da última atividade (e o próximo follow-up, se veio) no mesmo lote. */
 export async function registrarAtividade(autor: Usuario, lead: Lead, tipo: TipoAtividade, textoAtividade: string, ia: { geradoPorIA: boolean; iaModelo: string }, proximoContato: string | null): Promise<void> {
+  if (BACKEND === 'supabase') return registrarAtividadeSb(lead, tipo, textoAtividade, ia, proximoContato)
   const banco = requireDb()
   const lote = writeBatch(banco)
   lote.set(doc(collection(banco, 'crmAtividades')), {
@@ -245,6 +268,7 @@ export async function registrarAtividade(autor: Usuario, lead: Lead, tipo: TipoA
 }
 
 export async function criarProposta(autor: Usuario, lead: Lead, p: { box: string; preco: string; periodoMeses: number; validade: string; obs: string; geradoPorIA: boolean; iaModelo: string }): Promise<void> {
+  if (BACKEND === 'supabase') return criarPropostaSb(lead, p)
   await setDoc(doc(collection(requireDb(), 'crmPropostas')), {
     leadId: lead.id,
     unidadeId: lead.unidadeId,
@@ -262,5 +286,6 @@ export async function criarProposta(autor: Usuario, lead: Lead, p: { box: string
 }
 
 export async function mudarStatusProposta(autor: Usuario, proposta: Proposta, status: StatusProposta): Promise<void> {
+  if (BACKEND === 'supabase') return mudarStatusPropostaSb(proposta, status)
   await updateDoc(doc(requireDb(), 'crmPropostas', proposta.id), { status, ...autoria(autor) })
 }
