@@ -280,3 +280,11 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - Autoria, datas, campos imutáveis e transições de status nos gatilhos (`42501`). Cada ação grava uma linha, então não há RPC de lote.
 - App: `src/lib/marketingSupabase.ts` atrás de `VITE_BACKEND=supabase` (polling de 15 s).
 - Testes: `supabase/tests/fase7_marketing.test.sql` — 90 casos (66 das regras do Firestore + privacidade e anon), local e remoto com rollback.
+
+## 17. O que a fase 8 entregou (Checklist Operacional)
+
+- Migração `20261120161306_fase8_checklist` (aplicada no projeto): `checklist_modelos` e `checklist_execucoes` (itens em jsonb validado). Sem DELETE; anon sem nada.
+- Leitura igual às regras: gestores de Checklist (admin / equipe da franqueadora com `checklist`) leem tudo; consultor com `acompanhamento` lê modelos e execuções; auditor (`app.gere_auditoria()`, admin / franqueadora com `auditoria`) lê execuções para referenciar — só leitura; a unidade lê o próprio histórico e os modelos ativos públicos ou direcionados a ela.
+- Gatilhos validam versão, pesos e totais contra o modelo, autoria e datas do servidor; depois do envio só a observação do proprietário (franqueado) muda.
+- App: `src/lib/checklistSupabase.ts` atrás de `VITE_BACKEND=supabase`.
+- Testes: `supabase/tests/fase8_checklist.test.sql` — 90 casos (64 `ck:` + 4 de auditor/consultor das regras, mais privacidade e anon). Cinco casos indiretos que gravam auditorias ficam na fase 9.
