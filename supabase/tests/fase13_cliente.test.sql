@@ -2,7 +2,7 @@
 begin;
 
 create schema tests;
-select plan(112);
+select plan(114);
 create table tests.pessoas (apelido text primary key, id uuid not null, email text not null);
 insert into tests.pessoas (apelido, id, email)
 select apelido, ('00000000-0000-0000-0000-' || lpad(to_hex(n), 12, '0'))::uuid, apelido || '@ubox.test'
@@ -315,5 +315,19 @@ select tests.sair();
 select tests.entrar('admin');
 select ok(tests.publico('a') is not null, 'usuário autenticado usa o mesmo acesso público por token');
 select tests.sair();
+-- Grok Bot: o anônimo só executa o painel público (nada mais em app ou public) e não tem privilégio em tabela alguma.
+select is((select array_agg(n.nspname || '.' || p.proname order by 1) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+  where has_function_privilege('anon', p.oid, 'execute')
+    -- Todo o schema app e todas as funções public criadas pelas migrações (o pgTAP local fica em public).
+    and (n.nspname = 'app' or (n.nspname = 'public' and p.proname = any (array[
+      'atualizar_metadados_acesso', 'atualizar_unidade', 'confirmar_contagem_estoque', 'criar_acesso',
+      'criar_acoes_auditoria', 'criar_cliente', 'criar_lead_crm', 'criar_unidade_com_responsavel',
+      'decidir_solicitacao_acesso', 'enviar_tentativa_universidade', 'mudar_status_chamado', 'painel_publico',
+      'receber_pedido_estoque', 'registrar_atividade_crm', 'registrar_criacao_conta', 'registrar_movimento_estoque',
+      'salvar_acompanhamento', 'salvar_cliente', 'salvar_prova_universidade', 'trocar_link_cliente',
+      'trocar_senha_acesso'])))),
+  array['app.painel_publico', 'public.painel_publico'], 'anon executa só o painel público');
+select is((select count(*)::int from information_schema.role_table_grants where grantee = 'anon' and table_schema in ('public', 'app')),
+  0, 'anon não tem privilégio em nenhuma tabela');
 select * from finish();
 rollback;

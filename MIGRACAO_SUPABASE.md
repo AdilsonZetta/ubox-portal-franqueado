@@ -323,3 +323,12 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - Lead + contato nascem juntos pela RPC invoker `public.criar_lead_crm(...)` (FK/gatilho adiado exige o par); atividade + próximo follow-up também no mesmo lote. Erros com mensagem fixa, sem PII.
 - App: `src/lib/crmSupabase.ts` atrás de `VITE_BACKEND=supabase`.
 - Testes: `supabase/tests/fase12_crm.test.sql` — 119 casos (85 `crm:` das regras + privacidade de contatos, atomicidade e anon), local e remoto com rollback.
+
+## 22. O que a fase 13 entregou (Painel do Cliente e link público)
+
+- Migração `20261120180417_fase13_cliente` (aplicada no projeto): `clientes` (cadastro com nome, telefone, e-mail), `cliente_paineis` (pk = token de 128 bits em hex), `cliente_painel_cobrancas`, `cliente_painel_visitas`, `cliente_painel_recados`. Sem DELETE.
+- **Privacidade:** `clientes` só da própria unidade com o módulo `cliente`; admin, franqueadora e acompanhamento não leem. O painel guarda só o primeiro nome, sem telefone/e-mail/sobrenome.
+- **Link público `/painel/:token`:** o anônimo **não tem privilégio em tabela nenhuma** (nem SELECT), então não há listagem nem enumeração. O único acesso é `public.painel_publico(p_token)` (invoker) → `app.painel_publico` (definer, `search_path = ''`). Ela confere o formato do token, exige painel ativo **e** que o token seja o atual do cliente, e devolve só os campos públicos do painel e dos itens (sem `cliente_id`, `unidade_id` nem IDs internos). Token inválido, desconhecido, inativo ou trocado → `null` igual (sem oráculo de existência). Para isso a fase concede `USAGE` no schema `app` ao anon e antes revoga o EXECUTE herdado de PUBLIC dos gatilhos antigos; o teste confere que o anon executa **só** `painel_publico` e nenhuma tabela.
+- Troca de link (painel novo + antigo desativado + cliente apontando para o novo; link antigo nunca volta) e criação/edição do cliente com painel no mesmo lote por RPCs invoker (`criar_cliente`, `salvar_cliente`, `trocar_link_cliente`).
+- App: `src/lib/clienteSupabase.ts`; a página pública chama `rpc('painel_publico')` sob a chave. O caminho Firebase da página pública mantém o comportamento anterior.
+- Testes: `supabase/tests/fase13_cliente.test.sql` — 114 casos (83 `cli:` das regras + superfície do anônimo, chaves públicas e troca de link), local e remoto com rollback.
