@@ -1,3 +1,5 @@
+import { BACKEND } from './backend'
+import { carregarLinksRedeSb, carregarLinksUnidadeSb, criarLinkSb, removerLinkSb, salvarLinkSb } from './nuvemSupabase'
 import { collection, deleteDoc, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, type DocumentData } from 'firebase/firestore'
 import { requireDb } from './firebase'
 import { paraMillis } from './format'
@@ -32,11 +34,13 @@ const ler = async (q: ReturnType<typeof query>) => (await getDocs(q)).docs.map((
 
 /** Franqueadora: tudo o que ela publicou (rede, unidades escolhidas e a pasta só dela). Nunca a área privada das unidades. */
 export async function carregarLinksRede(): Promise<LinkNuvem[]> {
+  if (BACKEND === 'supabase') return carregarLinksRedeSb()
   return ler(query(col(), where('dono', '==', '')))
 }
 
 /** Unidade: links da rede toda, os compartilhados com ela e a própria área privada (três consultas, cada uma permitida pelas regras). */
 export async function carregarLinksUnidade(unidadeId: string): Promise<LinkNuvem[]> {
+  if (BACKEND === 'supabase') return carregarLinksUnidadeSb(unidadeId)
   const [rede, minhas, privada] = await Promise.all([
     ler(query(col(), where('dono', '==', ''), where('visibilidade', '==', 'rede'))),
     ler(query(col(), where('dono', '==', ''), where('unidades', 'array-contains', unidadeId))),
@@ -63,6 +67,7 @@ function campos(f: LinkForm) {
 const autoria = (autor: Usuario) => ({ atualizadoPor: autor.uid, atualizadoPorNome: autor.nome, atualizadoEm: serverTimestamp() })
 
 export async function criarLink(autor: Usuario, papel: 'rede' | 'unidade', f: LinkForm): Promise<string> {
+  if (BACKEND === 'supabase') return criarLinkSb(autor, papel, f)
   const ref = doc(col())
   await setDoc(ref, {
     ...campos(f),
@@ -74,10 +79,12 @@ export async function criarLink(autor: Usuario, papel: 'rede' | 'unidade', f: Li
 }
 
 export async function salvarLink(autor: Usuario, id: string, f: LinkForm): Promise<void> {
+  if (BACKEND === 'supabase') return salvarLinkSb(id, f)
   await updateDoc(doc(col(), id), { ...campos(f), ...autoria(autor) })
 }
 
 /** Remove só o registro do portal; o arquivo no Drive não é tocado. */
 export async function removerLink(id: string): Promise<void> {
+  if (BACKEND === 'supabase') return removerLinkSb(id)
   await deleteDoc(doc(col(), id))
 }

@@ -332,3 +332,11 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - Troca de link (painel novo + antigo desativado + cliente apontando para o novo; link antigo nunca volta) e criação/edição do cliente com painel no mesmo lote por RPCs invoker (`criar_cliente`, `salvar_cliente`, `trocar_link_cliente`).
 - App: `src/lib/clienteSupabase.ts`; a página pública chama `rpc('painel_publico')` sob a chave. O caminho Firebase da página pública mantém o comportamento anterior.
 - Testes: `supabase/tests/fase13_cliente.test.sql` — 114 casos (83 `cli:` das regras + superfície do anônimo, chaves públicas e troca de link), local e remoto com rollback.
+
+## 23. O que a fase 14 entregou (Armazenamento em Nuvem)
+
+- Migração `20261120180541_fase14_nuvem` (aplicada no projeto): `nuvem_links` (só links https de `drive.google.com`/`docs.google.com`; o compartilhamento no Drive não muda).
+- **Privacidade igual às regras:** a área privada da unidade (`dono = unidade_id`, visibilidade `privada`) só é lida, editada ou apagada pela própria unidade com o módulo `nuvem`; admin e equipe da franqueadora **não** acessam. Links da franqueadora (`dono = ''`) seguem a visibilidade `rede` / `unidades` / `franqueadora` (esta última invisível às unidades). DELETE existe, como nas regras, só para quem pode gravar.
+- Dono, autor e data de criação imutáveis; carimbos de atualização só pelo gatilho.
+- App: `src/lib/nuvemSupabase.ts` atrás de `VITE_BACKEND=supabase`.
+- Testes: `supabase/tests/fase14_nuvem.test.sql` — 74 casos (59 `nv:` das regras + privacidade da área da unidade), local e remoto com rollback.
