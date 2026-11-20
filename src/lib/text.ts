@@ -41,15 +41,19 @@ export interface ItemSumario {
 
 export function aplicarSumario(html: string): { html: string; itens: ItemSumario[] } {
   const itens: ItemSumario[] = []
+  const idsExistentes = new Set(Array.from(html.matchAll(/\sid=(['"])(.*?)\1/gi), (match) => match[2]))
   let ordem = 0
   const marcado = html.replace(/<h([1-3])(\s[^>]*)?>([\s\S]*?)<\/h\1>/gi, (_tudo, nivel: string, attrs = '', inner: string) => {
     const texto = htmlParaTexto(inner).slice(0, 160)
     if (!texto) return `<h${nivel}${attrs}>${inner}</h${nivel}>`
-    ordem += 1
-    const id = `sec-${ordem}`
+    const idExistente = attrs.match(/\sid=(['"])(.+?)\1/i)?.[2]
+    let id = idExistente
+    if (!id) {
+      do { id = `sec-${++ordem}` } while (idsExistentes.has(id))
+    }
     itens.push({ id, texto, nivel: Number(nivel) })
-    const limpo = String(attrs).replace(/\sid=(['"]).*?\1/i, '')
-    return `<h${nivel}${limpo} id="${id}">${inner}</h${nivel}>`
+    const atributos = idExistente ? attrs : `${attrs} id="${id}"`
+    return `<h${nivel}${atributos}>${inner}</h${nivel}>`
   })
   return { html: marcado, itens }
 }

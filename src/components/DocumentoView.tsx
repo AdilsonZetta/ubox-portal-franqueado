@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import type { MouseEvent } from 'react'
 import type { Anexo, Documento } from '../types'
 import { drivePreview, sanitizarHtml, youtubeEmbed } from '../lib/html'
 
@@ -12,6 +13,21 @@ window.addEventListener('resize', uboxAltura);
 setTimeout(uboxAltura, 400);
 setTimeout(uboxAltura, 1500);
 </script>`
+
+export function abrirAncoraDocumento(evento: MouseEvent<HTMLElement>) {
+  if (evento.defaultPrevented || evento.button !== 0 || evento.altKey || evento.ctrlKey || evento.metaKey || evento.shiftKey) return
+  const link = evento.target instanceof Element ? evento.target.closest('a[href^="#"]') : null
+  const id = link?.getAttribute('href')?.slice(1)
+  if (!id || id.startsWith('/')) return
+  const destino = document.getElementById(id)
+  if (!destino) return
+
+  // O fragmento da URL contém a rota do portal.
+  evento.preventDefault()
+  if (!destino.hasAttribute('tabindex')) destino.tabIndex = -1
+  destino.focus({ preventScroll: true })
+  destino.scrollIntoView()
+}
 
 export function ManualInterativo({ titulo, html, url }: { titulo: string; html?: string; url?: string }) {
   const [altura, setAltura] = useState(900)
@@ -43,7 +59,7 @@ export function DocumentoView({ documento }: { documento: Pick<Documento, 'forma
     const html = documento.htmlConteudo.trim() || documento.conteudoHtml.trim()
     if (html || documento.htmlUrl) return <ManualInterativo titulo={documento.titulo} html={html} url={documento.htmlUrl} />
   }
-  return <article className="documento max-w-none" dangerouslySetInnerHTML={{ __html: sanitizarHtml(documento.conteudoHtml) }} />
+  return <article className="documento max-w-none" onClick={abrirAncoraDocumento} dangerouslySetInnerHTML={{ __html: sanitizarHtml(documento.conteudoHtml) }} />
 }
 
 export function Anexos({ anexos }: { anexos: Anexo[] }) {
