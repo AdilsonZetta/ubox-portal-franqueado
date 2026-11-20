@@ -1839,6 +1839,32 @@ await caso('es: ajuste sem confirmar a contagem é recusado', assertFails(setDoc
   lote.set(doc(eqEs, 'estoqueMovimentos', 'ct-2_0'), ajuste('ct-2', 0, { uid: 'eq-es', nome: 'Equipe Es' }))
   await caso('es: equipe não gera ajuste de contagem', assertFails(lote.commit()))
 }
+{
+  // Linhas adulteradas: diferença que não fecha com contado − sistema, valores fora da faixa ou não inteiros.
+  const linha = (extra) => [{ itemId: 'it-cad', itemNome: 'Cadeado 40mm', unidadeMedida: 'un', sistema: 20, contado: 17, diferenca: -3, ...extra }]
+  const ruins = [
+    ['diferença que não fecha com contado − sistema', { diferenca: -3, contado: 10 }, -3],
+    ['contado negativo', { contado: -5, sistema: 0, diferenca: -5 }, -5],
+    ['sistema acima de 100.000', { sistema: 100003, contado: 100000, diferenca: -3 }, -3],
+    ['contado fracionado', { contado: 16.5, diferenca: -3.5 }, -3],
+    ['sistema ausente', { sistema: null }, -3],
+  ]
+  for (const [i, [nome, extra, delta]] of ruins.entries()) {
+    const id = `ct-ruim-${i}`
+    await setDoc(doc(frEs, 'estoqueContagens', id), ctNova({ itens: linha(extra), totalItens: 1, totalDivergencias: 1, criadoPor: 'fr-es', criadoPorNome: 'Dono Es', atualizadoPor: 'fr-es', atualizadoPorNome: 'Dono Es' }))
+      .catch(() => undefined)
+    const lote = writeBatch(frEs)
+    lote.update(doc(frEs, 'estoqueContagens', id), confirma())
+    lote.set(doc(frEs, 'estoqueMovimentos', `${id}_0`), ajuste(id, 0, { quantidade: Math.abs(Math.trunc(delta)), delta: Math.trunc(delta) }))
+    await caso(`es: ajuste recusado com linha de ${nome}`, assertFails(lote.commit()))
+  }
+  // Controle: a mesma montagem com a linha coerente passa.
+  await setDoc(doc(frEs, 'estoqueContagens', 'ct-boa'), ctNova({ itens: linha({}), totalItens: 1, totalDivergencias: 1, criadoPor: 'fr-es', criadoPorNome: 'Dono Es', atualizadoPor: 'fr-es', atualizadoPorNome: 'Dono Es' }))
+  const lote = writeBatch(frEs)
+  lote.update(doc(frEs, 'estoqueContagens', 'ct-boa'), confirma())
+  lote.set(doc(frEs, 'estoqueMovimentos', 'ct-boa_0'), ajuste('ct-boa', 0))
+  await caso('es: ajuste aceito com linha coerente (controle)', assertSucceeds(lote.commit()))
+}
 await caso('es: franqueado não confirma contagem de outra unidade', assertFails(updateDoc(doc(frEs, 'estoqueContagens', 'ct-outra'), confirma())))
 await caso('es: equipe não cancela contagem', assertFails(updateDoc(doc(eqEs, 'estoqueContagens', 'ct-2'), atualCt('eq-es', 'Equipe Es', { status: 'cancelada' }))))
 await caso('es: franqueado cancela contagem', assertSucceeds(updateDoc(doc(frEs, 'estoqueContagens', 'ct-2'), atualCt('fr-es', 'Dono Es', { status: 'cancelada' }))))

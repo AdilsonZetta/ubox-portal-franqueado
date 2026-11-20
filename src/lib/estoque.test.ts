@@ -81,6 +81,7 @@ describe('contagem', () => {
   it('valida', () => {
     expect(validarContagem([])).toHaveLength(1)
     expect(validarContagem(linhasContagem([item('a', 1)], new Map(), { a: -1 }))).toHaveLength(1)
+    expect(validarContagem(linhasContagem([item('a', 1)], new Map([['a', -2]]), { a: 3 }))).toHaveLength(1)
   })
 })
 

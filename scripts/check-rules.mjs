@@ -113,6 +113,8 @@ exigir(rules.includes("movimentoId == request.resource.data.origemId + '_' + str
 exigir(rules.includes("get(contagemPath(request.resource.data.origemId)).data.status == 'aberta'"), 'ajuste de contagem sem exigir a confirmação no mesmo lote')
 exigir(rules.includes("get(pedidoEstoquePath(request.resource.data.origemId)).data.status == 'enviado'"), 'entrada de pedido sem exigir o recebimento no mesmo lote')
 
+exigir(rules.includes('&& l.diferenca == l.contado - l.sistema'), 'ajuste de contagem sem conferir contado − sistema')
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)

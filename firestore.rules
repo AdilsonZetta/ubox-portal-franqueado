@@ -2939,6 +2939,15 @@ service cloud.firestore {
         && data.criadoEm == request.time;
     }
 
+    // Linha da contagem confirmada: mesmo item, contado e sistema inteiros de 0 a 100.000 e diferença coerente com o ajuste.
+    function linhaContagemOk(l, mov) {
+      return l.itemId == mov.itemId
+        && l.contado is int && l.contado >= 0 && l.contado <= 100000
+        && l.sistema is int && l.sistema >= 0 && l.sistema <= 100000
+        && l.diferenca == l.contado - l.sistema
+        && l.diferenca == mov.delta;
+    }
+
     function isValidContagem(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
         && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
@@ -3017,8 +3026,7 @@ service cloud.firestore {
           && getAfter(contagemPath(request.resource.data.origemId)).data.status == 'confirmada'
           && getAfter(contagemPath(request.resource.data.origemId)).data.unidadeId == request.resource.data.unidadeId
           && getAfter(contagemPath(request.resource.data.origemId)).data.itens.size() > request.resource.data.indice
-          && getAfter(contagemPath(request.resource.data.origemId)).data.itens[request.resource.data.indice].itemId == request.resource.data.itemId
-          && getAfter(contagemPath(request.resource.data.origemId)).data.itens[request.resource.data.indice].diferenca == request.resource.data.delta
+          && linhaContagemOk(getAfter(contagemPath(request.resource.data.origemId)).data.itens[request.resource.data.indice], request.resource.data)
         ) : false;
 
       // Pedido: entrada no mesmo lote em que o franqueado confirma o recebimento; id = pedido_indice.

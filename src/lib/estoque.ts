@@ -219,6 +219,7 @@ export function validarContagem(linhas: LinhaContagem[]): string[] {
   if (linhas.length > MAX_ITENS_CONTAGEM) erros.push(`No máximo ${MAX_ITENS_CONTAGEM} itens por contagem.`)
   if (linhas.some((l) => !Number.isInteger(l.contado) || l.contado < 0 || l.contado > QTD_MAX)) erros.push('As quantidades contadas precisam ser inteiras, de 0 a 100.000.')
   if (linhas.some((l) => Math.abs(l.diferenca) > QTD_MAX)) erros.push('Uma diferença passa do limite de 100.000.')
+  if (linhas.some((l) => !Number.isInteger(l.sistema) || l.sistema < 0 || l.sistema > QTD_MAX)) erros.push('Há item com saldo do sistema negativo ou acima de 100.000; fale com a franqueadora antes de confirmar.')
   return erros
 }
 
