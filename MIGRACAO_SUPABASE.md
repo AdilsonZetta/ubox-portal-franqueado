@@ -305,3 +305,13 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - RPC invoker `public.salvar_acompanhamento(...)` grava registro + passos no mesmo lote (equivalente a `existsAfter/getAfter`) e propaga o compartilhamento para os passos, inclusive validados. O franqueado só marca o passo como feito, com comentário.
 - **Painel do Acompanhamento no Supabase:** com `VITE_BACKEND=supabase`, o resumo lê as 12 fontes (modelos e execuções de checklist, auditorias e ações, chamados, tentativas e cursos, progresso e trilha de manuais, pedidos de marketing, registros e passos) das tabelas já migradas — sem tocar no Firestore.
 - Testes: `supabase/tests/fase10_acompanhamento.test.sql` — 72 casos; os 73 casos `ac:` das regras estão portados (50 aqui, 23 nas fases anteriores).
+
+## 20. O que a fase 11 entregou (Controle de Estoque)
+
+- Migração `20261120171359_fase11_estoque` (aplicada no projeto): `estoque_itens`, `estoque_movimentos`, `estoque_contagens`, `estoque_pedidos` e a nova `estoque_saldos` (saldo por unidade e item). Sem DELETE; anon sem nada.
+- Leitura igual às regras: Suprimentos (admin / franqueadora com `estoque`) lê tudo; a unidade com o módulo lê o catálogo e só os próprios movimentos, contagens, pedidos e saldos. O Acompanhamento sozinho não lê estoque (como no Firestore).
+- Lotes do Firestore viraram RPCs invoker: `registrar_movimento_estoque`, `confirmar_contagem_estoque` (contagem + ajustes) e `receber_pedido_estoque` (recebimento + entradas). O saldo só muda por gatilho, com o item travado (`for update`); escrita direta em `estoque_saldos` é recusada.
+- **Diferença intencional:** o banco recusa movimento que deixaria o saldo negativo (o app já bloqueava isso no cliente; o Firestore não conferia). Na carga de dados reais, `estoque_saldos` precisa ser inicializado com a soma dos deltas importados antes de liberar o módulo.
+- App: `src/lib/estoqueSupabase.ts` atrás de `VITE_BACKEND=supabase`.
+- `scripts/supabase-test-remoto.mjs`: o `plan()` passa para depois da tabela de saída quando o arquivo o declara antes do `create schema tests`.
+- Testes: `supabase/tests/fase11_estoque.test.sql` — 129 casos (99 `es:` das regras + privacidade, atomicidade do saldo e anon), local e remoto com rollback.
