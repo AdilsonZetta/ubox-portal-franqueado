@@ -1,3 +1,15 @@
+import { BACKEND } from './backend'
+import {
+  listarMateriaisSb,
+  salvarMaterialSb,
+  listarCampanhasSb,
+  salvarCampanhaSb,
+  listarPedidosSb,
+  criarPedidoSb,
+  cancelarPedidoSb,
+  responderPedidoSb,
+  andamentoPedidoSb,
+} from './marketingSupabase'
 import { collection, doc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, type DocumentData } from 'firebase/firestore'
 import { requireDb } from './firebase'
 import { paraMillis } from './format'
@@ -91,6 +103,7 @@ export function mapPedido(id: string, d: DocumentData): PedidoMkt {
 
 /** Franqueadora: tudo. Unidade: ativos da rede + ativos direcionados à própria unidade (duas consultas que as rules aceitam). */
 export async function listarMateriais(usuario: Usuario, gestor: boolean): Promise<MaterialMkt[]> {
+  if (BACKEND === 'supabase') return listarMateriaisSb(usuario, gestor)
   const base = collection(requireDb(), 'marketingMateriais')
   if (gestor) return (await getDocs(base)).docs.map((d) => mapMaterial(d.id, d.data()))
   const rede = getDocs(query(base, where('ativo', '==', true), where('publico', '==', true)))
@@ -102,6 +115,7 @@ export async function listarMateriais(usuario: Usuario, gestor: boolean): Promis
 }
 
 export async function salvarMaterial(autor: Usuario, id: string | null, f: MaterialForm): Promise<string> {
+  if (BACKEND === 'supabase') return salvarMaterialSb(id, f)
   const banco = requireDb()
   const ref = id ? doc(banco, 'marketingMateriais', id) : doc(collection(banco, 'marketingMateriais'))
   const dados = {
@@ -132,6 +146,7 @@ export async function salvarMaterial(autor: Usuario, id: string | null, f: Mater
 }
 
 export async function listarCampanhas(gestor: boolean): Promise<CampanhaMkt[]> {
+  if (BACKEND === 'supabase') return listarCampanhasSb(gestor)
   const base = collection(requireDb(), 'marketingCampanhas')
   const snap = await getDocs(gestor ? base : query(base, where('ativo', '==', true)))
   return snap.docs.map((d) => mapCampanha(d.id, d.data()))
@@ -149,6 +164,7 @@ export interface CampanhaForm {
 }
 
 export async function salvarCampanha(autor: Usuario, id: string | null, f: CampanhaForm): Promise<string> {
+  if (BACKEND === 'supabase') return salvarCampanhaSb(id, f)
   const banco = requireDb()
   const inicio = dataDoInput(f.inicio)
   const fim = dataDoInput(f.fim)
@@ -174,6 +190,7 @@ export async function salvarCampanha(autor: Usuario, id: string | null, f: Campa
 
 /** Franqueadora: todos. Franqueado: os da unidade. Equipe: os próprios. */
 export async function listarPedidos(usuario: Usuario, gestor: boolean): Promise<PedidoMkt[]> {
+  if (BACKEND === 'supabase') return listarPedidosSb(usuario, gestor)
   const base = collection(requireDb(), 'marketingSolicitacoes')
   let consulta
   if (gestor) consulta = base
@@ -184,6 +201,7 @@ export async function listarPedidos(usuario: Usuario, gestor: boolean): Promise<
 }
 
 export async function criarPedido(usuario: Usuario, f: PedidoForm): Promise<string> {
+  if (BACKEND === 'supabase') return criarPedidoSb(f)
   const ref = doc(collection(requireDb(), 'marketingSolicitacoes'))
   await setDoc(ref, {
     uid: usuario.uid,
@@ -212,10 +230,12 @@ export async function criarPedido(usuario: Usuario, f: PedidoForm): Promise<stri
 }
 
 export async function cancelarPedido(id: string): Promise<void> {
+  if (BACKEND === 'supabase') return cancelarPedidoSb(id)
   await updateDoc(doc(requireDb(), 'marketingSolicitacoes', id), { status: 'cancelada', atualizadoEm: serverTimestamp() })
 }
 
 export async function responderPedido(id: string, complemento: string): Promise<void> {
+  if (BACKEND === 'supabase') return responderPedidoSb(id, complemento)
   await updateDoc(doc(requireDb(), 'marketingSolicitacoes', id), {
     status: 'aberta',
     complemento: complemento.trim().slice(0, 2000),
@@ -232,6 +252,7 @@ export interface AndamentoPedido {
 }
 
 export async function andamentoPedido(autor: Usuario, id: string, a: AndamentoPedido): Promise<void> {
+  if (BACKEND === 'supabase') return andamentoPedidoSb(id, a)
   const entregue = a.status === 'entregue'
   await updateDoc(doc(requireDb(), 'marketingSolicitacoes', id), {
     status: a.status,
