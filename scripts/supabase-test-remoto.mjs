@@ -15,9 +15,12 @@ create schema tests;
 grant usage on schema tests to anon, authenticated;
 `)
 }
+// O plan() pode vir antes do create schema tests; ele passa para depois da tabela de saída.
+const plano = sql.match(/^select plan\(\d+\);\n/m)
+if (plano) sql = sql.replace(plano[0], '')
 sql = sql.replace(/^create schema tests;\n/m, `create schema tests;
 create table tests.saida (n serial primary key, linha text);
-`)
+${plano ? plano[0] : ''}`)
 sql = sql.replace(/^grant usage on schema tests to anon, authenticated;\n/m, `grant usage on schema tests to anon, authenticated;
 grant usage on schema tests to service_role;
 grant insert on tests.saida to anon, authenticated, service_role;

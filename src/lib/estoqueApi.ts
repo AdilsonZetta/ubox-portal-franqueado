@@ -1,3 +1,18 @@
+import { BACKEND } from './backend'
+import {
+  carregarEstoqueSb,
+  salvarItemSb,
+  registrarMovimentoSb,
+  salvarContagemSb,
+  confirmarContagemSb,
+  cancelarContagemSb,
+  criarPedidoSb,
+  cancelarPedidoUnidadeSb,
+  receberPedidoSb,
+  aprovarPedidoSb,
+  enviarPedidoSb,
+  cancelarPedidoRedeSb,
+} from './estoqueSupabase'
 import {
   collection,
   doc,
@@ -137,6 +152,7 @@ export interface DadosEstoque {
 
 /** Gestor sem unidade: a rede toda. Unidade (ou gestor filtrando): só a unidade, sempre com o filtro que as rules exigem. */
 export async function carregarEstoque(unidadeId: string | null): Promise<DadosEstoque> {
+  if (BACKEND === 'supabase') return carregarEstoqueSb(unidadeId)
   const banco = requireDb()
   const daUnidade = (nome: string) => (unidadeId ? query(collection(banco, nome), where('unidadeId', '==', unidadeId)) : collection(banco, nome))
   const [i, m, c, p] = await Promise.all([
@@ -156,6 +172,7 @@ export async function carregarEstoque(unidadeId: string | null): Promise<DadosEs
 const autoria = (autor: Usuario) => ({ atualizadoPor: autor.uid, atualizadoPorNome: autor.nome, atualizadoEm: serverTimestamp() })
 
 export async function salvarItem(autor: Usuario, existente: ItemEstoque | null, f: ItemForm): Promise<string> {
+  if (BACKEND === 'supabase') return salvarItemSb(existente, f)
   const banco = requireDb()
   const ref = existente ? doc(banco, 'estoqueItens', existente.id) : doc(collection(banco, 'estoqueItens'))
   const dados = {
@@ -192,6 +209,7 @@ function baseMovimento(autor: Usuario, item: Pick<ItemEstoque, 'id' | 'nome' | '
 }
 
 export async function registrarMovimento(autor: Usuario, item: ItemEstoque, tipo: TipoManual, quantidade: number, motivo: string): Promise<void> {
+  if (BACKEND === 'supabase') return registrarMovimentoSb(item, tipo, quantidade, motivo)
   const ref = doc(collection(requireDb(), 'estoqueMovimentos'))
   await setDoc(ref, {
     ...baseMovimento(autor, item),
@@ -206,6 +224,7 @@ export async function registrarMovimento(autor: Usuario, item: ItemEstoque, tipo
 }
 
 export async function salvarContagem(autor: Usuario, existente: Contagem | null, linhas: LinhaContagem[], obs: string): Promise<string> {
+  if (BACKEND === 'supabase') return salvarContagemSb(autor, existente, linhas, obs)
   const banco = requireDb()
   const dados = {
     itens: linhas,
@@ -236,6 +255,7 @@ export async function salvarContagem(autor: Usuario, existente: Contagem | null,
 
 /** Confirma a contagem e grava um ajuste por linha divergente, tudo no mesmo lote (id = contagem_indice). */
 export async function confirmarContagem(autor: Usuario, contagem: Contagem, saldoAtual: Map<string, number>, obs: string): Promise<number> {
+  if (BACKEND === 'supabase') return confirmarContagemSb(contagem, saldoAtual, obs)
   const banco = requireDb()
   const linhas = recalcularContagem(contagem.itens, saldoAtual)
   const lote = writeBatch(banco)
@@ -270,10 +290,12 @@ export async function confirmarContagem(autor: Usuario, contagem: Contagem, sald
 }
 
 export async function cancelarContagem(autor: Usuario, contagem: Contagem): Promise<void> {
+  if (BACKEND === 'supabase') return cancelarContagemSb(contagem)
   await updateDoc(doc(requireDb(), 'estoqueContagens', contagem.id), { status: 'cancelada', ...autoria(autor) })
 }
 
 export async function criarPedido(autor: Usuario, linhas: LinhaPedido[], obs: string): Promise<string> {
+  if (BACKEND === 'supabase') return criarPedidoSb(autor, linhas, obs)
   const ref = doc(collection(requireDb(), 'estoquePedidos'))
   const itens = linhas.map((l) => ({ ...l, quantidadeEnviada: 0 }))
   await setDoc(ref, {
@@ -297,11 +319,13 @@ export async function criarPedido(autor: Usuario, linhas: LinhaPedido[], obs: st
 }
 
 export async function cancelarPedidoUnidade(autor: Usuario, pedido: Pedido, obs: string): Promise<void> {
+  if (BACKEND === 'supabase') return cancelarPedidoUnidadeSb(pedido, obs)
   await updateDoc(doc(requireDb(), 'estoquePedidos', pedido.id), { status: 'cancelado', canceladoEm: serverTimestamp(), obsUnidade: obs.trim().slice(0, 1000), ...autoria(autor) })
 }
 
 /** Recebimento: o pedido vira "recebido" e cada item enviado vira uma entrada (id = pedido_indice), no mesmo lote. */
 export async function receberPedido(autor: Usuario, pedido: Pedido, obs: string): Promise<number> {
+  if (BACKEND === 'supabase') return receberPedidoSb(pedido, obs)
   const banco = requireDb()
   const lote = writeBatch(banco)
   lote.update(doc(banco, 'estoquePedidos', pedido.id), { status: 'recebido', recebidoEm: serverTimestamp(), obsUnidade: obs.trim().slice(0, 1000), ...autoria(autor) })
@@ -325,14 +349,17 @@ export async function receberPedido(autor: Usuario, pedido: Pedido, obs: string)
 }
 
 export async function aprovarPedido(autor: Usuario, pedido: Pedido, obs: string): Promise<void> {
+  if (BACKEND === 'supabase') return aprovarPedidoSb(pedido, obs)
   await updateDoc(doc(requireDb(), 'estoquePedidos', pedido.id), { status: 'aprovado', aprovadoEm: serverTimestamp(), obsFranqueadora: obs.trim().slice(0, 1000), ...autoria(autor) })
 }
 
 export async function enviarPedido(autor: Usuario, pedido: Pedido, enviadas: number[], obs: string): Promise<void> {
+  if (BACKEND === 'supabase') return enviarPedidoSb(pedido, enviadas, obs)
   const itens = pedido.itens.map((l, i) => ({ ...l, quantidadeEnviada: Math.max(0, Math.min(100_000, Math.trunc(enviadas[i] ?? l.quantidade))) }))
   await updateDoc(doc(requireDb(), 'estoquePedidos', pedido.id), { status: 'enviado', enviadoEm: serverTimestamp(), itens, obsFranqueadora: obs.trim().slice(0, 1000), ...autoria(autor) })
 }
 
 export async function cancelarPedidoRede(autor: Usuario, pedido: Pedido, obs: string): Promise<void> {
+  if (BACKEND === 'supabase') return cancelarPedidoRedeSb(pedido, obs)
   await updateDoc(doc(requireDb(), 'estoquePedidos', pedido.id), { status: 'cancelado', canceladoEm: serverTimestamp(), obsFranqueadora: obs.trim().slice(0, 1000), ...autoria(autor) })
 }
