@@ -1,3 +1,19 @@
+import { BACKEND } from './backend'
+import {
+  listarModelosAudSb,
+  salvarModeloAudSb,
+  listarAuditoriasSb,
+  lerAuditoriaSb,
+  criarAuditoriaSb,
+  salvarRascunhoSb,
+  assinarAuditoriaSb,
+  assinarCienciaSb,
+  listarAcoesSb,
+  listarAcoesDaAuditoriaSb,
+  criarAcaoSb,
+  andamentoAcaoUnidadeSb,
+  decidirAcaoSb,
+} from './auditoriaSupabase'
 import {
   collection,
   doc,
@@ -140,11 +156,13 @@ export function mapAcao(id: string, d: DocumentData): AcaoAuditoria {
 // ---------- Modelos ----------
 
 export async function listarModelosAud(): Promise<ModeloAuditoria[]> {
+  if (BACKEND === 'supabase') return listarModelosAudSb()
   const snap = await getDocs(collection(requireDb(), 'auditoriaModelos'))
   return snap.docs.map((d) => mapModeloAud(d.id, d.data())).sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'))
 }
 
 export async function salvarModeloAud(autor: Usuario, existente: ModeloAuditoria | null, f: ModeloAuditoriaForm): Promise<string> {
+  if (BACKEND === 'supabase') return salvarModeloAudSb(existente, f)
   const banco = requireDb()
   const ref = existente ? doc(banco, 'auditoriaModelos', existente.id) : doc(collection(banco, 'auditoriaModelos'))
   const itens = f.itens.map(normalizarItemAud)
@@ -175,6 +193,7 @@ export async function salvarModeloAud(autor: Usuario, existente: ModeloAuditoria
 
 /** Franqueadora: todas (mais recentes). Unidade: só as assinadas pelo auditor, da própria unidade. */
 export async function listarAuditorias(gestor: boolean, unidadeId: string | null | undefined): Promise<Auditoria[]> {
+  if (BACKEND === 'supabase') return listarAuditoriasSb(gestor, unidadeId)
   const base = collection(requireDb(), 'auditorias')
   if (gestor) {
     const snap = await getDocs(query(base, orderBy('criadoEm', 'desc'), limit(500)))
@@ -186,6 +205,7 @@ export async function listarAuditorias(gestor: boolean, unidadeId: string | null
 }
 
 export async function lerAuditoria(id: string): Promise<Auditoria | null> {
+  if (BACKEND === 'supabase') return lerAuditoriaSb(id)
   const snap = await getDoc(doc(requireDb(), 'auditorias', id))
   return snap.exists() ? mapAuditoria(snap.id, snap.data()) : null
 }
@@ -228,6 +248,7 @@ function camposEditaveis(f: DadosAuditoria) {
 }
 
 export async function criarAuditoria(autor: Usuario, modelo: ModeloAuditoria, unidade: { id: string; nome: string }, f: DadosAuditoria): Promise<string> {
+  if (BACKEND === 'supabase') return criarAuditoriaSb(modelo, unidade, f)
   const ref = doc(collection(requireDb(), 'auditorias'))
   await setDoc(ref, {
     unidadeId: unidade.id,
@@ -254,11 +275,13 @@ export async function criarAuditoria(autor: Usuario, modelo: ModeloAuditoria, un
 }
 
 export async function salvarRascunho(id: string, f: DadosAuditoria): Promise<void> {
+  if (BACKEND === 'supabase') return salvarRascunhoSb(id, f)
   await updateDoc(doc(requireDb(), 'auditorias', id), { ...camposEditaveis(f) })
 }
 
 /** Grava o conteúdo final e assina em uma única escrita; depois disso o auditor não muda mais nada. */
 export async function assinarAuditoria(autor: Usuario, id: string, f: DadosAuditoria): Promise<void> {
+  if (BACKEND === 'supabase') return assinarAuditoriaSb(id, f)
   await updateDoc(doc(requireDb(), 'auditorias', id), {
     ...camposEditaveis(f),
     status: 'aguardando_ciencia',
@@ -269,6 +292,7 @@ export async function assinarAuditoria(autor: Usuario, id: string, f: DadosAudit
 }
 
 export async function assinarCiencia(autor: Usuario, id: string, contestacao: string): Promise<void> {
+  if (BACKEND === 'supabase') return assinarCienciaSb(id, contestacao)
   await updateDoc(doc(requireDb(), 'auditorias', id), {
     status: 'concluida',
     cienciaUid: autor.uid,
@@ -282,6 +306,7 @@ export async function assinarCiencia(autor: Usuario, id: string, contestacao: st
 // ---------- Plano de ação ----------
 
 export async function listarAcoes(gestor: boolean, unidadeId: string | null | undefined): Promise<AcaoAuditoria[]> {
+  if (BACKEND === 'supabase') return listarAcoesSb(gestor, unidadeId)
   const base = collection(requireDb(), 'auditoriaAcoes')
   if (!gestor && !unidadeId) return []
   const snap = await getDocs(gestor ? query(base, orderBy('criadoEm', 'desc'), limit(1000)) : query(base, where('unidadeId', '==', unidadeId)))
@@ -289,6 +314,7 @@ export async function listarAcoes(gestor: boolean, unidadeId: string | null | un
 }
 
 export async function listarAcoesDaAuditoria(gestor: boolean, auditoria: Pick<Auditoria, 'id' | 'unidadeId'>): Promise<AcaoAuditoria[]> {
+  if (BACKEND === 'supabase') return listarAcoesDaAuditoriaSb(gestor, auditoria)
   const base = collection(requireDb(), 'auditoriaAcoes')
   // A unidade só pode consultar filtrando pela própria unidade (as rules conferem pelo filtro).
   const snap = await getDocs(
@@ -303,6 +329,7 @@ export async function criarAcao(
   item: { itemId: string; itemTexto: string },
   f: { descricao: string; responsavel: string; prazo: Date },
 ): Promise<void> {
+  if (BACKEND === 'supabase') return criarAcaoSb(auditoria, item, f)
   await setDoc(doc(collection(requireDb(), 'auditoriaAcoes')), {
     auditoriaId: auditoria.id,
     unidadeId: auditoria.unidadeId,
@@ -323,6 +350,7 @@ export async function criarAcao(
 }
 
 export async function andamentoAcaoUnidade(autor: Usuario, id: string, status: StatusAcao, evidenciaUrl: string, comentario: string): Promise<void> {
+  if (BACKEND === 'supabase') return andamentoAcaoUnidadeSb(id, status, evidenciaUrl, comentario)
   await updateDoc(doc(requireDb(), 'auditoriaAcoes', id), {
     status,
     evidenciaUrl: evidenciaUrl.trim().slice(0, 600),
@@ -334,6 +362,7 @@ export async function andamentoAcaoUnidade(autor: Usuario, id: string, status: S
 }
 
 export async function decidirAcao(autor: Usuario, id: string, status: 'validada' | 'reaberta', comentario: string): Promise<void> {
+  if (BACKEND === 'supabase') return decidirAcaoSb(id, status, comentario)
   await updateDoc(doc(requireDb(), 'auditoriaAcoes', id), {
     status,
     comentarioFranqueadora: comentario.trim().slice(0, 1000),
