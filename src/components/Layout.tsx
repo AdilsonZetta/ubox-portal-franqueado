@@ -37,6 +37,7 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/checklist')) return 'checklist'
   if (pathname.startsWith('/estoque')) return 'estoque'
   if (pathname.startsWith('/crm')) return 'crm'
+  if (pathname.startsWith('/clientes')) return 'cliente'
   // Auditorias da unidade: não dependem de módulo (a auditoria é da franqueadora; as rules limitam à própria unidade).
   if (pathname.startsWith('/auditorias')) return null
   // Acompanhamento da unidade: também não depende de módulo (só os registros compartilhados).
@@ -269,6 +270,11 @@ export function Layout() {
                             </NavLink>
                           )
                         ) : null}
+                        {modulo.slug === 'cliente' ? (
+                          <NavLink to="/clientes" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            Clientes e contratos
+                          </NavLink>
+                        ) : null}
                         {modulo.slug === 'auditoria' ? (
                           <>
                             <NavLink to="/auditoria" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
@@ -337,7 +343,7 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
-                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'estoque' && modulo.slug !== 'crm' && modulo.slug !== 'auditoria' && modulo.slug !== 'acompanhamento' ? (
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'estoque' && modulo.slug !== 'crm' && modulo.slug !== 'cliente' && modulo.slug !== 'auditoria' && modulo.slug !== 'acompanhamento' ? (
                           <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                             Abrir
                           </NavLink>

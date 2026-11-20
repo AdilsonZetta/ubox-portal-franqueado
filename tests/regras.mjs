@@ -2108,6 +2108,126 @@ await caso('crm: motivo retirado da lista deixa de valer', assertFails(updateDoc
 await caso('crm: lead antigo com origem retirada ainda anda no funil', assertSucceeds(updateDoc(doc(eqCrm, 'crmLeads', 'ld-n1'), atualCrm({ etapa: 'contato', etapaEm: serverTimestamp() }))))
 await caso('crm: ninguém apaga a configuração', assertFails(deleteDoc(doc(adminAu, 'crmConfig', 'rede'))))
 
+// ===== Módulo 12: Painel do Cliente =====
+const TK1 = 'a'.repeat(32), TK2 = 'b'.repeat(32), TKX = 'c'.repeat(32), TKOUTRA = 'd'.repeat(32), TKOFF = 'e'.repeat(32)
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  for (const [id, nome] of [['un-cli', 'Unidade Cli'], ['un-cli2', 'Outra Cli']]) {
+    await setDoc(doc(banco, 'unidades', id), {
+      nome, cidade: 'Uberaba', responsavel: 'Dono', email: `${id}@ubox.test`, uid: null,
+      modulosLiberados: ['cliente'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+    })
+  }
+  await setDoc(doc(banco, 'usuarios', 'fr-cli'), usuario('fr-cli', { unidadeId: 'un-cli', unidade: 'Unidade Cli', modulos: ['cliente'], nome: 'Dono Cli' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-cli'), usuario('eq-cli', { papel: 'equipe_franqueado', unidadeId: 'un-cli', unidade: 'Unidade Cli', modulos: ['cliente'], criadoPor: 'fr-cli', nome: 'Atendente Cli' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-cli-sem'), usuario('eq-cli-sem', { papel: 'equipe_franqueado', unidadeId: 'un-cli', unidade: 'Unidade Cli', modulos: ['manuais'], criadoPor: 'fr-cli', nome: 'Equipe Sem Cli' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-cli2'), usuario('fr-cli2', { unidadeId: 'un-cli2', unidade: 'Outra Cli', modulos: ['cliente'], nome: 'Dono Outra Cli' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-cli'), usuario('eq-rede-cli', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['cliente'], nome: 'Rede Cli' }))
+  const cli = (unidadeId, token, extra = {}) => ({
+    unidadeId, nome: 'Maria da Silva', telefone: '(34) 99999-0000', email: 'maria@cliente.test', box: 'Box 12 (6 m²)',
+    contratoInicio: criado, contratoFim: null, valorMensalCentavos: 28990, diaVencimento: 10, status: 'ativo', painelToken: token, obs: '',
+    criadoEm: criado, atualizadoPor: 'fr-cli', atualizadoPorNome: 'Dono Cli', atualizadoEm: criado, ...extra,
+  })
+  const pn = (unidadeId, clienteId, extra = {}) => ({
+    unidadeId, unidadeNome: unidadeId === 'un-cli' ? 'Unidade Cli' : 'Outra Cli', contatoUnidade: '(34) 3333-0000', clienteId, primeiroNome: 'Maria',
+    box: 'Box 12 (6 m²)', contratoInicio: criado, contratoFim: null, valorMensalCentavos: 28990, diaVencimento: 10,
+    cobrancas: [{ id: 'c1', competencia: '2026-11', valorCentavos: 28990, vencimento: '2026-11-10', status: 'pendente', pagoEm: '' }], visitas: [], recados: [],
+    ativo: true, atualizadoEm: criado, ...extra,
+  })
+  await setDoc(doc(banco, 'clientes', 'cl-1'), cli('un-cli', TK1))
+  await setDoc(doc(banco, 'clientePaineis', TK1), pn('un-cli', 'cl-1'))
+  await setDoc(doc(banco, 'clientePaineis', TKOFF), pn('un-cli', 'cl-1', { ativo: false }))
+  await setDoc(doc(banco, 'clientes', 'cl-outra'), cli('un-cli2', TKOUTRA, { atualizadoPor: 'fr-cli2', atualizadoPorNome: 'Dono Outra Cli' }))
+  await setDoc(doc(banco, 'clientePaineis', TKOUTRA), pn('un-cli2', 'cl-outra'))
+})
+const frCli = ambiente.authenticatedContext('fr-cli', { email: 'fr-cli@ubox.test' }).firestore()
+const eqCli = ambiente.authenticatedContext('eq-cli', { email: 'eq-cli@ubox.test' }).firestore()
+const eqCliSem = ambiente.authenticatedContext('eq-cli-sem', { email: 'eq-cli-sem@ubox.test' }).firestore()
+const frCli2 = ambiente.authenticatedContext('fr-cli2', { email: 'fr-cli2@ubox.test' }).firestore()
+const redeCli = ambiente.authenticatedContext('eq-rede-cli', { email: 'eq-rede-cli@ubox.test' }).firestore()
+const anonimo = ambiente.unauthenticatedContext().firestore()
+const daUnCli = (db, col, un = 'un-cli') => getDocs(query(collection(db, col), where('unidadeId', '==', un)))
+
+// Leitura e privacidade
+await caso('cli: link ativo abre sem login', assertSucceeds(getDoc(doc(anonimo, 'clientePaineis', TK1))))
+await caso('cli: link desativado não abre sem login', assertFails(getDoc(doc(anonimo, 'clientePaineis', TKOFF))))
+await caso('cli: ninguém de fora lista os painéis', assertFails(getDocs(collection(anonimo, 'clientePaineis'))))
+await caso('cli: logado de outra unidade não lista painéis', assertFails(daUnCli(frCli2, 'clientePaineis')))
+await caso('cli: anônimo não lê o cadastro do cliente', assertFails(getDoc(doc(anonimo, 'clientes', 'cl-1'))))
+await caso('cli: admin não lê o cadastro do cliente', assertFails(getDoc(doc(adminAu, 'clientes', 'cl-1'))))
+await caso('cli: franqueadora não lê o cadastro do cliente', assertFails(getDoc(doc(redeCli, 'clientes', 'cl-1'))))
+await caso('cli: franqueadora não lista painéis', assertFails(getDocs(collection(redeCli, 'clientePaineis'))))
+await caso('cli: outra unidade não lê o cliente', assertFails(getDoc(doc(frCli2, 'clientes', 'cl-1'))))
+await caso('cli: equipe sem o módulo não lê clientes', assertFails(daUnCli(eqCliSem, 'clientes')))
+await caso('cli: equipe com o módulo lista clientes da unidade', assertSucceeds(daUnCli(eqCli, 'clientes')))
+await caso('cli: unidade lista os próprios painéis', assertSucceeds(daUnCli(eqCli, 'clientePaineis')))
+await caso('cli: unidade abre o próprio painel desativado', assertSucceeds(getDoc(doc(eqCli, 'clientePaineis', TKOFF))))
+await caso('cli: unidade não lista sem filtrar a unidade', assertFails(getDocs(collection(eqCli, 'clientes'))))
+
+// Criação (cliente + painel no mesmo lote)
+const novoCli = (token, extra = {}) => ({
+  unidadeId: 'un-cli', nome: 'João Pereira', telefone: '+55 34 98888-1111', email: '', box: 'Box 3', contratoInicio: new Date('2026-11-01T12:00:00Z'),
+  contratoFim: null, valorMensalCentavos: 19990, diaVencimento: 5, status: 'ativo', painelToken: token, obs: '',
+  criadoEm: serverTimestamp(), atualizadoPor: 'eq-cli', atualizadoPorNome: 'Atendente Cli', atualizadoEm: serverTimestamp(), ...extra,
+})
+const novoPn = (clienteId, extra = {}) => ({
+  unidadeId: 'un-cli', unidadeNome: 'Unidade Cli', contatoUnidade: '(34) 3333-0000', clienteId, primeiroNome: 'João', box: 'Box 3',
+  contratoInicio: new Date('2026-11-01T12:00:00Z'), contratoFim: null, valorMensalCentavos: 19990, diaVencimento: 5,
+  cobrancas: [], visitas: [], recados: [], ativo: false, atualizadoEm: serverTimestamp(), ...extra,
+})
+function criarCli(db, id, token, c = {}, p = {}) {
+  const lote = writeBatch(db)
+  lote.set(doc(db, 'clientes', id), novoCli(token, c))
+  lote.set(doc(db, 'clientePaineis', token), novoPn(id, p))
+  return lote.commit()
+}
+await caso('cli: equipe cria cliente com painel no lote', assertSucceeds(criarCli(eqCli, 'cl-n1', TK2)))
+await caso('cli: cliente sem painel é recusado', assertFails(setDoc(doc(eqCli, 'clientes', 'cl-x1'), novoCli(TKX))))
+await caso('cli: painel sem cliente é recusado', assertFails(setDoc(doc(eqCli, 'clientePaineis', TKX), novoPn('cl-x2'))))
+await caso('cli: token fora do formato é recusado', assertFails(criarCli(eqCli, 'cl-x3', 'abc123')))
+await caso('cli: painel com sobrenome é recusado', assertFails(criarCli(eqCli, 'cl-x4', TKX, {}, { primeiroNome: 'João Pereira' })))
+await caso('cli: painel com telefone do cliente é recusado', assertFails(criarCli(eqCli, 'cl-x5', TKX, {}, { telefone: '34999990000' })))
+await caso('cli: painel com e-mail do cliente é recusado', assertFails(criarCli(eqCli, 'cl-x6', TKX, {}, { email: 'joao@x.com' })))
+await caso('cli: dia de vencimento 31 é recusado', assertFails(criarCli(eqCli, 'cl-x7', TKX, { diaVencimento: 31 }, { diaVencimento: 31 })))
+await caso('cli: mensalidade fracionada é recusada', assertFails(criarCli(eqCli, 'cl-x8', TKX, { valorMensalCentavos: 10.5 })))
+await caso('cli: cliente em outra unidade é recusado', assertFails(criarCli(eqCli, 'cl-x9', TKX, { unidadeId: 'un-cli2' }, { unidadeId: 'un-cli2', unidadeNome: 'Outra Cli' })))
+await caso('cli: autor com nome forjado é recusado', assertFails(criarCli(eqCli, 'cl-x10', TKX, { atualizadoPorNome: 'Outra Pessoa' })))
+await caso('cli: telefone com letras é recusado', assertFails(criarCli(eqCli, 'cl-x11', TKX, { telefone: 'liga' })))
+await caso('cli: mais de 24 cobranças no painel é recusado', assertFails(criarCli(eqCli, 'cl-x12', TKX, {}, { cobrancas: Array.from({ length: 25 }, (_, i) => ({ id: `c${i}` })) })))
+await caso('cli: equipe sem o módulo não cria cliente', assertFails(criarCli(eqCliSem, 'cl-x13', TKX, { atualizadoPor: 'eq-cli-sem', atualizadoPorNome: 'Equipe Sem Cli' })))
+await caso('cli: franqueadora não cria cliente', assertFails(criarCli(redeCli, 'cl-x14', TKX, { atualizadoPor: 'eq-rede-cli', atualizadoPorNome: 'Rede Cli' })))
+await caso('cli: anônimo não cria painel', assertFails(setDoc(doc(anonimo, 'clientePaineis', TKX), novoPn('cl-1'))))
+await caso('cli: painel não aponta para cliente de outra unidade', assertFails(setDoc(doc(frCli, 'clientePaineis', TKX), novoPn('cl-outra'))))
+
+// Atualização
+const atCli = (extra = {}) => ({ atualizadoPor: 'fr-cli', atualizadoPorNome: 'Dono Cli', atualizadoEm: serverTimestamp(), ...extra })
+await caso('cli: franqueado edita contrato', assertSucceeds(updateDoc(doc(frCli, 'clientes', 'cl-1'), atCli({ valorMensalCentavos: 30990 }))))
+await caso('cli: cliente não muda de unidade', assertFails(updateDoc(doc(frCli, 'clientes', 'cl-1'), atCli({ unidadeId: 'un-cli2' }))))
+await caso('cli: data de cadastro não muda', assertFails(updateDoc(doc(frCli, 'clientes', 'cl-1'), atCli({ criadoEm: new Date('2020-01-01T00:00:00Z') }))))
+await caso('cli: token apontando para painel de outro cliente é recusado', assertFails(updateDoc(doc(frCli, 'clientes', 'cl-1'), atCli({ painelToken: TKOUTRA }))))
+await caso('cli: outra unidade não edita o cliente', assertFails(updateDoc(doc(frCli2, 'clientes', 'cl-1'), { obs: 'x', atualizadoPor: 'fr-cli2', atualizadoPorNome: 'Dono Outra Cli', atualizadoEm: serverTimestamp() })))
+await caso('cli: unidade registra cobrança paga no painel', assertSucceeds(updateDoc(doc(eqCli, 'clientePaineis', TK1), { cobrancas: [{ id: 'c1', competencia: '2026-11', valorCentavos: 28990, vencimento: '2026-11-10', status: 'pago', pagoEm: '2026-11-09' }], atualizadoEm: serverTimestamp() })))
+await caso('cli: painel sem horário do servidor é recusado', assertFails(updateDoc(doc(eqCli, 'clientePaineis', TK1), { recados: [], atualizadoEm: new Date(Date.now() - 60000) })))
+await caso('cli: painel não troca de cliente', assertFails(updateDoc(doc(eqCli, 'clientePaineis', TK1), { clienteId: 'cl-outra', atualizadoEm: serverTimestamp() })))
+await caso('cli: anônimo não altera o painel', assertFails(updateDoc(doc(anonimo, 'clientePaineis', TK1), { recados: [], atualizadoEm: serverTimestamp() })))
+await caso('cli: outra unidade não altera o painel', assertFails(updateDoc(doc(frCli2, 'clientePaineis', TK1), { recados: [], atualizadoEm: serverTimestamp() })))
+await caso('cli: link antigo não volta a valer', assertFails(updateDoc(doc(frCli, 'clientePaineis', TKOFF), { ativo: true, atualizadoEm: serverTimestamp() })))
+await caso('cli: unidade desativa o link atual', assertSucceeds(updateDoc(doc(frCli, 'clientePaineis', TK1), { ativo: false, atualizadoEm: serverTimestamp() })))
+await caso('cli: link desativado some para o anônimo', assertFails(getDoc(doc(anonimo, 'clientePaineis', TK1))))
+await caso('cli: unidade reativa o link atual', assertSucceeds(updateDoc(doc(frCli, 'clientePaineis', TK1), { ativo: true, atualizadoEm: serverTimestamp() })))
+{
+  // Troca de link: painel novo + cliente apontando para ele + antigo desativado, no mesmo lote.
+  const lote = writeBatch(frCli)
+  lote.set(doc(frCli, 'clientePaineis', TKX), novoPn('cl-1', { primeiroNome: 'Maria', box: 'Box 12 (6 m²)', valorMensalCentavos: 30990, diaVencimento: 10, ativo: true }))
+  lote.update(doc(frCli, 'clientes', 'cl-1'), atCli({ painelToken: TKX }))
+  lote.update(doc(frCli, 'clientePaineis', TK1), { ativo: false, atualizadoEm: serverTimestamp() })
+  await caso('cli: unidade troca o link do cliente', assertSucceeds(lote.commit()))
+}
+await caso('cli: link trocado não abre mais', assertFails(getDoc(doc(anonimo, 'clientePaineis', TK1))))
+await caso('cli: link novo abre sem login', assertSucceeds(getDoc(doc(anonimo, 'clientePaineis', TKX))))
+await caso('cli: ninguém apaga cliente', assertFails(deleteDoc(doc(frCli, 'clientes', 'cl-1'))))
+await caso('cli: ninguém apaga painel', assertFails(deleteDoc(doc(frCli, 'clientePaineis', TKX))))
+
 void manual
 await ambiente.cleanup()
 

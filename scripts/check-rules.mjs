@@ -138,3 +138,17 @@ if (erros.length) {
   process.exit(1)
 }
 console.log('firestore.rules: checagens estáticas ok')
+
+// Módulo 12: Painel do Cliente
+exigir(rules.includes('match /clientes/{clienteId}') && rules.includes('match /clientePaineis/{token}'), 'coleções do Painel do Cliente ausentes')
+{
+  const ini = rules.indexOf('// ===== Módulo 12: Painel do Cliente =====')
+  const bloco = rules.slice(ini)
+  exigir(ini > 0 && !bloco.includes('isAdmin') && !bloco.includes('equipe_franqueadora'), 'Painel do Cliente acessível pela franqueadora')
+  const painel = bloco.slice(bloco.indexOf('function painelOk'), bloco.indexOf('match /clientes/{clienteId}'))
+  exigir(!/'(nome|telefone|email|obs)'/.test(painel), 'dado pessoal do cliente no painel público')
+  exigir(painel.includes("matches('^[^ ]{1,40}$')"), 'painel público sem limitar ao primeiro nome')
+  const pn = bloco.slice(bloco.indexOf('match /clientePaineis/{token}'))
+  exigir(pn.includes('allow list: if unidadeCli()') && !/allow (read|list): if resource\.data\.ativo/.test(pn), 'painel público listável')
+  exigir(!/allow delete: if (?!false)/.test(bloco), 'exclusão liberada no Painel do Cliente')
+}

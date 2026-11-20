@@ -3396,5 +3396,95 @@ service cloud.firestore {
         ) : false;
       allow delete: if false;
     }
+
+    // ===== Módulo 12: Painel do Cliente =====
+    // clientes: cadastro e contrato do locatário (nome, telefone, e-mail): só a unidade; nem admin nem franqueadora.
+    // clientePaineis/{token}: o que o locatário vê por link secreto (token aleatório de 128 bits), sem login,
+    // só por get (nunca list) e só enquanto ativo e for o link atual do cliente. Sem telefone, e-mail ou sobrenome.
+    function unidadeCli() {
+      return userExists()
+        && contaAtiva(userData())
+        && userData().papel in ['franqueado', 'equipe_franqueado']
+        && temLista(userData(), 'cliente')
+        && unidadeAtiva(userData())
+        && unidadeIdPreenchido(userData());
+    }
+
+    function cliPath(id) {
+      return /databases/$(database)/documents/clientes/$(id);
+    }
+
+    function contratoCliOk(d) {
+      return unidadeCli()
+        && d.unidadeId == userData().unidadeId
+        && d.box is string && d.box.size() >= 1 && d.box.size() <= 60
+        && d.contratoInicio is timestamp
+        && (d.contratoFim == null || d.contratoFim is timestamp)
+        && d.valorMensalCentavos is int && d.valorMensalCentavos >= 0 && d.valorMensalCentavos <= 100000000
+        && d.diaVencimento is int && d.diaVencimento >= 1 && d.diaVencimento <= 28
+        && d.atualizadoEm == request.time;
+    }
+
+    function clienteOk(d, id) {
+      return contratoCliOk(d)
+        && d.keys().hasOnly(['unidadeId', 'nome', 'telefone', 'email', 'box', 'contratoInicio', 'contratoFim', 'valorMensalCentavos', 'diaVencimento', 'status', 'painelToken', 'obs', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && d.keys().size() == 16
+        && validName(d.nome)
+        && d.telefone is string && d.telefone.matches('^[0-9 ()+.-]{0,30}$')
+        && d.email is string && d.email.size() <= 120 && (d.email == '' || d.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+        && d.status in ['ativo', 'encerrado']
+        && d.painelToken is string && d.painelToken.matches('^[0-9a-f]{32}$')
+        && validShort(d.obs, 1000)
+        && d.atualizadoPorNome == userData().nome
+        // O painel atual nasce/existe no mesmo lote e aponta para este cliente.
+        && getAfter(/databases/$(database)/documents/clientePaineis/$(d.painelToken)).data.clienteId == id;
+    }
+
+    function painelOk(d) {
+      return contratoCliOk(d)
+        && d.keys().hasOnly(['unidadeId', 'unidadeNome', 'contatoUnidade', 'clienteId', 'primeiroNome', 'box', 'contratoInicio', 'contratoFim', 'valorMensalCentavos', 'diaVencimento', 'cobrancas', 'visitas', 'recados', 'ativo', 'atualizadoEm'])
+        && d.keys().size() == 15
+        && d.unidadeNome == userData().get('unidade', '')
+        && validShort(d.contatoUnidade, 120)
+        && d.clienteId is string && d.clienteId.size() >= 1 && d.clienteId.size() <= 64
+        // Só o primeiro nome (uma palavra) vai para o link público.
+        && d.primeiroNome is string && d.primeiroNome.matches('^[^ ]{1,40}$')
+        && d.cobrancas is list && d.cobrancas.size() <= 24
+        && d.visitas is list && d.visitas.size() <= 10
+        && d.recados is list && d.recados.size() <= 10
+        && d.ativo is bool;
+    }
+
+    match /clientes/{clienteId} {
+      allow read: if unidadeCli() && resource.data.unidadeId == userData().unidadeId;
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          clienteOk(request.resource.data, clienteId) && request.resource.data.criadoEm == request.time
+        ) : false;
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          clienteOk(request.resource.data, clienteId)
+          && resource.data.unidadeId == request.resource.data.unidadeId
+          && resource.data.criadoEm == request.resource.data.criadoEm
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /clientePaineis/{token} {
+      // Link público: quem tem o token lê o painel ativo. Sem list para ninguém de fora da unidade.
+      allow get: if resource.data.ativo == true
+        || (unidadeCli() && resource.data.unidadeId == userData().unidadeId);
+      allow list: if unidadeCli() && resource.data.unidadeId == userData().unidadeId;
+      allow create: if token.matches('^[0-9a-f]{32}$') ? (
+          painelOk(request.resource.data)
+          && getAfter(cliPath(request.resource.data.clienteId)).data.unidadeId == request.resource.data.unidadeId
+          && getAfter(cliPath(request.resource.data.clienteId)).data.painelToken == token
+        ) : false;
+      allow update: if resource.data.clienteId == request.resource.data.clienteId ? (
+          painelOk(request.resource.data)
+          && resource.data.unidadeId == request.resource.data.unidadeId
+          // Link antigo (trocado) não volta a valer.
+          && (request.resource.data.ativo == false || getAfter(cliPath(resource.data.clienteId)).data.painelToken == token)
+        ) : false;
+      allow delete: if false;
+    }
   }
 }
