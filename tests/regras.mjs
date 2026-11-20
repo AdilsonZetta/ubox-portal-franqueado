@@ -1,3 +1,4 @@
+import { equal } from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { assertFails, assertSucceeds, initializeTestEnvironment } from '@firebase/rules-unit-testing'
 import {
@@ -250,10 +251,34 @@ await caso('gestor não cria aviso de rascunho', assertFails(setDoc(doc(equipeRe
   ...gravacoesManuais.at(-1)[1](), documentoId: 'gestao-html',
 })))
 await caso('gestor não troca o número da versão', assertFails(updateDoc(doc(equipeRede, 'documentos', 'gestao-richtext', 'versoes', '1'), { versao: 2 })))
-await caso('admin não exclui a versão', assertFails(deleteDoc(doc(admin, 'documentos', 'gestao-richtext', 'versoes', '1'))))
+await caso('franqueado não exclui a versão', assertFails(deleteDoc(doc(dono, 'documentos', 'gestao-richtext', 'versoes', '1'))))
+await caso('equipe da unidade não exclui a versão', assertFails(deleteDoc(doc(equipe, 'documentos', 'gestao-richtext', 'versoes', '1'))))
+await caso('admin exclui a versão', assertSucceeds(deleteDoc(doc(admin, 'documentos', 'gestao-richtext', 'versoes', '1'))))
 await caso('admin exclui o aviso', assertSucceeds(deleteDoc(doc(admin, 'avisos', 'gestao-aviso'))))
 await caso('admin exclui o documento', assertSucceeds(deleteDoc(doc(admin, 'documentos', 'gestao-richtext'))))
 await caso('admin exclui a categoria', assertSucceeds(deleteDoc(doc(admin, 'categorias', 'gestao-cat'))))
+
+const manualOrfaoId = 'manual-restrito-categoria-removida'
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  await setDoc(doc(banco, 'documentos', manualOrfaoId), {
+    titulo: 'Manual restrito', categoriaId: 'categoria-removida', status: 'publicado', publico: false, uids: [],
+  })
+  for (const versao of [1, 2]) {
+    await setDoc(doc(banco, 'documentos', manualOrfaoId, 'versoes', String(versao)), { versao })
+  }
+})
+
+await caso('admin lê manual restrito sem categoria', assertSucceeds(getDoc(doc(admin, 'documentos', manualOrfaoId))))
+await caso('gestor lê manual restrito sem categoria', assertSucceeds(getDoc(doc(equipeRede, 'documentos', manualOrfaoId))))
+await caso('franqueado não lê manual restrito sem categoria', assertFails(getDoc(doc(dono, 'documentos', manualOrfaoId))))
+await caso('equipe da unidade não lê manual restrito sem categoria', assertFails(getDoc(doc(equipe, 'documentos', manualOrfaoId))))
+await caso('admin lista e exclui as duas versões do manual sem categoria', (async () => {
+  const versoes = await assertSucceeds(getDocs(collection(admin, 'documentos', manualOrfaoId, 'versoes')))
+  equal(versoes.size, 2)
+  await assertSucceeds(Promise.all(versoes.docs.map((item) => deleteDoc(item.ref))))
+})())
+await caso('admin exclui o manual sem categoria após excluir as versões', assertSucceeds(deleteDoc(doc(admin, 'documentos', manualOrfaoId))))
 
 await caso('franqueado não vira admin', assertFails(updateDoc(doc(dono, 'usuarios', 'fr-1'), { papel: 'admin', atualizadoEm: serverTimestamp() })))
 await caso('franqueado não amplia os próprios módulos', assertFails(updateDoc(doc(dono, 'usuarios', 'fr-1'), { modulosLiberados: ['manuais', 'universidade', 'crm'], atualizadoEm: serverTimestamp() })))
