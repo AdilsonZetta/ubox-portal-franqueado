@@ -210,12 +210,12 @@ export function resumirProgresso(
 
 /** Quem configura a trilha e vê o progresso da rede: admin, ou equipe da franqueadora com o módulo. */
 export function podeGerirTrilha(
-  usuario: { papel: string; ativo?: boolean; modulosLiberados?: string[] } | null | undefined,
+  usuario: { papel: string; ativo: boolean; recusado: boolean; modulosLiberados?: string[] } | null | undefined,
   ehAdmin: boolean,
 ): boolean {
-  if (!usuario) return false
-  if (ehAdmin) return true
-  return usuario.papel === 'equipe_franqueadora' && usuario.ativo !== false && (usuario.modulosLiberados ?? []).includes('manuais')
+  if (usuario?.ativo !== true || usuario.recusado !== false) return false
+  if (usuario.papel === 'admin') return ehAdmin
+  return usuario.papel === 'equipe_franqueadora' && (usuario.modulosLiberados ?? []).includes('manuais')
 }
 
 /** Só franqueado e equipe da unidade fazem a trilha (as rules exigem esses papéis). */

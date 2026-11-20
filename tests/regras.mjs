@@ -128,6 +128,7 @@ await ambiente.withSecurityRulesDisabled(async (contexto) => {
   await setDoc(doc(banco, 'usuarios', 'fr-off'), usuario('fr-off', { unidadeId: 'un-off', modulos: ['manuais'], nome: 'Dono Off' }))
   await setDoc(doc(banco, 'usuarios', 'fr-inativo'), usuario('fr-inativo', { ativo: false, unidadeId: 'un-1', modulos: ['manuais'] }))
   await setDoc(doc(banco, 'usuarios', 'eq-rede'), usuario('eq-rede', { papel: 'equipe_franqueadora', modulos: ['manuais'], unidade: 'Franqueadora', unidadeId: null }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-inativa-manuais'), usuario('eq-rede-inativa-manuais', { papel: 'equipe_franqueadora', ativo: false, unidadeId: null }))
   await setDoc(doc(banco, 'usuarios', 'eq-rede-vazio'), usuario('eq-rede-vazio', { papel: 'equipe_franqueadora', modulos: [], unidade: 'Franqueadora', unidadeId: null }))
   await setDoc(doc(banco, 'usuarios', 'eq-1'), usuario('eq-1', { papel: 'equipe_franqueado', unidadeId: 'un-1', modulos: ['manuais'], criadoPor: 'fr-1' }))
   await setDoc(doc(banco, 'usuarios', 'eq-sem'), usuario('eq-sem', { papel: 'equipe_franqueado', unidadeId: 'un-1', modulos: [], criadoPor: 'fr-1' }))
@@ -156,6 +157,73 @@ await caso('equipe da unidade sem manuais não lê o manual', assertFails(getDoc
 await caso('inativo não lê o manual', assertFails(getDoc(doc(inativo, 'documentos', 'pub'))))
 await caso('unidade desativada não lê o manual', assertFails(getDoc(doc(parado, 'documentos', 'pub'))))
 await caso('inativo não lê outro usuário', assertFails(getDoc(doc(inativo, 'usuarios', 'fr-1'))))
+
+const audManuais = { publico: false, unidades: [], papeis: [], uidsExtra: [], uids: [] }
+const conteudoManuais = (formato) => ({
+  titulo: 'Manual de teste', formato, conteudoHtml: '<p>Teste</p>', conteudoTexto: 'Teste',
+  htmlConteudo: formato === 'html' ? '<main>Teste</main>' : '', htmlUrl: '',
+})
+const gravacoesManuais = [
+  ['categorias', () => ({
+    nome: 'Categoria de teste', descricao: '', ordem: 10, parentId: null, ...audManuais,
+    criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+  }), () => ({ nome: 'Categoria revisada', atualizadoEm: serverTimestamp() })],
+  ...['richtext', 'html'].map((formato) => [
+    'documentos', (uid) => ({
+      ...conteudoManuais(formato), categoriaId: 'gestao-cat', tipo: formato === 'html' ? 'html' : 'pop',
+      status: 'rascunho', versao: 1, leituraObrigatoria: false, anexos: [], ...audManuais,
+      criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(), publicadoEm: null,
+      atualizadoPor: uid, atualizadoPorNome: 'Pessoa Teste',
+    }), (uid) => ({ titulo: 'Manual revisado', atualizadoPor: uid, atualizadoEm: serverTimestamp() }),
+  ]),
+  ['documentos/gestao-richtext/versoes', (uid) => ({
+    ...conteudoManuais('richtext'), versao: 1, autorId: uid, autorNome: 'Pessoa Teste', criadoEm: serverTimestamp(),
+  }), (uid) => ({ titulo: 'Versão revisada', autorId: uid })],
+  ['avisos', () => ({
+    titulo: 'Manual publicado', mensagem: '', tipo: 'novo', documentoId: 'gestao-richtext', ...audManuais,
+    criadoEm: serverTimestamp(),
+  }), () => ({ mensagem: 'Aviso revisado' })],
+]
+
+const redeInativaManuais = ambiente.authenticatedContext('eq-rede-inativa-manuais').firestore()
+for (const [indice, [caminho, criar, editar]] of gravacoesManuais.entries()) {
+  const id = ['gestao-cat', 'gestao-richtext', 'gestao-html', '1', 'gestao-aviso'][indice]
+  const ref = doc(equipeRede, caminho, id)
+  if (caminho === 'avisos') {
+    await caso('gestor publica o documento antes de emitir o aviso', assertSucceeds(updateDoc(doc(equipeRede, 'documentos', 'gestao-richtext'), {
+      status: 'publicado', publicadoEm: serverTimestamp(), atualizadoEm: serverTimestamp(),
+    })))
+  }
+  await caso(`gestor cria ${caminho}/${id}`, assertSucceeds(setDoc(ref, criar('eq-rede'))))
+  await caso(`gestor edita ${caminho}/${id}`, assertSucceeds(updateDoc(ref, editar('eq-rede'))))
+  await caso(`gestor não exclui ${caminho}/${id}`, assertFails(deleteDoc(ref)))
+  await caso(`gestor não cria payload inválido em ${caminho}/${id}`, assertFails(setDoc(doc(equipeRede, caminho, `invalido-${id}`), {
+    ...criar('eq-rede'), campoInvalido: true,
+  })))
+  await caso(`gestor não edita payload inválido em ${caminho}/${id}`, assertFails(updateDoc(ref, {
+    ...editar('eq-rede'), campoInvalido: true,
+  })))
+  for (const [banco, uid] of [[equipeVazio, 'eq-rede-vazio'], [redeInativaManuais, 'eq-rede-inativa-manuais'], [dono, 'fr-1'], [equipe, 'eq-1']]) {
+    await caso(`${uid} não cria ${caminho}/${id}`, assertFails(setDoc(doc(banco, caminho, `negado-${id}`), criar(uid))))
+    await caso(`${uid} não edita ${caminho}/${id}`, assertFails(updateDoc(doc(banco, caminho, id), editar(uid))))
+  }
+}
+for (const caminho of ['categorias', 'documentos', 'documentos/gestao-richtext/versoes']) {
+  await caso(`gestor lista todos os registros de ${caminho}`, assertSucceeds(getDocs(collection(equipeRede, caminho))))
+}
+await caso('gestor lê rascunho restrito', assertSucceeds(getDoc(doc(equipeRede, 'documentos', 'gestao-html'))))
+await caso('gestor não lê o diretório de usuários', assertFails(getDocs(collection(equipeRede, 'usuarios'))))
+
+await caso('gestor não cria aviso geral', assertFails(setDoc(doc(equipeRede, 'avisos', 'gestao-geral'), {
+  ...gravacoesManuais.at(-1)[1](), tipo: 'geral',
+})))
+await caso('gestor não cria aviso de rascunho', assertFails(setDoc(doc(equipeRede, 'avisos', 'gestao-aviso-rascunho'), {
+  ...gravacoesManuais.at(-1)[1](), documentoId: 'gestao-html',
+})))
+await caso('gestor não troca o número da versão', assertFails(updateDoc(doc(equipeRede, 'documentos', 'gestao-richtext', 'versoes', '1'), { versao: 2 })))
+await caso('admin exclui a versão antes de excluir o documento', assertSucceeds(deleteDoc(doc(admin, 'documentos', 'gestao-richtext', 'versoes', '1'))))
+await caso('admin exclui o documento', assertSucceeds(deleteDoc(doc(admin, 'documentos', 'gestao-richtext'))))
+await caso('admin exclui a categoria', assertSucceeds(deleteDoc(doc(admin, 'categorias', 'gestao-cat'))))
 
 await caso('franqueado não vira admin', assertFails(updateDoc(doc(dono, 'usuarios', 'fr-1'), { papel: 'admin', atualizadoEm: serverTimestamp() })))
 await caso('franqueado não amplia os próprios módulos', assertFails(updateDoc(doc(dono, 'usuarios', 'fr-1'), { modulosLiberados: ['manuais', 'universidade', 'crm'], atualizadoEm: serverTimestamp() })))

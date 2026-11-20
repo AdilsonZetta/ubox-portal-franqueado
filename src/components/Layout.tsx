@@ -66,6 +66,7 @@ export function Layout() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
   const imprimir = useMatch('/documento/:id/imprimir')
+  const gereManuais = podeGerirTrilha(user, ehAdmin)
   const naoLidos = avisos.filter((aviso) => !avisosLidos.includes(aviso.id)).length
   const redeChamados = Boolean(user && (user.papel === 'admin' || user.papel === 'equipe_franqueadora') && !comoFranqueado)
   const unidadeChamados = comoFranqueado ? simulado?.unidadeId : user?.unidadeId
@@ -184,7 +185,7 @@ export function Layout() {
                       <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-line pl-2">
                         {modulo.slug === 'manuais'
                           ? itensManuais
-                              .filter((item) => (!item.admin || ehAdmin) && (!item.gestao || (podeGerirTrilha(user, ehAdmin) && !comoFranqueado)))
+                              .filter((item) => (!item.admin || ehAdmin) && (!item.gestao || gereManuais))
                               .map((item) => (
                                 <NavLink
                                   key={item.to}
@@ -199,7 +200,7 @@ export function Layout() {
                           : null}
                         {modulo.slug === 'manuais'
                           ? areas.map((area) => {
-                              const quantidade = documentos.filter((documento) => documento.categoriaId === area.id && (documento.status === 'publicado' || ehAdmin)).length
+                              const quantidade = documentos.filter((documento) => documento.categoriaId === area.id && (documento.status === 'publicado' || gereManuais)).length
                               return (
                                 <NavLink
                                   key={area.id}

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { AudienciaFields, type AudienciaForm } from '../../components/AudienciaFields'
 import { RichEditor } from '../../components/Editor'
-import { Aviso, Button, Campo, inputClass } from '../../components/ui'
+import { Aviso, Button, Campo, Carregando, inputClass } from '../../components/ui'
 import { MODELOS } from '../../data/modelos'
 import { gerarRascunho } from '../../lib/ai'
 import { excluirDocumento, enviarArquivo, listarUsuarios, salvarDocumento, type RascunhoDocumento } from '../../lib/api'
@@ -12,6 +12,7 @@ import { useAuth } from '../../lib/auth'
 import { storageHabilitado } from '../../firebaseConfig'
 import { mensagemErro } from '../../lib/errors'
 import { htmlParaTexto } from '../../lib/text'
+import { useVisao } from '../../lib/visao'
 import { usePortal } from '../../lib/portal'
 import type { Anexo, TipoDocumento, Usuario } from '../../types'
 
@@ -37,6 +38,7 @@ export default function DocumentoEditor() {
   const novo = !id || id === 'novo'
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { ehAdmin } = useVisao()
   const portal = usePortal()
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [form, setForm] = useState<RascunhoDocumento | null>(null)
@@ -48,8 +50,9 @@ export default function DocumentoEditor() {
   const [pedidoIa, setPedidoIa] = useState('')
 
   useEffect(() => {
+    if (!ehAdmin) return
     void listarUsuarios().then(setUsuarios).catch(() => undefined)
-  }, [])
+  }, [ehAdmin])
 
   useEffect(() => {
     if (!portal.categorias.length && portal.carregando) return
@@ -82,7 +85,13 @@ export default function DocumentoEditor() {
     })
   }, [id, novo, portal.categorias, portal.documentos, portal.carregando])
 
-  if (!form || !user) return <p>Carregando editor…</p>
+  if (!form && portal.carregando) return <Carregando texto="Carregando editor…" />
+  if (!form || !user) return (
+    <Aviso tom="erro">
+      {portal.erro || 'Documento indisponível.'}{' '}
+      <Link to="/biblioteca" className="underline">Voltar à biblioteca</Link>
+    </Aviso>
+  )
 
   const audiencia: AudienciaForm = {
     publico: form.publico,
@@ -100,7 +109,7 @@ export default function DocumentoEditor() {
     setOcupado(true)
     setErro('')
     try {
-      const salvo = await salvarDocumento({ ...form, status }, user, usuarios, novo ? undefined : id)
+      const salvo = await salvarDocumento({ ...form, status }, user, ehAdmin ? usuarios : null, novo ? undefined : id)
       await portal.atualizar()
       navigate(`/documento/${salvo}`)
     } catch (falha) {
@@ -225,7 +234,11 @@ export default function DocumentoEditor() {
           ) : null}
         </div>
       )}
-      <AudienciaFields valor={audiencia} usuarios={usuarios} onChange={(valor) => setForm({ ...form, ...valor })} />
+      {ehAdmin ? (
+        <AudienciaFields valor={audiencia} usuarios={usuarios} onChange={(valor) => setForm({ ...form, ...valor })} />
+      ) : novo ? (
+        <p className="text-sm text-ink-soft">Após a publicação, o documento ficará visível para quem tem acesso a Manuais.</p>
+      ) : null}
       <section className="space-y-2 rounded-2xl border border-line p-4">
         <h2 className="font-semibold">Anexos por link</h2>
         <p className="text-xs text-ink/55">Google Drive, YouTube ou qualquer URL. O envio de arquivo pelo Storage permanece desligado no plano Spark.</p>
@@ -277,7 +290,7 @@ export default function DocumentoEditor() {
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" disabled={ocupado} onClick={() => void salvar('rascunho')}>Salvar rascunho</Button>
         <Button disabled={ocupado} onClick={() => void salvar('publicado')}>Publicar</Button>
-        {!novo ? (
+        {ehAdmin && !novo ? (
           <Button
             variant="danger"
             onClick={() => {

@@ -1,14 +1,16 @@
 import { useEffect, useState } from 'react'
 import { AudienciaFields, type AudienciaForm } from '../../components/AudienciaFields'
-import { Aviso, Button, Campo, inputClass } from '../../components/ui'
+import { Aviso, Button, Campo, Carregando, Vazio, inputClass } from '../../components/ui'
 import { excluirCategoria, listarUsuarios, salvarCategoria } from '../../lib/api'
 import { mensagemErro } from '../../lib/errors'
+import { useVisao } from '../../lib/visao'
 import { usePortal } from '../../lib/portal'
 import type { Usuario } from '../../types'
 
 const audienciaInicial: AudienciaForm = { publico: true, unidades: [], papeis: [], uidsExtra: [] }
 
 export function CategoriasPage() {
+  const { ehAdmin } = useVisao()
   const portal = usePortal()
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [nome, setNome] = useState('')
@@ -18,10 +20,12 @@ export function CategoriasPage() {
   const [audiencia, setAudiencia] = useState<AudienciaForm>(audienciaInicial)
   const [editando, setEditando] = useState<string | undefined>()
   const [erro, setErro] = useState('')
+  const [salvando, setSalvando] = useState(false)
 
   useEffect(() => {
+    if (!ehAdmin) return
     void listarUsuarios().then(setUsuarios).catch(() => undefined)
-  }, [])
+  }, [ehAdmin])
 
   function limpar() {
     setEditando(undefined)
@@ -37,7 +41,12 @@ export function CategoriasPage() {
       <div>
         <h1 className="text-3xl font-extrabold">Categorias</h1>
         {erro ? <div className="mt-3"><Aviso tom="erro">{erro}</Aviso></div> : null}
-        <ul className="mt-4 divide-y divide-line rounded-2xl border border-line bg-white">
+        {portal.erro ? <Aviso tom="erro">{portal.erro} <button type="button" onClick={() => void portal.atualizar()} className="underline">Tentar novamente</button></Aviso> : null}
+        {portal.carregando ? <Carregando texto="Carregando categorias…" /> : null}
+        {!portal.carregando && !portal.erro && !portal.categorias.length ? (
+          <Vazio titulo="Nenhuma categoria cadastrada" texto="Use o formulário para criar a primeira categoria." />
+        ) : null}
+        {portal.categorias.length ? <ul className="mt-4 divide-y divide-line rounded-2xl border border-line bg-white">
           {[...portal.categorias].sort((a, b) => a.ordem - b.ordem).map((categoria) => (
             <li key={categoria.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <span>
@@ -58,7 +67,7 @@ export function CategoriasPage() {
                 >
                   Editar
                 </button>
-                <button
+                {ehAdmin ? <button
                   className="text-sm text-red-700"
                   onClick={() => {
                     if (window.confirm('Excluir esta categoria?')) {
@@ -67,22 +76,26 @@ export function CategoriasPage() {
                   }}
                 >
                   Excluir
-                </button>
+                </button> : null}
               </span>
             </li>
           ))}
-        </ul>
+        </ul> : null}
       </div>
       <form
         className="space-y-3 rounded-2xl border border-line bg-white p-4"
         onSubmit={(evento) => {
           evento.preventDefault()
-          void salvarCategoria({ nome, descricao, ordem, parentId, ...audiencia }, usuarios, editando)
+          if (salvando) return
+          setErro('')
+          setSalvando(true)
+          void salvarCategoria({ nome, descricao, ordem, parentId, ...audiencia }, ehAdmin ? usuarios : null, editando)
             .then(async () => {
               limpar()
               await portal.atualizar()
             })
             .catch((falha: unknown) => setErro(mensagemErro(falha)))
+            .finally(() => setSalvando(false))
         }}
       >
         <h2 className="font-bold">{editando ? 'Editar categoria' : 'Nova categoria'}</h2>
@@ -103,8 +116,12 @@ export function CategoriasPage() {
             ))}
           </select>
         </Campo>
-        <AudienciaFields valor={audiencia} usuarios={usuarios} onChange={setAudiencia} />
-        <Button type="submit">Salvar</Button>
+        {ehAdmin ? (
+          <AudienciaFields valor={audiencia} usuarios={usuarios} onChange={setAudiencia} />
+        ) : !editando ? (
+          <p className="text-sm text-ink-soft">A nova categoria ficará visível para quem tem acesso a Manuais.</p>
+        ) : null}
+        <Button type="submit" disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
       </form>
     </div>
   )

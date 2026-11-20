@@ -350,8 +350,8 @@ select throws_ok($$
 $$, '42501', null, 'admin não pode alterar o caminho do gabarito');
 select throws_ok($$update public.documentos set criado_em = now() - interval '1 day' where id = 'pub'$$,
   '42501', null, 'admin não pode trocar a data de criação');
-select throws_ok($$update public.avisos set titulo = 'Aviso alterado' where id = 'aviso-publico'$$,
-  '42501', null, 'nem admin pode alterar um aviso');
+select is(tests.linhas($$update public.avisos set titulo = 'Aviso alterado' where id = 'aviso-publico'$$),
+  0, 'nem admin pode alterar um aviso geral');
 select throws_ok($$
   insert into public.certificados (id, uid, trilha_id, nome, trilha_titulo, codigo, tentativa_id)
   values (tests.id('admin') || '_sem-prova', tests.id('admin'), 'sem-prova', 'Admin Rede',
@@ -417,8 +417,8 @@ select throws_ok($$
 $$, '42501', null, 'trilha legada com quiz exige tentativa aprovada');
 
 select tests.entrar('redeSem');
-select is((select count(*)::int from public.documentos where id in ('rascunho', 'restrito')), 0,
-  'franqueadora com manuais não lê rascunho nem publicado fora da audiência');
+select is((select count(*)::int from public.documentos where id in ('rascunho', 'restrito')), 2,
+  'gestor de manuais lê rascunho e publicado fora da audiência');
 select is((select count(*)::int from public.reestudos), 0, 'franqueadora sem universidade não lê reestudos');
 select is((select count(*)::int from public.leituras), 0, 'franqueadora não lê leituras alheias');
 select is((select count(*)::int from public.aceites), 0, 'franqueadora não lê aceites alheios');
