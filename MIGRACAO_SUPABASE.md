@@ -263,3 +263,12 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - Privacidade: consultor (acompanhamento) lê chamados, mas não os eventos; outra unidade, conta/unidade inativa e anon não leem nada.
 - App: `src/lib/chamadosSupabase.ts` atrás de `VITE_BACKEND=supabase`; no Supabase a lista é atualizada por polling de 15 s (sem Realtime ainda).
 - Testes: `supabase/tests/fase5_chamados.test.sql` (61 casos; 32 casos das regras do Firestore portados), local e remoto com rollback.
+
+## 15. O que a fase 6 entregou (cofre de senhas)
+
+- Migração `20261120154924_fase6_senhas` (aplicada no projeto): `acessos` (metadados), `acesso_segredos` (login/senha/notas, tabela separada com RLS própria), `acesso_eventos` e `solicitacoes_acesso`. Nenhum DELETE.
+- Privacidade igual às regras do Firestore: o segredo de unidade só é lido pelo franqueado da unidade com o módulo `senhas`, ou pela equipe da unidade quando `visivel_para_equipe` ou o uid está em `visivel_para`. **Admin e equipe da franqueadora não leem nem gravam segredos de unidade** (leem só os metadados). Segredos da rede seguem `perfilPodeLerSegredo`/`perfilPodeEscreverSegredo`.
+- Mesmo lote do Firestore: segredo só é gravado na transação que trocou `ultima_troca_em` (identificador de troca + FK adiada); limpar `pendente_troca` exige rotação. RPCs invoker: `criar_acesso`, `trocar_senha_acesso`, `atualizar_metadados_acesso`, `decidir_solicitacao_acesso` — erros com mensagem fixa, sem dados do segredo.
+- Nenhuma função definer devolve colunas do segredo; os predicados em `app` devolvem só booleanos.
+- App: `src/lib/senhasSupabase.ts` atrás de `VITE_BACKEND=supabase` (listas por polling de 15 s).
+- Testes: `supabase/tests/fase6_senhas.test.sql` — 80 casos (35 das regras do Firestore + privacidade de admin/franqueadora, anon e mesmo lote), local e remoto com rollback.
