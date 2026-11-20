@@ -1,3 +1,11 @@
+import { BACKEND } from './backend'
+import {
+  carregarAcompanhamentoSb,
+  concluirPassoUnidadeSb,
+  decidirPassoSb,
+  listarCompartilhadosSb,
+  salvarRegistroSb,
+} from './acompanhamentoSupabase'
 import {
   collection,
   doc,
@@ -89,6 +97,7 @@ export interface DadosAcompanhamento {
 
 /** Lê tudo o que o painel agrega. Com `unidadeId`, só a unidade; sem, a rede toda (visão geral). Somente leitura. */
 export async function carregarAcompanhamento(unidadeId?: string): Promise<DadosAcompanhamento> {
+  if (BACKEND === 'supabase') return carregarAcompanhamentoSb(unidadeId)
   const banco = requireDb()
   const un: QueryConstraint[] = unidadeId ? [where('unidadeId', '==', unidadeId)] : []
   const ler = (nome: string, ...extra: QueryConstraint[]) => getDocs(query(collection(banco, nome), ...un, ...extra))
@@ -149,6 +158,7 @@ export async function salvarRegistro(
   passosDoRegistro: PassoAc[],
   f: RegistroForm,
 ): Promise<string> {
+  if (BACKEND === 'supabase') return salvarRegistroSb(unidade, existente, f)
   const banco = requireDb()
   const lote = writeBatch(banco)
   const ref = existente ? doc(banco, 'acompanhamentoRegistros', existente.id) : doc(collection(banco, 'acompanhamentoRegistros'))
@@ -197,6 +207,7 @@ export async function salvarRegistro(
 }
 
 export async function decidirPasso(autor: Usuario, passo: PassoAc, status: 'validado' | 'reaberto', comentario: string): Promise<void> {
+  if (BACKEND === 'supabase') return decidirPassoSb(passo, status, comentario)
   const lote = writeBatch(requireDb())
   lote.update(doc(requireDb(), 'acompanhamentoPassos', passo.id), {
     status,
@@ -211,6 +222,7 @@ export async function decidirPasso(autor: Usuario, passo: PassoAc, status: 'vali
 // ---------- Visão da unidade ----------
 
 export async function listarCompartilhados(unidadeId: string): Promise<{ registros: RegistroAc[]; passos: PassoAc[] }> {
+  if (BACKEND === 'supabase') return listarCompartilhadosSb(unidadeId)
   const banco = requireDb()
   const filtros = [where('unidadeId', '==', unidadeId), where('compartilhado', '==', true)]
   const r = await getDocs(query(collection(banco, 'acompanhamentoRegistros'), ...filtros))
@@ -226,6 +238,7 @@ export async function listarCompartilhados(unidadeId: string): Promise<{ registr
 }
 
 export async function concluirPassoUnidade(autor: Usuario, id: string, comentario: string): Promise<void> {
+  if (BACKEND === 'supabase') return concluirPassoUnidadeSb(id, comentario)
   const lote = writeBatch(requireDb())
   lote.update(doc(requireDb(), 'acompanhamentoPassos', id), {
     status: 'concluido_unidade',
