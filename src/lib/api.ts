@@ -256,7 +256,10 @@ export async function carregarPortal(usuario: Usuario, { exigirBibliotecaComplet
   if (usuario.papel === 'admin') {
     const lerBiblioteca = <T>(consulta: Promise<T[]>): Promise<T[]> => exigirBibliotecaCompleta ? consulta : seguro(consulta, [])
     const [categorias, documentos, trilhas] = await Promise.all([
-      lerBiblioteca(lerColecao('categorias', mapCategoria, exigirBibliotecaCompleta)),
+      lerBiblioteca(lerColecao('categorias', (id, data) => ({
+        ...mapCategoria(id, data),
+        ...(exigirBibliotecaCompleta ? { publico: data.publico === true } : {}),
+      }), exigirBibliotecaCompleta)),
       lerBiblioteca(lerColecao('documentos', mapDocumento, exigirBibliotecaCompleta)),
       seguro(lerColecao('trilhas', mapTrilha), [] as Trilha[]),
     ])

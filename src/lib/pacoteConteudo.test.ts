@@ -5,8 +5,16 @@ import pagina from '../pages/admin/ImportarConteudo.tsx?raw'
 import { expect, it } from 'vitest'
 import { importarPacote, planejarImportacao, validarPacote, type DependenciasImportacao, type ExistentesImportacao, type PacoteConteudo } from './pacoteConteudo'
 
-const exemplo = (): PacoteConteudo => JSON.parse(arquivo)
-const existentes = (): ExistentesImportacao => ({ categorias: [], documentos: [], trilha: [], cursos: [], provas: [], checklists: [] })
+const exemplo = (): PacoteConteudo => {
+  const pacote: PacoteConteudo = JSON.parse(arquivo)
+  pacote.cursos[0].prova = {
+    chave: 'prova-demo', titulo: 'Prova demonstrativa', notaMinima: 70, manualRetorno: 'doc-manual',
+    tempoReestudoSeg: 300, publicado: true,
+    perguntas: [{ id: 'p1', enunciado: 'O que conferir na abertura?', opcoes: ['Iluminação', 'Nada'], correta: 0 }],
+  }
+  return pacote
+}
+const existentes = (): ExistentesImportacao => ({ categorias: [], documentos: [], trilha: [], cursos: [], provas: [], checklists: [], chaves: [] })
 
 it('valida o exemplo publicado e preserva o conteúdo', () => {
   expect(validarPacote(exemplo())).toEqual({ ok: true, pacote: exemplo() })
@@ -46,13 +54,13 @@ it.each<[string, (p: PacoteConteudo) => void]>([
 })
 
 it.each(['__proto__', 'constructor', 'prototype'])('rejeita a propriedade %s em JSON', (chave) => {
-  expect(validarPacote(JSON.parse(arquivo.replace('"id":"p1"', `"id":"p1","${chave}":{}`))).ok).toBe(false)
+  expect(validarPacote(JSON.parse(JSON.stringify(exemplo()).replace('"id":"p1"', `"id":"p1","${chave}":{}`))).ok).toBe(false)
 })
 
 it('localiza título e tipo exatos e só atualiza por opção', () => {
   const pacote = exemplo()
   const base = existentes()
-  base.documentos.push({ id: 'manual', titulo: pacote.documentos[0].titulo, tipo: 'manual' })
+  base.documentos.push({ id: 'manual', titulo: pacote.documentos[0].titulo, tipo: 'manual', publico: true })
   expect(planejarImportacao(pacote, base).documentos.map((i) => i.acao)).toEqual(['ja-existe', 'criar', 'criar'])
   expect(planejarImportacao(pacote, base, { atualizarExistentes: true }).documentos[0]).toMatchObject({ acao: 'atualizar', existente: { id: 'manual' } })
 })
@@ -71,6 +79,9 @@ it('resolve referências, segue após falha e usa a base atualizada para retomar
       base.documentos.push({ ...f, id: f.tipo })
       return f.tipo
     },
+    salvarChave: async (vinculo) => {
+      base.chaves = [...base.chaves.filter((v) => v.chave !== vinculo.chave), vinculo]
+    },
     salvarTrilha: async (itens) => {
       ordem.push('trilha')
       expect(itens[0].documentoId).toBe('manual')
@@ -87,7 +98,7 @@ it('resolve referências, segue após falha e usa a base atualizada para retomar
       expect(f.perguntas[0].correta).toBe(0)
       expect(versao).toBe(0)
       if (falhar) throw new Error('Falha simulada')
-      base.provas.push({ cursoId: f.cursoId, versao: 1 })
+      base.provas.push({ cursoId: f.cursoId, titulo: f.titulo, versao: 1 })
     },
     salvarModelo: async (_, f) => {
       ordem.push('checklist')
@@ -127,6 +138,9 @@ it('retoma a ordem do pacote quando um item anterior da trilha falhou', async ()
   const deps: DependenciasImportacao = {
     salvarCategoria: async () => { throw new Error('Categoria já existe') },
     salvarDocumento: async () => { throw new Error('Documento já existe') },
+    salvarChave: async (vinculo) => {
+      base.chaves = [...base.chaves.filter((v) => v.chave !== vinculo.chave), vinculo]
+    },
     salvarTrilha: async (itens) => {
       if (falhar && itens.some((i) => i.documentoId === 'doc-manual')) throw new Error('Falha simulada')
       base.trilha = itens.map((i, index) => ({ ...i, ordem: index + 1, anteriorId: '' }))
@@ -150,4 +164,116 @@ it('calcula somente as gravações necessárias para preservar a corrente existe
   expect(alteracoesNaTrilha(depois, antes).map((i) => i.documentoId)).toEqual(['c'])
   const meio = encadearTrilha([antes[0], depois[2], antes[1]])
   expect(alteracoesNaTrilha(meio, antes).map((i) => i.documentoId)).toEqual(['c', 'b'])
+})
+
+it('prioriza o vínculo pela chave, protege a audiência e grava o vínculo após atualizar', async () => {
+  const pacote = exemplo()
+  pacote.documentos = pacote.documentos.slice(0, 1)
+  pacote.trilha = []
+  pacote.cursos = []
+  pacote.checklists = []
+  const base = existentes()
+  const audiencia = { publico: false, unidades: ['unidade'], papeis: [], uidsExtra: ['pessoa'], uids: ['pessoa'] }
+  base.categorias = [{ ...pacote.categorias[0], ...audiencia, id: 'cat', parentId: null }]
+  base.documentos = [
+    { id: 'por-chave', titulo: 'Nome anterior', tipo: 'manual', ...audiencia },
+    { id: 'por-titulo', titulo: pacote.documentos[0].titulo, tipo: 'manual', publico: true },
+  ]
+  base.chaves = [{ tipo: 'documento', chave: 'doc-manual', alvoId: 'por-chave' }]
+  const opcoes = { atualizarExistentes: true }
+  const bloqueado = planejarImportacao(pacote, base, opcoes)
+  expect(bloqueado.documentos[0]).toMatchObject({
+    acao: 'restrito', correspondencia: 'chave', alvoId: 'por-chave', restrito: true,
+  })
+  const chamadas: unknown[] = []
+  const deps: DependenciasImportacao = {
+    salvarCategoria: async (form, id, usuarios) => { chamadas.push([id, usuarios, form.publico, form.unidades]); return id! },
+    salvarDocumento: async (form, id, usuarios) => { chamadas.push([id, usuarios, form.publico, form.uidsExtra]); return id! },
+    salvarChave: async (vinculo) => { chamadas.push(vinculo) },
+    salvarTrilha: async () => undefined,
+    salvarCurso: async () => undefined,
+    salvarProva: async () => undefined,
+    salvarModelo: async () => 'modelo',
+  }
+  expect(await importarPacote(bloqueado, deps)).toMatchObject({ ignorados: 2, erros: [] })
+  expect(chamadas).toEqual([])
+  const confirmado = planejarImportacao(pacote, base, { ...opcoes, atualizarRestritos: true })
+  expect(await importarPacote(confirmado, deps)).toMatchObject({ atualizados: 2, erros: [] })
+  expect(chamadas).toEqual([
+    ['cat', null, false, ['unidade']],
+    { tipo: 'categoria', chave: 'cat-demo', alvoId: 'cat' },
+    ['por-chave', null, false, ['pessoa']],
+    { tipo: 'documento', chave: 'doc-manual', alvoId: 'por-chave' },
+  ])
+})
+
+it('usa o título somente quando a chave não tem vínculo e o ID está livre', () => {
+  const pacote = exemplo()
+  const base = existentes()
+  base.documentos = [{ id: 'manual', titulo: pacote.documentos[0].titulo, tipo: 'manual', publico: true }]
+  const opcoes = { atualizarExistentes: true }
+  expect(planejarImportacao(pacote, base, opcoes).documentos[0]).toMatchObject({ acao: 'atualizar', correspondencia: 'título' })
+  for (const vinculo of [
+    { tipo: 'documento', chave: 'doc-manual', alvoId: 'apagado' },
+    { tipo: 'documento', chave: 'outra-chave', alvoId: 'manual' },
+  ] as const) {
+    base.chaves = [vinculo]
+    expect(planejarImportacao(pacote, base, opcoes).documentos[0].acao).toBe('criar')
+  }
+})
+
+it('preserva a audiência do checklist restrito quando a atualização é confirmada', async () => {
+  const pacote = exemplo()
+  pacote.categorias = []
+  pacote.documentos = []
+  pacote.trilha = []
+  pacote.cursos = []
+  const base = existentes()
+  base.checklists = [{
+    ...pacote.checklists[0], id: 'modelo', publico: false, unidades: ['unidade-1'],
+    geradoPorIA: false, iaModelo: '', versao: 1, totalItens: 1, pesoTotal: 1,
+    criadoEmMs: 0, atualizadoPorNome: 'Admin', atualizadoEmMs: 0,
+  }]
+  const deps: DependenciasImportacao = {
+    salvarCategoria: async () => '',
+    salvarDocumento: async () => '',
+    salvarChave: async () => undefined,
+    salvarTrilha: async () => undefined,
+    salvarCurso: async () => undefined,
+    salvarProva: async () => undefined,
+    salvarModelo: async (existente, form) => {
+      expect(existente?.id).toBe('modelo')
+      expect(form).toMatchObject({ publico: false, unidades: ['unidade-1'] })
+      return 'modelo'
+    },
+  }
+  const plano = planejarImportacao(pacote, base, { atualizarExistentes: true, atualizarRestritos: true })
+  expect(await importarPacote(plano, deps)).toMatchObject({ atualizados: 1, erros: [] })
+})
+
+it('bloqueia a sobrescrita de uma prova de título diferente no mesmo curso', () => {
+  const pacote = exemplo()
+  const base = existentes()
+  const curso = pacote.cursos[0]
+  base.cursos = [{ id: 'curso', titulo: curso.titulo, publico: true }]
+  base.provas = [{ cursoId: 'curso', titulo: 'Outra prova', versao: 1, publico: true }]
+  const opcoes = { atualizarExistentes: true, atualizarRestritos: true }
+  expect(planejarImportacao(pacote, base, opcoes).provas[0].acao).toBe('conflito')
+  base.chaves = [{ tipo: 'prova', chave: curso.prova!.chave, alvoId: 'curso' }]
+  expect(planejarImportacao(pacote, base, opcoes).provas[0]).toMatchObject({
+    acao: 'atualizar', correspondencia: 'chave',
+  })
+})
+
+it('ignora documento restrito sem a confirmação separada e nunca marca curso como restrito', () => {
+  const pacote = exemplo()
+  const base = existentes()
+  base.documentos = [{ id: 'manual', titulo: pacote.documentos[0].titulo, tipo: pacote.documentos[0].tipo, publico: false, unidades: ['u1'] }]
+  if (pacote.cursos[0]) base.cursos = [{ id: 'curso-x', titulo: pacote.cursos[0].titulo }]
+  const semConfirmacao = planejarImportacao(pacote, base, { atualizarExistentes: true })
+  expect(semConfirmacao.documentos[0]).toMatchObject({ acao: 'restrito', restrito: true, alvoId: 'manual' })
+  if (pacote.cursos[0]) expect(semConfirmacao.cursos[0]).toMatchObject({ acao: 'atualizar', restrito: false })
+  const comConfirmacao = planejarImportacao(pacote, base, { atualizarExistentes: true, atualizarRestritos: true })
+  expect(comConfirmacao.documentos[0].acao).toBe('atualizar')
+  expect(planejarImportacao(pacote, base, {}).documentos[0].acao).toBe('ja-existe')
 })

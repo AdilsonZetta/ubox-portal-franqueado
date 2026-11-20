@@ -14,10 +14,19 @@ Use JSON UTF-8 de até 5 MB (5 × 1.024² bytes). Na raiz, informe `formato: "ub
 | Prova | `chave`, `titulo` (2–120), `notaMinima` (1–100), `manualRetorno` (chave de documento), `tempoReestudoSeg` (30–14.400), `publicado` (booleano), `perguntas` (1–20). Cada pergunta tem `id` único na prova (1–40), `enunciado` (1–600), `opcoes` (2–6 textos de 1–300) e `correta` (um único índice inteiro, começando em zero). |
 | Checklist | `chave`, `titulo` (2–120), `descricao` (até 1.000), `tipo` (`abertura`, `fechamento`, `limpeza`, `inauguracao`, `vistoria`, `outro`), `frequencia` (`diaria`, `semanal`, `mensal`, `avulsa`), `publico: true`, `ativo` (booleano), `itens` (1–60). Cada item tem `id` único no modelo (1–80), `texto` (2–300), `secao` (até 60), `peso` (1–10), `exigeEvidencia` e `exigeObs` (booleanos). `geradoPorIA` e `iaModelo` são opcionais. Se `geradoPorIA` for `true`, informe `iaModelo` (2–80). |
 
-Tempos, notas, pesos e ordem de cursos são inteiros. Nomes e títulos são comparados após remover espaços nas pontas do valor do pacote, com distinção entre maiúsculas, minúsculas e acentos. A correspondência usa nome e pai para categorias, título e tipo para documentos, título para cursos e checklists, documento para trilha e curso para prova. Evite repetir identidades no pacote. Se a base já tiver mais de um registro com a mesma identidade, a prévia usa o menor ID em ordem lexicográfica.
+Tempos, notas, pesos e ordem de cursos são inteiros. Mantenha as chaves ao renomear itens. Depois da primeira gravação, a importação localiza o registro pelo vínculo entre tipo, chave e ID. Se ainda não houver vínculo, a prévia procura um registro com a identidade legada e sem vínculo com outra chave. A identidade usa nome e pai para categorias, título e tipo para documentos, título para cursos e checklists, título do manual e documento para trilha, título e curso para prova. A comparação distingue maiúsculas, minúsculas e acentos. Se houver mais de um registro elegível, a prévia usa o menor ID em ordem lexicográfica.
 
-A importação ignora itens existentes por padrão. A opção de atualização usa os IDs encontrados e segue o versionamento dos editores. Se gravar um curso e a prova falhar, a próxima importação reconhece o curso e tenta gravar a prova ausente. A opção de rascunho altera o status dos documentos gravados nessa execução. A publicação de cursos e provas continua indicada pelos respectivos campos `publicado`.
+A importação ignora itens existentes por padrão. A opção de atualização mantém as audiências atuais e segue o versionamento dos editores. Itens com audiência restrita exigem confirmação separada. A prévia exibe a correspondência, a audiência e as URLs externas antes da gravação. A opção de rascunho altera o status dos documentos gravados nessa execução. A publicação de cursos e provas continua indicada pelos respectivos campos `publicado`.
 
-O arquivo de exemplo contém dados sintéticos. O gabarito do pacote é material administrativo. Guarde o arquivo em local de acesso restrito quando contiver respostas reais.
+## Gerar e verificar um pacote real
 
-[Exemplo mínimo](./exemplo-minimo.json)
+Guarde e compartilhe pacotes reais somente fora do repositório, em local de acesso restrito. Informe um caminho de saída explícito. As opções locais ignoradas pelo Git são `pacotes-gerados/` e arquivos `content/pacotes/*.real.json`.
+
+```sh
+node scripts/gerar-pacote-conteudo.mjs <diretório-origem> /caminho/privado/ubox.real.json
+node scripts/verificar-pacote.mjs /caminho/privado/ubox.real.json
+```
+
+O gerador embaralha as alternativas por padrão e atualiza o índice `correta`. Use `--embaralhar` para indicar esse comportamento explicitamente ou `--no-embaralhar` para manter a ordem da origem. O verificador retorna código 1 se encontrar conteúdo exclusivo da franqueadora.
+
+O [exemplo mínimo](./exemplo-minimo.json) contém dados sintéticos. Os JSONs versionados em `content/` devem ficar livres do campo `correta`.

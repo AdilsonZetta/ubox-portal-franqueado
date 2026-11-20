@@ -9,31 +9,44 @@ import {
   importarPacote, MAX_BYTES_PACOTE, planejarImportacao, validarPacote,
   type AcaoImportacao, type ExistentesImportacao, type PacoteConteudo, type PlanoImportacao, type RelatorioImportacao,
 } from '../../lib/pacoteConteudo'
+import { listarPacoteChaves, salvarPacoteChave } from '../../lib/pacoteChavesApi'
 import { usePortal } from '../../lib/portal'
 import { listarCursos, listarProvas, salvarCurso, salvarProva } from '../../lib/universidadeApi'
-import type { Usuario } from '../../types'
+import type { Audiencia, Usuario } from '../../types'
 
-const ROTULO_ACAO: Record<AcaoImportacao, string> = { criar: 'Criar', 'ja-existe': 'Já existe', atualizar: 'Atualizar' }
+const ROTULO_ACAO: Record<AcaoImportacao, string> = { criar: 'Criar', 'ja-existe': 'Já existe', atualizar: 'Atualizar', restrito: 'Ignorar', conflito: 'Vínculo em conflito' }
 const CARTAO = 'rounded-2xl border border-line bg-white p-4 sm:p-6'
 const CAIXA = 'h-4 w-4 shrink-0 accent-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark'
 
 async function carregarExistentes(user: Usuario): Promise<ExistentesImportacao> {
-  const [biblioteca, trilha, cursos, provas, checklists] = await Promise.all([
+  const [biblioteca, trilha, cursos, provas, checklists, chaves] = await Promise.all([
     carregarPortal(user, { exigirBibliotecaCompleta: true }),
-    listarTrilhaManuais(), listarCursos(true), listarProvas(), listarModelos(user, true),
+    listarTrilhaManuais(), listarCursos(true), listarProvas(), listarModelos(user, true), listarPacoteChaves(),
   ])
-  return { categorias: biblioteca.categorias, documentos: biblioteca.documentos, trilha, cursos, provas, checklists }
+  return { categorias: biblioteca.categorias, documentos: biblioteca.documentos, trilha, cursos, provas, checklists, chaves }
+}
+
+function descreverAudiencia(audiencia: Partial<Audiencia>) {
+  if (audiencia.publico === true) return 'Rede toda'
+  const partes: string[] = []
+  const unidades = audiencia.unidades?.length ?? 0
+  const papeis = audiencia.papeis ?? []
+  const pessoas = new Set([...(audiencia.uids ?? []), ...(audiencia.uidsExtra ?? [])]).size
+  if (unidades) partes.push(`${unidades} ${unidades === 1 ? 'unidade' : 'unidades'}`)
+  if (papeis.length) partes.push(`Papéis: ${papeis.join(', ')}`)
+  if (pessoas) partes.push(`${pessoas} ${pessoas === 1 ? 'pessoa' : 'pessoas'}`)
+  return partes.join(' · ') || 'Sem audiência de rede informada'
 }
 
 function gruposDoPlano(plano: PlanoImportacao, pacote: PacoteConteudo) {
   const nomes = new Map(pacote.documentos.map((d) => [d.chave, d.titulo]))
   return [
-    { titulo: 'Categorias', itens: plano.categorias.map(({ item, acao }) => ({ chave: item.chave, nome: item.nome, acao })) },
-    { titulo: 'Documentos', itens: plano.documentos.map(({ item, acao }) => ({ chave: item.chave, nome: item.titulo, acao })) },
-    { titulo: 'Itens da trilha', itens: plano.trilha.map(({ item, acao }) => ({ chave: item.chave, nome: nomes.get(item.documento), acao })) },
-    { titulo: 'Cursos', itens: plano.cursos.map(({ item, acao }) => ({ chave: item.chave, nome: item.titulo, acao })) },
-    { titulo: 'Provas', itens: plano.provas.map(({ item, acao }) => ({ chave: item.chave, nome: item.titulo, acao })) },
-    { titulo: 'Checklists', itens: plano.checklists.map(({ item, acao }) => ({ chave: item.chave, nome: item.titulo, acao })) },
+    { titulo: 'Categorias', itens: plano.categorias.map((passo) => ({ ...passo, nome: passo.item.nome })) },
+    { titulo: 'Documentos', itens: plano.documentos.map((passo) => ({ ...passo, nome: passo.item.titulo })) },
+    { titulo: 'Itens da trilha', itens: plano.trilha.map((passo) => ({ ...passo, nome: nomes.get(passo.item.documento) })) },
+    { titulo: 'Cursos', itens: plano.cursos.map((passo) => ({ ...passo, nome: passo.item.titulo })) },
+    { titulo: 'Provas', itens: plano.provas.map((passo) => ({ ...passo, nome: passo.item.titulo })) },
+    { titulo: 'Checklists', itens: plano.checklists.map((passo) => ({ ...passo, nome: passo.item.titulo })) },
   ]
 }
 
@@ -44,15 +57,21 @@ export default function ImportarConteudo() {
   const [existentes, setExistentes] = useState<ExistentesImportacao | null>(null)
   const [erros, setErros] = useState<string[]>([])
   const [atualizarExistentes, setAtualizarExistentes] = useState(false)
+  const [atualizarRestritos, setAtualizarRestritos] = useState(false)
   const [comoRascunho, setComoRascunho] = useState(false)
   const [lendo, setLendo] = useState(false)
   const [importando, setImportando] = useState(false)
   const [progresso, setProgresso] = useState({ feito: 0, total: 0, chave: '' })
   const [relatorio, setRelatorio] = useState<RelatorioImportacao | null>(null)
   const ocupado = useRef(false)
-  const plano = useMemo(() => pacote && existentes ? planejarImportacao(pacote, existentes, { atualizarExistentes, comoRascunho }) : null,
-    [pacote, existentes, atualizarExistentes, comoRascunho])
+  const plano = useMemo(() => pacote && existentes ? planejarImportacao(pacote, existentes, { atualizarExistentes, atualizarRestritos, comoRascunho }) : null,
+    [pacote, existentes, atualizarExistentes, atualizarRestritos, comoRascunho])
   const grupos = useMemo(() => plano && pacote ? gruposDoPlano(plano, pacote) : [], [plano, pacote])
+  const links = useMemo(() => pacote?.documentos.flatMap((doc) => [
+    ...(doc.htmlUrl ? [{ url: doc.htmlUrl, nome: `${doc.titulo} — HTML interativo` }] : []),
+    ...(doc.anexos ?? []).map((anexo) => ({ url: anexo.url, nome: `${doc.titulo} — ${anexo.nome}` })),
+  ]) ?? [], [pacote])
+  const temRestritos = grupos.some((grupo) => grupo.itens.some((item) => item.restrito))
   const total = grupos.reduce((soma, grupo) => soma + grupo.itens.length, 0)
 
   async function preparar(arquivo?: File) {
@@ -67,6 +86,7 @@ export default function ImportarConteudo() {
         setRelatorio(null)
         setProgresso({ feito: 0, total: 0, chave: '' })
         setAtualizarExistentes(false)
+        setAtualizarRestritos(false)
         setComoRascunho(false)
         if (!/\.json$/i.test(arquivo.name)) {
           setErros(['Selecione um arquivo com a extensão .json.'])
@@ -109,25 +129,29 @@ export default function ImportarConteudo() {
     try {
       // Reconsulta a base antes de gravar para reconhecer itens salvos desde a prévia.
       const base = await carregarExistentes(user)
-      const planoAtual = planejarImportacao(pacote, base, { atualizarExistentes, comoRascunho })
+      const planoAtual = planejarImportacao(pacote, base, { atualizarExistentes, atualizarRestritos, comoRascunho })
       const mudou = ([ 'categorias', 'documentos', 'trilha', 'cursos', 'provas', 'checklists' ] as const).some((grupo) =>
         planoAtual[grupo].some((passo, i) => passo.acao !== plano[grupo][i].acao ||
+          passo.alvoId !== plano[grupo][i].alvoId || passo.correspondencia !== plano[grupo][i].correspondencia ||
           JSON.stringify(passo.existente) !== JSON.stringify(plano[grupo][i].existente)),
       )
       if (mudou) {
+        setAtualizarRestritos(false)
         setExistentes(base)
         setErros(['O conteúdo existente mudou. Confira a nova prévia antes de importar.'])
         return
       }
       const resultado = await importarPacote(planoAtual, {
-        salvarCategoria: (form, id) => salvarCategoria(form, [], id),
-        salvarDocumento: (form, id) => salvarDocumento(form, user, [], id),
+        salvarCategoria: (form, id, usuarios) => salvarCategoria(form, usuarios, id),
+        salvarDocumento: (form, id, usuarios) => salvarDocumento(form, user, usuarios, id),
+        salvarChave: (vinculo) => salvarPacoteChave(vinculo, user.uid),
         salvarTrilha: (itens, anteriores) => salvarTrilhaManuais(user, itens, anteriores),
         salvarCurso: (form) => salvarCurso(user, form),
         salvarProva: (form, versao) => salvarProva(user, form, versao),
         salvarModelo: (existente, form) => salvarModelo(user, existente, form),
       }, (feito, chave) => setProgresso({ feito, total, chave }))
       setRelatorio(resultado)
+      setAtualizarRestritos(false)
       await atualizar()
       setExistentes(await carregarExistentes(user))
     } catch {
@@ -193,21 +217,50 @@ export default function ImportarConteudo() {
                     <summary className="cursor-pointer rounded py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-brand-dark">{grupo.titulo}</summary>
                     <ul className="divide-y divide-line border-t border-line text-sm">
                       {grupo.itens.map((item) => (
-                        <li key={item.chave} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5">
-                          <span className="min-w-0 break-words">{item.nome}</span>
-                          <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 font-medium text-ink-soft">{ROTULO_ACAO[item.acao]}</span>
+                        <li key={item.item.chave} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5">
+                          <div className="min-w-0 break-words">
+                            <span className="font-medium">{item.nome}</span>
+                            {item.existente ? (
+                              <p className="mt-1 text-xs text-ink-soft">
+                                ID {item.alvoId} · Por {item.correspondencia} · {descreverAudiencia(item.existente)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <span className="shrink-0 rounded-full bg-paper px-2 py-0.5 font-medium text-ink-soft">{ROTULO_ACAO[item.acao]}{item.restrito ? ' · Restrito' : ''}</span>
                         </li>
                       ))}
                     </ul>
                   </details>
                 ))}
               </div>
+              <section className="mt-5 rounded-xl border border-line p-3" aria-labelledby="links-externos-pacote">
+                <h3 id="links-externos-pacote" className="text-sm font-semibold">Links externos</h3>
+                {links.length ? (
+                  <ul className="mt-2 divide-y divide-line text-sm">
+                    {links.map(({ url, nome }, indice) => (
+                      <li key={indice} className="py-2">
+                        <p className="break-words font-medium">{nome}</p>
+                        <p className="break-all text-ink-soft">{url}</p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <p className="mt-1 text-sm text-ink-soft">O pacote não contém links de interativos ou anexos.</p>}
+              </section>
               <fieldset className="mt-5 space-y-2 rounded-xl bg-paper p-3" disabled={bloqueado}>
                 <legend className="px-1 text-sm font-semibold">Opções da importação</legend>
                 <label className="flex min-h-10 items-center gap-2 text-sm">
-                  <input type="checkbox" className={CAIXA} checked={atualizarExistentes} onChange={(e) => setAtualizarExistentes(e.target.checked)} />
+                  <input type="checkbox" className={CAIXA} checked={atualizarExistentes} onChange={(e) => {
+                    setAtualizarExistentes(e.target.checked)
+                    setAtualizarRestritos(false)
+                  }} />
                   Atualizar itens que já existem
                 </label>
+                {temRestritos && atualizarExistentes ? (
+                  <label className="flex min-h-10 items-center gap-2 text-sm">
+                    <input type="checkbox" className={CAIXA} checked={atualizarRestritos} onChange={(e) => setAtualizarRestritos(e.target.checked)} />
+                    Atualizar também os itens restritos (a audiência atual é mantida)
+                  </label>
+                ) : null}
                 <label className="flex min-h-10 items-center gap-2 text-sm">
                   <input type="checkbox" className={CAIXA} checked={comoRascunho} onChange={(e) => setComoRascunho(e.target.checked)} />
                   Importar documentos como rascunho

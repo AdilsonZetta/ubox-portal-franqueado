@@ -1660,6 +1660,22 @@ service cloud.firestore {
         && dados.unidadeId == unidadeId;
     }
 
+    function isValidPacoteChave(data, id) {
+      return id.matches('^[A-Za-z0-9_-]{1,150}$')
+        && data.keys().hasOnly(['tipo', 'chave', 'alvoId', 'atualizadoEm', 'atualizadoPor'])
+        && data.tipo in ['categoria', 'documento', 'trilha', 'curso', 'prova', 'checklist']
+        && data.chave is string && data.chave.size() > 0 && data.chave.size() <= 120
+        && data.alvoId is string && data.alvoId.size() > 0 && data.alvoId.size() <= 128
+        && data.atualizadoEm == request.time
+        && data.atualizadoPor == uid();
+    }
+
+    match /pacoteChaves/{chaveId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin() && isValidPacoteChave(novo(), chaveId);
+      allow delete: if false;
+    }
+
     match /manuaisTrilha/{id} {
       allow read: if isActive() && podeModulo('manuais');
       allow read: if userExists() && gereAcompanhamento(userData());

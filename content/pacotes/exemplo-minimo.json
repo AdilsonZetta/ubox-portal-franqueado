@@ -15,8 +15,7 @@
     {"chave":"trilha-demo","documento":"doc-manual","etapa":"Abertura","tempoMinimoSeg":30,"videoMinutos":0,"ativo":true}
   ],
   "cursos": [
-    {"chave":"curso-demo","titulo":"Curso demonstrativo","descricao":"Pratique a abertura da unidade.","ordem":1,"aulas":["doc-manual"],"publicado":true,
-      "prova":{"chave":"prova-demo","titulo":"Prova demonstrativa","notaMinima":70,"manualRetorno":"doc-manual","tempoReestudoSeg":300,"publicado":true,"perguntas":[{"id":"p1","enunciado":"O que conferir na abertura?","opcoes":["Iluminação","Nada"],"correta":0}]}}
+    {"chave":"curso-demo","titulo":"Curso demonstrativo","descricao":"Pratique a abertura da unidade.","ordem":1,"aulas":["doc-manual"],"publicado":true}
   ],
   "checklists": [
     {"chave":"ck-demo","titulo":"Checklist demonstrativo","descricao":"","tipo":"abertura","frequencia":"diaria","publico":true,"ativo":true,"itens":[{"id":"i1","texto":"Conferir iluminação","secao":"","peso":1,"exigeEvidencia":false,"exigeObs":false}]}

@@ -1,12 +1,14 @@
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
-import { readdir, readFile, writeFile } from 'node:fs/promises'
-import { basename, join } from 'node:path'
+import { randomInt } from 'node:crypto'
+import { lstat, mkdtemp, readdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { basename, dirname, isAbsolute, join, relative, sep } from 'node:path'
 import { parseArgs } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import createDOMPurify from 'dompurify'
 import { JSDOM } from 'jsdom'
 import { Marked } from 'marked'
 import { createServer } from 'vite'
+import { embaralharPergunta } from './lib/embaralhar-pergunta.mjs'
 
 const etapas = ['Boas-vindas', 'Implantação', 'Operação', 'Equipe', 'Marketing local', 'Gestão financeira', 'Marca']
 const etapaPorNumero = new Map(etapas.map((etapa, indice) => [`0${indice + 1}`, etapa]))
@@ -163,10 +165,31 @@ async function gerarPacote(origem, geradoEm, { tempoSugeridoSeg, htmlParaTexto }
 
 async function main() {
   const { positionals: [origem, saida, ...extras], values } = parseArgs({
-    allowPositionals: true, options: { 'gerado-em': { type: 'string' } },
+    allowPositionals: true, options: {
+      'gerado-em': { type: 'string' },
+      embaralhar: { type: 'boolean', default: true },
+    },
+    allowNegative: true,
   })
   if (!origem || !saida || extras.length) {
-    throw new Error('Uso: node scripts/gerar-pacote-conteudo.mjs <dirOrigem> <saida.json> [--gerado-em <ISO>]')
+    throw new Error('Uso: node scripts/gerar-pacote-conteudo.mjs <dirOrigem> <saida.json> [--gerado-em <ISO>] [--embaralhar | --no-embaralhar]')
+  }
+
+  const raiz = await realpath(raizRepo)
+  const pasta = await realpath(dirname(saida))
+  const destino = join(pasta, basename(saida))
+  const caminhoLocal = relative(raiz, destino)
+  const dentroDoRepo = !isAbsolute(caminhoLocal) && caminhoLocal !== '..' && !caminhoLocal.startsWith(`..${sep}`)
+  if (dentroDoRepo && !caminhoLocal.startsWith(`pacotes-gerados${sep}`) &&
+      !(pasta === join(raiz, 'content', 'pacotes') && basename(destino).endsWith('.real.json'))) {
+    throw new Error('Grave o pacote fora do repositório, em pacotes-gerados/ ou com o sufixo .real.json em content/pacotes/.')
+  }
+  const anterior = await lstat(destino).catch((erro) => {
+    if (erro.code !== 'ENOENT') throw erro
+    return null
+  })
+  if (anterior && (!anterior.isFile() || anterior.nlink !== 1)) {
+    throw new Error('Informe um arquivo de saída regular, sem links.')
   }
 
   // Executa os módulos TypeScript do portal localmente, sem abrir um servidor HTTP.
@@ -183,9 +206,21 @@ async function main() {
         `${caminho} (${pacote[lista]?.[indice]?.chave ?? 'sem chave'})`,
       )).join('\n'))
     }
+    if (values.embaralhar) {
+      for (const curso of pacote.cursos) {
+        if (curso.prova) curso.prova.perguntas = curso.prova.perguntas.map((pergunta) => embaralharPergunta(pergunta, randomInt))
+      }
+    }
     const json = `${JSON.stringify(pacote, null, 2)}\n`
     if (Buffer.byteLength(json) > MAX_BYTES_PACOTE) throw new Error('O arquivo JSON excede o limite de 5 MB.')
-    await writeFile(saida, json)
+    const temporario = await mkdtemp(join(pasta, '.pacote-'))
+    try {
+      const arquivo = join(temporario, 'pacote.json')
+      await writeFile(arquivo, json, { mode: 0o600 })
+      await rename(arquivo, destino)
+    } finally {
+      await rm(temporario, { recursive: true, force: true })
+    }
     for (const tipo of ['manual', 'pop', 'html']) {
       const documentos = pacote.documentos.filter((documento) => documento.tipo === tipo)
       const publicados = documentos.filter((documento) => documento.status === 'publicado').length

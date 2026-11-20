@@ -145,6 +145,30 @@ const equipeRede = ambiente.authenticatedContext('eq-rede', { email: 'eq-rede@ub
 const equipeVazio = ambiente.authenticatedContext('eq-rede-vazio', { email: 'eq-rede-vazio@ubox.test' }).firestore()
 const equipe = ambiente.authenticatedContext('eq-1', { email: 'eq-1@ubox.test' }).firestore()
 const equipeSem = ambiente.authenticatedContext('eq-sem', { email: 'eq-sem@ubox.test' }).firestore()
+
+const vinculoPacote = {
+  tipo: 'documento', chave: 'manual', alvoId: 'doc-manual',
+  atualizadoPor: 'admin-1', atualizadoEm: serverTimestamp(),
+}
+const refPacote = (banco, id = 'documento_manual') => doc(banco, 'pacoteChaves', id)
+await caso('admin cria, lê e atualiza vínculo do pacote', (async () => {
+  await assertSucceeds(setDoc(refPacote(admin), vinculoPacote))
+  await assertSucceeds(getDoc(refPacote(admin)))
+  await assertSucceeds(updateDoc(refPacote(admin), { alvoId: 'doc-novo', atualizadoEm: serverTimestamp() }))
+})())
+for (const [nome, banco, uid] of [['franqueado', dono, 'fr-1'], ['equipe franqueadora', equipeRede, 'eq-rede']]) {
+  await caso(`${nome} não lê, cria ou atualiza vínculos do pacote`, (async () => {
+    await assertFails(getDoc(refPacote(banco)))
+    await assertFails(setDoc(refPacote(banco, 'documento_outro'), { ...vinculoPacote, chave: 'outro', atualizadoPor: uid }))
+    await assertFails(updateDoc(refPacote(banco), { atualizadoPor: uid, atualizadoEm: serverTimestamp() }))
+  })())
+}
+await caso('vínculo do pacote recusa campo extra, outro autor e exclusão', (async () => {
+  await assertFails(setDoc(refPacote(admin), { ...vinculoPacote, extra: true }))
+  await assertFails(updateDoc(refPacote(admin), { atualizadoPor: 'fr-1', atualizadoEm: serverTimestamp() }))
+  await assertFails(deleteDoc(refPacote(admin)))
+})())
+
 const manual = doc(admin, 'documentos', 'pub')
 
 await caso('admin lê manual publicado', assertSucceeds(getDoc(doc(admin, 'documentos', 'pub'))))
