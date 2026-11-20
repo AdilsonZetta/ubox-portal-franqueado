@@ -1548,7 +1548,7 @@ service cloud.firestore {
 
     function isValidItemTrilha(data, id) {
       return data.keys().hasOnly(['documentoId', 'titulo', 'etapa', 'ordem', 'tempoMinimoSeg', 'videoMinutos', 'anteriorId', 'ativo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['documentoId', 'titulo', 'etapa', 'ordem', 'tempoMinimoSeg', 'videoMinutos', 'anteriorId', 'ativo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 11
         && data.documentoId == id
         && data.titulo is string && data.titulo.size() > 0 && data.titulo.size() <= 200
         && data.etapa is string && data.etapa.size() <= 80
@@ -1564,7 +1564,7 @@ service cloud.firestore {
 
     function isValidProgressoManual(data) {
       return data.keys().hasOnly(['uid', 'documentoId', 'nome', 'unidadeId', 'unidadeNome', 'status', 'iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'concluidoEm', 'atualizadoEm'])
-        && data.keys().hasAll(['uid', 'documentoId', 'nome', 'unidadeId', 'unidadeNome', 'status', 'iniciadoEm', 'reinicios', 'tempoMinimoSeg', 'concluidoEm', 'atualizadoEm'])
+        && data.keys().size() == 11
         && data.documentoId is string && data.documentoId.size() > 0 && data.documentoId.size() <= 128
         && data.unidadeNome is string && data.unidadeNome.size() <= 120
         && data.status in ['em_andamento', 'concluido']
@@ -1751,7 +1751,7 @@ service cloud.firestore {
 
     function isValidCurso(data, id) {
       return data.keys().hasOnly(['titulo', 'descricao', 'ordem', 'aulas', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'ordem', 'aulas', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 8
         && idCursoOk(id)
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
@@ -1808,7 +1808,7 @@ service cloud.firestore {
 
     function isValidProva(data, id) {
       return data.keys().hasOnly(['cursoId', 'titulo', 'notaMinima', 'perguntas', 'totalPerguntas', 'manualRetornoId', 'tempoReestudoSeg', 'versao', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['cursoId', 'titulo', 'notaMinima', 'perguntas', 'totalPerguntas', 'manualRetornoId', 'tempoReestudoSeg', 'versao', 'publicado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 12
         && data.cursoId == id
         && validName(data.titulo)
         && data.notaMinima is int && data.notaMinima >= 1 && data.notaMinima <= 100
@@ -1849,7 +1849,7 @@ service cloud.firestore {
 
     function isValidGabarito(data, id) {
       return data.keys().hasOnly(['cursoId', 'corretas', 'versao', 'atualizadoPor', 'atualizadoEm'])
-        && data.keys().hasAll(['cursoId', 'corretas', 'versao', 'atualizadoPor', 'atualizadoEm'])
+        && data.keys().size() == 5
         && data.cursoId == id
         && corretasOk(data.corretas)
         && data.versao is int && data.versao >= 1
@@ -1927,7 +1927,7 @@ service cloud.firestore {
 
     function isValidTentativaProva(d) {
       return d.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'aprovado', 'criadoEm', 'corrigidoEm'])
-        && d.keys().hasAll(['uid', 'cursoId', 'ciclo', 'numero', 'nome', 'unidadeId', 'unidadeNome', 'versao', 'aprovado', 'criadoEm', 'corrigidoEm'])
+        && d.keys().size() == 11
         && idCursoOk(d.cursoId)
         && d.ciclo is int && d.ciclo >= 1 && d.ciclo <= 50
         && d.numero is int && d.numero >= 1 && d.numero <= 3
@@ -2057,7 +2057,7 @@ service cloud.firestore {
         allow read: if signedIn() && exists(userPath()) && gereUniversidade(userData());
         allow create: if request.resource.data.uid == request.auth.uid && folhaId == 'atual' ? (
             request.resource.data.keys().hasOnly(['uid', 'versao', 'respostas'])
-            && request.resource.data.keys().hasAll(['uid', 'versao', 'respostas'])
+            && request.resource.data.keys().size() == 3
             && tentativaId.size() > request.auth.uid.size() + 1
             && tentativaId[0:request.auth.uid.size() + 1] == request.auth.uid + '_'
             && !exists(tentativaProvaPath(tentativaId))
@@ -2081,7 +2081,7 @@ service cloud.firestore {
       allow create: if request.resource.data.uid == request.auth.uid && request.resource.data.status == 'em_andamento' ? (
           signedIn() && exists(userPath())
           && request.resource.data.keys().hasOnly(['uid', 'cursoId', 'ciclo', 'documentoId', 'status', 'iniciadoEm', 'reinicios', 'concluidoEm', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['uid', 'cursoId', 'ciclo', 'documentoId', 'status', 'iniciadoEm', 'reinicios', 'concluidoEm', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 9
           && idCursoOk(request.resource.data.cursoId)
           && request.resource.data.ciclo is int && request.resource.data.ciclo >= 1 && request.resource.data.ciclo <= 50
           && reestudoId == request.auth.uid + '_' + request.resource.data.cursoId + '_' + string(request.resource.data.ciclo)
@@ -2190,7 +2190,7 @@ service cloud.firestore {
 
     function isValidMaterial(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'categoria', 'campanhaId', 'url', 'previaUrl', 'formato', 'regrasUso', 'validoDe', 'validoAte', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'categoria', 'campanhaId', 'url', 'previaUrl', 'formato', 'regrasUso', 'validoDe', 'validoAte', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 20
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.tipo in ['arte', 'campanha', 'logo', 'marca', 'template', 'video', 'outro']
@@ -2212,7 +2212,7 @@ service cloud.firestore {
 
     function isValidCampanhaMkt(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'inicio', 'fim', 'ativo', 'geradoPorIA', 'iaModelo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'inicio', 'fim', 'ativo', 'geradoPorIA', 'iaModelo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 11
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.tipo in ['campanha', 'data_comemorativa', 'lancamento']
@@ -2261,7 +2261,7 @@ service cloud.firestore {
     // Pedido de peça da unidade para a franqueadora.
     function isValidSolicitacaoMkt(data) {
       return data.keys().hasOnly(['uid', 'nome', 'unidadeId', 'unidadeNome', 'titulo', 'tipoPeca', 'descricao', 'medidas', 'prazoDesejado', 'referenciaUrl', 'campanhaId', 'status', 'complemento', 'resposta', 'entregaUrl', 'geradoPorIA', 'iaModelo', 'responsavelNome', 'criadoEm', 'atualizadoEm', 'entregueEm'])
-        && data.keys().hasAll(['uid', 'nome', 'unidadeId', 'unidadeNome', 'titulo', 'tipoPeca', 'descricao', 'medidas', 'prazoDesejado', 'referenciaUrl', 'campanhaId', 'status', 'complemento', 'resposta', 'entregaUrl', 'geradoPorIA', 'iaModelo', 'responsavelNome', 'criadoEm', 'atualizadoEm', 'entregueEm'])
+        && data.keys().size() == 21
         && data.status in ['aberta', 'em_producao', 'aguardando_unidade', 'entregue', 'cancelada']
         && validShort(data.complemento, 2000)
         && validShort(data.resposta, 2000)
@@ -2362,7 +2362,7 @@ service cloud.firestore {
 
     function isValidModeloChecklist(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'tipo', 'frequencia', 'itens', 'totalItens', 'pesoTotal', 'versao', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'tipo', 'frequencia', 'itens', 'totalItens', 'pesoTotal', 'versao', 'publico', 'unidades', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 17
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.tipo in ['abertura', 'fechamento', 'limpeza', 'inauguracao', 'vistoria', 'outro']
@@ -2401,7 +2401,7 @@ service cloud.firestore {
 
     function execucaoNovaOk(data, dados) {
       return data.keys().hasOnly(['modeloId', 'modeloTitulo', 'modeloVersao', 'tipo', 'frequencia', 'unidadeId', 'unidadeNome', 'uid', 'nome', 'respostas', 'totalItens', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'obsGeral', 'obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm', 'criadoEm'])
-        && data.keys().hasAll(['modeloId', 'modeloTitulo', 'modeloVersao', 'tipo', 'frequencia', 'unidadeId', 'unidadeNome', 'uid', 'nome', 'respostas', 'totalItens', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'obsGeral', 'obsProprietario', 'obsProprietarioPor', 'obsProprietarioNome', 'obsProprietarioEm', 'criadoEm'])
+        && data.keys().size() == 23
         && data.nome == dados.nome
         && data.unidadeId == dados.unidadeId
         && data.unidadeNome == dados.get('unidade', '')
@@ -2523,7 +2523,7 @@ service cloud.firestore {
 
     function isValidModeloAuditoria(data) {
       return data.keys().hasOnly(['titulo', 'descricao', 'itens', 'totalItens', 'pesoTotal', 'notaMinima', 'versao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['titulo', 'descricao', 'itens', 'totalItens', 'pesoTotal', 'notaMinima', 'versao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 14
         && validName(data.titulo)
         && validShort(data.descricao, 1000)
         && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 80
@@ -2540,7 +2540,7 @@ service cloud.firestore {
 
     function isValidAuditoria(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'modeloId', 'modeloTitulo', 'modeloVersao', 'modalidade', 'dataVisita', 'auditorUid', 'auditorNome', 'respostas', 'totalItens', 'pesoTotal', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'criadoEm', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'modeloId', 'modeloTitulo', 'modeloVersao', 'modalidade', 'dataVisita', 'auditorUid', 'auditorNome', 'respostas', 'totalItens', 'pesoTotal', 'qtdOk', 'qtdNaoOk', 'qtdNa', 'pontosObtidos', 'pontosPossiveis', 'score', 'notaMinima', 'checklistExecucaoId', 'checklistScore', 'resultado', 'obsGeral', 'geradoPorIA', 'iaModelo', 'status', 'assinaturaAuditorUid', 'assinaturaAuditorNome', 'assinaturaAuditorEm', 'cienciaUid', 'cienciaNome', 'cienciaEm', 'contestacao', 'criadoEm', 'atualizadoEm'])
+        && data.keys().size() == 35
         && data.unidadeId is string && data.unidadeId.size() > 0 && data.unidadeId.size() <= 64
         && validName(data.unidadeNome)
         && data.modeloId is string && data.modeloId.size() > 0 && data.modeloId.size() <= 64
@@ -2593,7 +2593,7 @@ service cloud.firestore {
 
     function isValidAcao(data) {
       return data.keys().hasOnly(['auditoriaId', 'unidadeId', 'itemId', 'itemTexto', 'descricao', 'responsavel', 'prazo', 'status', 'evidenciaUrl', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['auditoriaId', 'unidadeId', 'itemId', 'itemTexto', 'descricao', 'responsavel', 'prazo', 'status', 'evidenciaUrl', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 15
         && validShort(data.itemId, 64)
         && validShort(data.itemTexto, 300)
         && data.descricao is string && data.descricao.size() >= 2 && data.descricao.size() <= 1000
@@ -2757,7 +2757,7 @@ service cloud.firestore {
 
     function isValidRegistroAc(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'data', 'tipo', 'notas', 'compartilhado', 'geradoPorIA', 'iaModelo', 'autorUid', 'autorNome', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'data', 'tipo', 'notas', 'compartilhado', 'geradoPorIA', 'iaModelo', 'autorUid', 'autorNome', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 14
         && data.unidadeId is string && data.unidadeId.size() > 0 && data.unidadeId.size() <= 64
         && validName(data.unidadeNome)
         && data.data is timestamp
@@ -2778,7 +2778,7 @@ service cloud.firestore {
 
     function isValidPassoAc(data) {
       return data.keys().hasOnly(['registroId', 'unidadeId', 'descricao', 'responsavel', 'prazo', 'status', 'compartilhado', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['registroId', 'unidadeId', 'descricao', 'responsavel', 'prazo', 'status', 'compartilhado', 'comentarioUnidade', 'comentarioFranqueadora', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 13
         && data.registroId is string && data.registroId.size() > 0 && data.registroId.size() <= 64
         && data.descricao is string && data.descricao.size() >= 2 && data.descricao.size() <= 1000
         && validName(data.responsavel)
@@ -2903,7 +2903,7 @@ service cloud.firestore {
 
     function isValidItemEstoque(data) {
       return data.keys().hasOnly(['nome', 'codigo', 'categoria', 'unidadeMedida', 'estoqueMinimo', 'precoSugeridoCentavos', 'descricao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['nome', 'codigo', 'categoria', 'unidadeMedida', 'estoqueMinimo', 'precoSugeridoCentavos', 'descricao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 14
         && validName(data.nome)
         && validShort(data.codigo, 40)
         && data.categoria in ['insumos', 'cadeados', 'caixas', 'embalagens', 'limpeza', 'uniformes', 'outro']
@@ -2921,7 +2921,7 @@ service cloud.firestore {
     // Movimento novo: autoria, unidade e sinal do saldo (entrada soma, saída/venda subtraem, ajuste tem sinal).
     function movimentoOk(data, dados) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itemId', 'itemNome', 'unidadeMedida', 'tipo', 'quantidade', 'delta', 'motivo', 'origem', 'origemId', 'indice', 'uid', 'nome', 'criadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itemId', 'itemNome', 'unidadeMedida', 'tipo', 'quantidade', 'delta', 'motivo', 'origem', 'origemId', 'indice', 'uid', 'nome', 'criadoEm'])
+        && data.keys().size() == 15
         && data.unidadeId == dados.unidadeId
         && data.unidadeNome == dados.get('unidade', '')
         && data.itemId is string && data.itemId.size() > 0 && data.itemId.size() <= 64
@@ -2950,7 +2950,7 @@ service cloud.firestore {
 
     function isValidContagem(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 16
         && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 60
         && data.totalItens == data.itens.size()
         && data.totalDivergencias is int && data.totalDivergencias >= 0 && data.totalDivergencias <= data.totalItens
@@ -2963,7 +2963,7 @@ service cloud.firestore {
 
     function isValidPedidoEstoque(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'status', 'obsUnidade', 'obsFranqueadora', 'solicitanteUid', 'solicitanteNome', 'criadoEm', 'aprovadoEm', 'enviadoEm', 'recebidoEm', 'canceladoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'status', 'obsUnidade', 'obsFranqueadora', 'solicitanteUid', 'solicitanteNome', 'criadoEm', 'aprovadoEm', 'enviadoEm', 'recebidoEm', 'canceladoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 17
         && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 40
         && data.totalItens == data.itens.size()
         && data.status in ['aberto', 'aprovado', 'enviado', 'recebido', 'cancelado']
@@ -3209,15 +3209,28 @@ service cloud.firestore {
 
     // Responsável: pessoa ativa da mesma unidade com o módulo, com o nome exatamente igual ao do perfil.
     function responsavelCrmOk(uid, nome, unidadeId) {
-      return exists(/databases/$(database)/documents/usuarios/$(uid))
-        && get(/databases/$(database)/documents/usuarios/$(uid)).data.unidadeId == unidadeId
-        && get(/databases/$(database)/documents/usuarios/$(uid)).data.nome == nome
-        && unidadeCrm(get(/databases/$(database)/documents/usuarios/$(uid)).data);
+      let caminho = /databases/$(database)/documents/usuarios/$(uid);
+      return exists(caminho) && perfilCrmOk(get(caminho).data, nome, unidadeId);
+    }
+
+    function perfilCrmOk(u, nome, unidadeId) {
+      return u.unidadeId == unidadeId && u.nome == nome && unidadeCrm(u);
+    }
+
+    function contatoCrmOk(d) {
+      return validName(d.nome)
+        && d.telefone is string && d.telefone.matches('^[0-9 ()+.-]{0,30}$')
+        && d.email is string && d.email.size() <= 120
+        && (d.email == '' || d.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+        && validShort(d.interesseTamanho, 60)
+        && validShort(d.interessePeriodo, 60)
+        && validShort(d.interesseUso, 200)
+        && d.atualizadoEm == request.time;
     }
 
     function isValidLeadCrm(data) {
       return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().size() == 17
         && data.origem is string && data.origem.size() >= 1 && data.origem.size() <= 40
         && (data.valorEstimadoCentavos == null || (data.valorEstimadoCentavos is int && data.valorEstimadoCentavos >= 0 && data.valorEstimadoCentavos <= 100000000))
         && data.etapa in ['novo', 'contato', 'visita', 'proposta', 'ganho', 'perdido']
@@ -3242,7 +3255,7 @@ service cloud.firestore {
           signedIn() && exists(userPath())
           && gereCrm(userData())
           && request.resource.data.keys().hasOnly(['origens', 'motivosPerda', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['origens', 'motivosPerda', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 5
           && listaTextosCrm(request.resource.data.origens)
           && listaTextosCrm(request.resource.data.motivosPerda)
           && request.resource.data.atualizadoPorNome == userData().nome
@@ -3311,16 +3324,9 @@ service cloud.firestore {
           signedIn() && exists(userPath())
           && unidadeCrm(userData())
           && request.resource.data.keys().hasOnly(['unidadeId', 'nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['unidadeId', 'nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 9
           && request.resource.data.unidadeId == userData().unidadeId
-          && validName(request.resource.data.nome)
-          && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
-          && request.resource.data.email is string && request.resource.data.email.size() <= 120
-          && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
-          && validShort(request.resource.data.interesseTamanho, 60)
-          && validShort(request.resource.data.interessePeriodo, 60)
-          && validShort(request.resource.data.interesseUso, 200)
-          && request.resource.data.atualizadoEm == request.time
+          && contatoCrmOk(request.resource.data)
           && getAfter(crmLeadPath(leadId)).data.unidadeId == request.resource.data.unidadeId
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
@@ -3328,14 +3334,7 @@ service cloud.firestore {
           && unidadeCrm(userData())
           && resource.data.unidadeId == userData().unidadeId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'email', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'atualizadoPor', 'atualizadoEm'])
-          && validName(request.resource.data.nome)
-          && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
-          && request.resource.data.email is string && request.resource.data.email.size() <= 120
-          && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
-          && validShort(request.resource.data.interesseTamanho, 60)
-          && validShort(request.resource.data.interessePeriodo, 60)
-          && validShort(request.resource.data.interesseUso, 200)
-          && request.resource.data.atualizadoEm == request.time
+          && contatoCrmOk(request.resource.data)
         ) : false;
       allow delete: if false;
     }
@@ -3349,7 +3348,7 @@ service cloud.firestore {
           signedIn() && exists(userPath())
           && unidadeCrm(userData())
           && request.resource.data.keys().hasOnly(['leadId', 'unidadeId', 'tipo', 'texto', 'uid', 'nome', 'geradoPorIA', 'iaModelo', 'criadoEm'])
-          && request.resource.data.keys().hasAll(['leadId', 'unidadeId', 'tipo', 'texto', 'uid', 'nome', 'geradoPorIA', 'iaModelo', 'criadoEm'])
+          && request.resource.data.keys().size() == 9
           && request.resource.data.unidadeId == userData().unidadeId
           && request.resource.data.nome == userData().nome
           && request.resource.data.tipo in ['ligacao', 'whatsapp', 'visita', 'email', 'nota']
@@ -3371,7 +3370,7 @@ service cloud.firestore {
           signedIn() && exists(userPath())
           && unidadeCrm(userData())
           && request.resource.data.keys().hasOnly(['leadId', 'unidadeId', 'box', 'precoMensalCentavos', 'periodoMeses', 'validade', 'status', 'obs', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
-          && request.resource.data.keys().hasAll(['leadId', 'unidadeId', 'box', 'precoMensalCentavos', 'periodoMeses', 'validade', 'status', 'obs', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.keys().size() == 14
           && request.resource.data.unidadeId == userData().unidadeId
           && request.resource.data.box is string && request.resource.data.box.size() >= 1 && request.resource.data.box.size() <= 60
           && request.resource.data.precoMensalCentavos is int && request.resource.data.precoMensalCentavos > 0 && request.resource.data.precoMensalCentavos <= 100000000
