@@ -25,6 +25,16 @@ import {
 import type { Usuario } from '../types'
 import { paraMillis } from './format'
 import { requireDb } from './firebase'
+import { BACKEND } from './backend'
+import {
+  observarChamadosSb,
+  observarPendentesSb,
+  observarEventosSb,
+  abrirChamadoSb,
+  comentarChamadoSb,
+  mudarStatusSb,
+  assumirChamadoSb,
+} from './chamadosSupabase'
 
 export interface AnexoChamado {
   nome: string
@@ -112,6 +122,7 @@ export function observarChamados(
   aoMudar: (chamados: Chamado[]) => void,
   aoErro: (erro: unknown) => void,
 ): () => void {
+  if (BACKEND === 'supabase') return observarChamadosSb(filtro, aoMudar, aoErro)
   if (!filtro.rede && !filtro.unidadeId) {
     aoMudar([])
     return () => undefined
@@ -133,6 +144,7 @@ export function observarPendentes(
   filtro: { rede: boolean; unidadeId?: string | null },
   aoMudar: (total: number) => void,
 ): () => void {
+  if (BACKEND === 'supabase') return observarPendentesSb(filtro, aoMudar)
   return observarChamados(
     filtro,
     (chamados) => aoMudar(chamados.filter((chamado) => (STATUS_PENDENTES as string[]).includes(chamado.status)).length),
@@ -141,6 +153,7 @@ export function observarPendentes(
 }
 
 export function observarEventos(chamadoId: string, aoMudar: (eventos: EventoChamado[]) => void, aoErro: (erro: unknown) => void): () => void {
+  if (BACKEND === 'supabase') return observarEventosSb(chamadoId, aoMudar, aoErro)
   const consulta = query(collection(requireDb(), 'chamados', chamadoId, 'eventos'), orderBy('criadoEm', 'asc'))
   return onSnapshot(
     consulta,
@@ -181,6 +194,7 @@ export async function abrirChamado(
   autor: Usuario,
   dados: { titulo: string; categoria: CategoriaChamado; prioridade: PrioridadeChamado; descricao: string; anexos: AnexoChamado[] },
 ): Promise<string> {
+  if (BACKEND === 'supabase') return abrirChamadoSb(autor, dados)
   if (!autor.unidadeId) throw new Error('Sua conta ainda não está ligada a uma unidade.')
   const banco = requireDb()
   const unidade = await getDoc(doc(banco, 'unidades', autor.unidadeId))
@@ -213,10 +227,12 @@ export async function abrirChamado(
 }
 
 export async function comentarChamado(autor: Usuario, chamadoId: string, textoComentario: string): Promise<void> {
+  if (BACKEND === 'supabase') return comentarChamadoSb(autor, chamadoId, textoComentario)
   await setDoc(doc(collection(requireDb(), 'chamados', chamadoId, 'eventos')), evento(autor, 'comentario', textoComentario.trim()))
 }
 
 export async function mudarStatus(autor: Usuario, chamado: Chamado, status: StatusChamado, extra: { avaliacao?: number } = {}): Promise<void> {
+  if (BACKEND === 'supabase') return mudarStatusSb(autor, chamado, status, extra)
   const banco = requireDb()
   const batch = writeBatch(banco)
   const patch: Record<string, unknown> = { status, atualizadoEm: serverTimestamp() }
@@ -243,6 +259,7 @@ export async function mudarStatus(autor: Usuario, chamado: Chamado, status: Stat
 }
 
 export async function assumirChamado(autor: Usuario, chamado: Chamado, responsavel: { uid: string; nome: string }): Promise<void> {
+  if (BACKEND === 'supabase') return assumirChamadoSb(autor, chamado, responsavel)
   const banco = requireDb()
   const batch = writeBatch(banco)
   const status = chamado.status === 'aberto' ? 'em_andamento' : chamado.status
