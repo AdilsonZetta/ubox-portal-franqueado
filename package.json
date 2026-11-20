@@ -15,7 +15,8 @@
     "migrar-modulos": "node --experimental-strip-types scripts/migrar-modulos.mjs",
     "seed": "node scripts/seed.mjs",
     "test:supabase": "node scripts/supabase-test.mjs",
-    "test:supabase:remoto": "node scripts/supabase-test-remoto.mjs"
+    "test:supabase:remoto": "node scripts/supabase-test-remoto.mjs",
+    "migracao:ensaio": "node scripts/migrar-usuarios.mjs ensaio"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

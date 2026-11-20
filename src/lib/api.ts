@@ -45,6 +45,8 @@ import { requireDb } from './firebase'
 import { idAvisoLeitura, idCertificado, idLeitura } from './ids'
 import { aplicarGabarito, extrairItensTrilha, extrairPerguntas, publicadoNoDado } from './quizSchema'
 import { htmlParaTexto, limitar, textoParaIndice } from './text'
+import { BACKEND } from './backend'
+import { atualizarUsuarioSb, listarUsuariosSb } from './gestaoSupabase'
 
 function texto(valor: unknown, fallback = ''): string {
   return typeof valor === 'string' ? valor : fallback
@@ -286,6 +288,7 @@ export async function carregarPortal(usuario: Usuario): Promise<{
 }
 
 export async function listarUsuarios(): Promise<Usuario[]> {
+  if (BACKEND === 'supabase') return listarUsuariosSb()
   const lista = await lerColecao('usuarios', (id, data) => mapUsuario(id, data))
   return lista.filter((item): item is Usuario => item !== null)
 }
@@ -556,6 +559,8 @@ export async function listarQuizzes(): Promise<Quiz[]> {
 }
 
 export async function reidratarAcessos(): Promise<void> {
+  // Público dos conteúdos (uids) só migra na fase 3; no Supabase não há nada a recalcular ainda.
+  if (BACKEND === 'supabase') return
   const banco = requireDb()
   const usuarios = await listarUsuarios()
   for (const nome of ['categorias', 'documentos', 'trilhas', 'quizzes'] as const) {
@@ -583,10 +588,12 @@ export async function atualizarUsuario(
   uid: string,
   patch: Partial<Pick<Usuario, 'nome' | 'papel' | 'ativo' | 'recusado' | 'unidade' | 'cidade' | 'modulosLiberados'>>,
 ): Promise<void> {
+  if (BACKEND === 'supabase') return atualizarUsuarioSb(uid, patch)
   await updateDoc(doc(requireDb(), 'usuarios', uid), { ...patch, atualizadoEm: serverTimestamp() })
 }
 
 export async function atualizarMeuNome(uid: string, nome: string): Promise<void> {
+  if (BACKEND === 'supabase') return atualizarUsuarioSb(uid, { nome })
   await updateDoc(doc(requireDb(), 'usuarios', uid), { nome: nome.trim(), atualizadoEm: serverTimestamp() })
 }
 
