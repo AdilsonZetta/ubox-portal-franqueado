@@ -62,6 +62,7 @@ const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ de
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
 const ConformidadePage = lazy(() => import('./pages/admin/Conformidade').then((mod) => ({ default: mod.ConformidadePage })))
 const CategoriasPage = lazy(() => import('./pages/admin/Categorias').then((mod) => ({ default: mod.CategoriasPage })))
+const ImportarConteudo = lazy(() => import('./pages/admin/ImportarConteudo'))
 const DocumentoEditor = lazy(() => import('./pages/admin/DocumentoEditor'))
 const TrilhasAdminPage = lazy(() => import('./pages/admin/TrilhasAdmin').then((mod) => ({ default: mod.TrilhasAdminPage })))
 const TrilhaEditor = lazy(() => import('./pages/admin/TrilhasAdmin'))
@@ -174,6 +175,7 @@ function Area() {
           <Route path="/admin" element={<Admin><PainelPage /></Admin>} />
           <Route path="/admin/usuarios" element={<Admin><UsuariosPage /></Admin>} />
           <Route path="/admin/conformidade" element={<Admin><ConformidadePage /></Admin>} />
+          <Route path="/admin/importar" element={<Admin><ImportarConteudo /></Admin>} />
           <Route path="/admin/categorias" element={<GestorManuais><CategoriasPage /></GestorManuais>} />
           <Route path="/admin/documento/novo" element={<GestorManuais><DocumentoEditor key="novo" /></GestorManuais>} />
           <Route path="/admin/documento/:id" element={<GestorManuais><DocumentoEditor key="edicao" /></GestorManuais>} />

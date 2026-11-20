@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  getDocsFromServer,
   query,
   serverTimestamp,
   setDoc,
@@ -221,8 +222,9 @@ function mesclar<T extends { id: string }>(grupos: T[][]): T[] {
   return [...mapa.values()]
 }
 
-async function lerColecao<T>(caminho: string, mapear: (id: string, data: DocumentData) => T): Promise<T[]> {
-  const snap = await getDocs(collection(requireDb(), caminho))
+async function lerColecao<T>(caminho: string, mapear: (id: string, data: DocumentData) => T, doServidor = false): Promise<T[]> {
+  const ler = doServidor ? getDocsFromServer : getDocs
+  const snap = await ler(collection(requireDb(), caminho))
   return snap.docs.map((item) => mapear(item.id, item.data()))
 }
 
@@ -242,7 +244,7 @@ async function seguro<T>(promessa: Promise<T>, vazio: T): Promise<T> {
   }
 }
 
-export async function carregarPortal(usuario: Usuario): Promise<{
+export async function carregarPortal(usuario: Usuario, { exigirBibliotecaCompleta = false } = {}): Promise<{
   categorias: Categoria[]
   documentos: Documento[]
   trilhas: Trilha[]
@@ -252,9 +254,10 @@ export async function carregarPortal(usuario: Usuario): Promise<{
   const manuais = deveCarregar(usuario, 'manuais')
   const universidade = deveCarregar(usuario, 'universidade')
   if (usuario.papel === 'admin') {
+    const lerBiblioteca = <T>(consulta: Promise<T[]>): Promise<T[]> => exigirBibliotecaCompleta ? consulta : seguro(consulta, [])
     const [categorias, documentos, trilhas] = await Promise.all([
-      seguro(lerColecao('categorias', mapCategoria), [] as Categoria[]),
-      seguro(lerColecao('documentos', mapDocumento), [] as Documento[]),
+      lerBiblioteca(lerColecao('categorias', mapCategoria, exigirBibliotecaCompleta)),
+      lerBiblioteca(lerColecao('documentos', mapDocumento, exigirBibliotecaCompleta)),
       seguro(lerColecao('trilhas', mapTrilha), [] as Trilha[]),
     ])
     return { categorias, documentos, trilhas }
