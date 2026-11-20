@@ -1,3 +1,4 @@
+import { Textura } from '../../components/Textura'
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
 import { listarUsuarios } from '../../lib/api'
@@ -19,24 +20,27 @@ export function PainelPage() {
   ]
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-wide text-brand">Franqueadora</p>
-          <h1 className="text-3xl font-extrabold">Painel</h1>
+      <header className="apresentacao">
+        <div className="flex flex-wrap items-end justify-between gap-4 px-5 py-7 sm:px-8">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-lime-soft">Franqueadora</p>
+            <h1 className="mt-2 text-3xl font-bold">Painel</h1>
+          </div>
+          <Link to="/admin/conformidade" className="inline-flex min-h-11 items-center rounded-[10px] bg-lime px-4 py-2 text-sm font-semibold text-ink hover:bg-lime-soft">
+            Quem leu e aceitou
+          </Link>
         </div>
-        <Link to="/admin/conformidade" className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white">
-          Quem leu e aceitou
-        </Link>
+        <Textura className="h-8 w-full sm:h-12" />
       </header>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
-          <Link key={card.rotulo} to={card.para} className="rounded-2xl border border-line bg-white p-4 hover:border-brand">
-            <p className="text-3xl font-extrabold">{card.valor}</p>
-            <p className="text-sm text-ink/60">{card.rotulo}</p>
+          <Link key={card.rotulo} to={card.para} className="rounded-2xl border border-line bg-surface p-4 hover:border-brand">
+            <p className="text-3xl font-bold tabular-nums text-brand">{card.valor}</p>
+            <p className="text-sm text-muted">{card.rotulo}</p>
           </Link>
         ))}
       </div>
-      <section className="rounded-2xl border border-line bg-white p-4">
+      <section className="rounded-2xl border border-line bg-surface p-4">
         <h2 className="font-bold">Atalhos</h2>
         <div className="mt-3 flex flex-wrap gap-2 text-sm">
           <Link className="rounded-full bg-brand px-3 py-1 font-semibold text-white" to="/admin/documento/novo">Novo documento</Link>

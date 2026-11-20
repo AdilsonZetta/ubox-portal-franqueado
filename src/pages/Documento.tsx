@@ -60,11 +60,11 @@ export function DocumentoPage() {
   if (bloqueado) {
     return (
       <div className="mx-auto max-w-3xl space-y-3">
-        <div className="flex items-start gap-3 rounded-2xl border border-line bg-white p-5">
-          <Lock className="mt-0.5 h-5 w-5 shrink-0 text-ink/45" aria-hidden="true" />
+        <div className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-5">
+          <Lock className="mt-0.5 h-5 w-5 shrink-0 text-muted" aria-hidden="true" />
           <div>
             <h1 className="font-bold">{documento.titulo}</h1>
-            <p className="mt-1 text-sm text-ink/65">Este manual faz parte da trilha e abre quando você concluir o manual anterior.</p>
+            <p className="mt-1 text-sm text-muted">Este manual faz parte da trilha e abre quando você concluir o manual anterior.</p>
             <Link to="/manuais/trilha" className="mt-3 inline-block text-sm font-semibold text-brand-dark hover:underline">Ir para a trilha de manuais</Link>
           </div>
         </div>
@@ -96,7 +96,7 @@ export function DocumentoPage() {
 
   return (
     <article className={imprimir ? 'folha mx-auto w-full max-w-[1200px]' : 'mx-auto w-full max-w-[1200px]'}>
-      <p className="no-print text-sm text-ink/50">
+      <p className="no-print text-sm text-muted">
         <Link to="/biblioteca">Biblioteca</Link>
         {trilha.map((categoria) => (
           <span key={categoria.id}>
@@ -105,7 +105,7 @@ export function DocumentoPage() {
           </span>
         ))}
       </p>
-      <header className="mt-3">
+      <header className="cabecalho-pagina mt-3">
         <div className="flex flex-wrap gap-2">
           <Selo>{rotuloExibicao(tipoExibicao(documento))}</Selo>
           <Selo tom="neutro">Versão {documento.versao}</Selo>
@@ -113,32 +113,32 @@ export function DocumentoPage() {
           {lido ? <Selo tom="lima">Lido</Selo> : null}
           {aceito ? <Selo tom="lima">Aceito</Selo> : null}
         </div>
-        <h1 className="mt-3 text-3xl font-extrabold">{documento.titulo}</h1>
-        <p className="mt-2 text-sm text-ink/55">
+        <h1 className="mt-3 text-3xl font-bold">{documento.titulo}</h1>
+        <p className="mt-2 text-sm text-muted">
           Atualizado em {formatarData(documento.atualizadoEm)}
           {documento.atualizadoPorNome ? ` · ${documento.atualizadoPorNome}` : ''}
         </p>
       </header>
       <div className="no-print mt-4 flex flex-wrap gap-2">
-        <Link to={`/documento/${documento.id}/imprimir`} className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+        <Link to={`/documento/${documento.id}/imprimir`} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
           Imprimir / PDF
         </Link>
         {gestor ? (
-          <Link to={`/admin/documento/${documento.id}`} className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+          <Link to={`/admin/documento/${documento.id}`} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
             Editar
           </Link>
         ) : null}
       </div>
       {erro ? <div className="mt-4"><Aviso tom="erro">{erro}</Aviso></div> : null}
       <div className={interativo ? 'mt-6' : 'mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_220px]'}>
-        <div className={interativo ? '' : 'folha rounded-3xl border border-line bg-white p-5 shadow-sm md:p-8'}>
+        <div className={interativo ? '' : 'folha rounded-3xl border border-line bg-surface p-5 shadow-sm md:p-8'}>
           <DocumentoView documento={documentoLeitura} />
           <Anexos anexos={documento.anexos} />
-          <p className="mt-10 border-t border-line pt-4 text-xs text-ink/45">Documento controlado · Ubox Self Storage · versão {documento.versao}</p>
+          <p className="mt-10 border-t border-line pt-4 text-xs text-muted">Documento controlado · Ubox Self Storage · versão {documento.versao}</p>
         </div>
         {sumario.itens.length ? (
-          <aside className="no-print sticky top-6 hidden rounded-2xl border border-line bg-white p-4 xl:block">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink/40">Sumário</p>
+          <aside className="no-print sticky top-6 hidden rounded-2xl border border-line bg-surface p-4 xl:block">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted">Sumário</p>
             <ol className="mt-3 space-y-2">
               {sumario.itens.map((item) => (
                 <li key={item.id} style={{ paddingLeft: `${(item.nivel - 1) * 10}px` }}>
@@ -152,7 +152,7 @@ export function DocumentoPage() {
         ) : null}
       </div>
       {documento.leituraObrigatoria && documento.status === 'publicado' ? (
-        <div className="no-print sticky bottom-20 mt-4 rounded-2xl border border-line bg-white p-4 shadow-lg lg:bottom-4">
+        <div className="no-print sticky bottom-20 mt-4 rounded-2xl border border-line bg-surface p-4 shadow-lg lg:bottom-4">
           {aceito ? (
             <Aviso tom="ok">Você registrou “Li e concordo” nesta versão.</Aviso>
           ) : (

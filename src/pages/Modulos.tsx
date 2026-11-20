@@ -1,3 +1,4 @@
+import { Textura } from '../components/Textura'
 import { Link, useParams } from 'react-router-dom'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
 import { useAuth } from '../lib/auth'
@@ -13,11 +14,17 @@ export function ModulosPage() {
   return (
     <div>
       <div className="mx-auto max-w-6xl">
-        <p className="text-sm font-medium text-ink/50">UBOX · Portal do Franqueado</p>
-        <h1 className="mt-1 text-3xl font-extrabold tracking-tight">Olá, {primeiroNome(user?.nome ?? '')}. Escolha um módulo.</h1>
-        <p className="mt-2 max-w-2xl text-sm text-ink/60">
-          Cada frente da rede tem o seu lugar. Manuais e a Universidade já estão abertos. Os demais módulos mostram o que vem por aí.
-        </p>
+        <header className="apresentacao">
+          <div className="relative px-5 py-8 sm:px-8 sm:py-10">
+            <Textura variante="linha" className="pointer-events-none absolute inset-y-0 right-0 -z-10 hidden h-full w-1/3 opacity-50 xl:block" />
+            <p className="text-xs font-semibold uppercase tracking-wider text-lime-soft">UBOX · Portal do Franqueado</p>
+            <h1 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Olá, {primeiroNome(user?.nome ?? '')}. Escolha um módulo.</h1>
+            <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-line-strong">
+              Cada frente da rede tem o seu lugar. Manuais e a Universidade já estão abertos. Os demais módulos mostram o que vem por aí.
+            </p>
+          </div>
+          <Textura className="h-8 w-full sm:h-12" />
+        </header>
         {podeModulo(pessoa, 'universidade', comoFranqueado) ? (
           <div className="mt-6 max-w-2xl">
             <CartaoUniversidade />
@@ -29,7 +36,7 @@ export function ModulosPage() {
             if (!itens.length) return null
             return (
             <section key={grupo}>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/40">{grupo}</h2>
+              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">{grupo}</h2>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {itens.map((modulo) => {
                   const Icone = modulo.icon
@@ -38,18 +45,18 @@ export function ModulosPage() {
                     <Link
                       key={modulo.slug}
                       to={destino}
-                      className="group flex flex-col rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:-translate-y-0.5 hover:border-brand hover:shadow-md"
+                      className="cartao-modulo group flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-5 transition hover:border-brand hover:shadow-sm"
                     >
                       <span className="flex items-start justify-between gap-3">
-                        <span className="grid h-11 w-11 place-items-center rounded-xl bg-brand/10 text-brand transition group-hover:bg-brand group-hover:text-white">
+                        <span className="grid h-11 w-11 place-items-center icone-modulo rounded-[10px] bg-brand-tint text-brand">
                           <Icone className="h-5 w-5" />
                         </span>
-                        <span className={modulo.ativo ? 'rounded-full bg-lime/25 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-lime-dark' : 'rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-ink/45'}>
+                        <span className={modulo.ativo ? 'rounded-full bg-lime/25 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-lime-dark' : 'rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted'}>
                           {modulo.ativo ? 'Aberto' : 'Em breve'}
                         </span>
                       </span>
                       <h3 className="mt-4 font-bold leading-snug">{modulo.nome}</h3>
-                      <p className="mt-1 flex-1 text-sm leading-relaxed text-ink/60">{modulo.descricao}</p>
+                      <p className="mt-1 flex-1 text-sm leading-relaxed text-muted">{modulo.descricao}</p>
                     </Link>
                   )
                 })}
@@ -79,13 +86,13 @@ export function ModuloEmBrevePage() {
         <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/10 text-brand">
           <Icone className="h-7 w-7" />
         </span>
-        <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-ink/40">{modulo.grupo}</p>
-        <h1 className="mt-1 text-3xl font-extrabold">{modulo.nome}</h1>
-        <span className="mt-3 inline-flex rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-ink/50">Em breve</span>
+        <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-muted">{modulo.grupo}</p>
+        <h1 className="mt-1 text-3xl font-bold">{modulo.nome}</h1>
+        <span className="mt-3 inline-flex rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-muted">Em breve</span>
         <p className="mt-4 text-ink/70">{modulo.descricao} Este módulo ainda não está ligado. Quando abrir, a unidade vai encontrar aqui:</p>
         <ul className="mt-6 space-y-3">
           {modulo.recursos.map((recurso) => (
-            <li key={recurso} className="rounded-2xl border border-line bg-white px-4 py-3 text-sm">
+            <li key={recurso} className="rounded-2xl border border-line bg-surface px-4 py-3 text-sm">
               {recurso}
             </li>
           ))}

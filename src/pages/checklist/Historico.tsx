@@ -20,7 +20,7 @@ function useFiltros(diasPadrao: number) {
 
 function Filtros({ f, modelos, extra }: { f: ReturnType<typeof useFiltros>; modelos: { id: string; titulo: string }[]; extra?: ReactNode }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-line bg-white p-4 sm:grid-cols-4">
+    <div className="grid gap-3 rounded-2xl border border-line bg-surface p-4 sm:grid-cols-4">
       <label className="block space-y-1 text-sm">
         <span className="font-medium">Checklist</span>
         <select className={inputClass} value={f.modeloId} onChange={(e) => f.setModeloId(e.target.value)}>
@@ -51,13 +51,13 @@ export function HistoricoChecklistPage() {
   const media = mediaScore(lista)
   return (
     <div className="mx-auto max-w-6xl space-y-5">
-      <p className="text-sm text-ink/50"><Link to="/checklist">Checklist Operacional</Link> / Histórico</p>
-      <header className="flex flex-wrap items-end justify-between gap-3">
+      <p className="text-sm text-muted"><Link to="/checklist">Checklist Operacional</Link> / Histórico</p>
+      <header className="cabecalho-pagina flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-extrabold">Histórico da unidade</h1>
-          <p className="mt-1 text-sm text-ink/65">Todos os checklists enviados pela unidade, com score e não conformidades.</p>
+          <h1 className="text-3xl font-bold">Histórico da unidade</h1>
+          <p className="mt-1 text-sm text-muted">Todos os checklists enviados pela unidade, com score e não conformidades.</p>
         </div>
-        <div className="text-right text-sm text-ink/60">
+        <div className="text-right text-sm text-muted">
           {lista.length} checklist(s){media !== null ? <> · média <ScoreSelo score={media} /></> : null}
         </div>
       </header>
@@ -85,10 +85,10 @@ export function NaoConformidadesPage() {
   if (dados.gestor) return <Navigate to="/checklist/gestao?aba=nc" replace />
   return (
     <div className="mx-auto max-w-5xl space-y-5">
-      <p className="text-sm text-ink/50"><Link to="/checklist">Checklist Operacional</Link> / Não conformidades</p>
-      <header>
-        <h1 className="text-3xl font-extrabold">Não conformidades</h1>
-        <p className="mt-1 text-sm text-ink/65">Itens marcados como Não OK, com a explicação e a evidência registradas. {itens.length} no período.</p>
+      <p className="text-sm text-muted"><Link to="/checklist">Checklist Operacional</Link> / Não conformidades</p>
+      <header className="cabecalho-pagina">
+        <h1 className="text-3xl font-bold">Não conformidades</h1>
+        <p className="mt-1 text-sm text-muted">Itens marcados como Não OK, com a explicação e a evidência registradas. {itens.length} no período.</p>
       </header>
       <Filtros f={f} modelos={modelos} />
       {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}

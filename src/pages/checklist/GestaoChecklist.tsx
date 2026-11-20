@@ -124,13 +124,13 @@ export function GestaoChecklistPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <header className="cabecalho-pagina flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Checklist Operacional · Franqueadora</p>
-          <h1 className="text-2xl font-black text-ink">Gestão do checklist</h1>
-          <p className="mt-0.5 max-w-2xl text-sm text-ink/65">Monte os modelos, acompanhe as execuções e o score das unidades, as não conformidades e quem está atrasado.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Checklist Operacional · Franqueadora</p>
+          <h1 className="text-2xl font-bold text-ink">Gestão do checklist</h1>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted">Monte os modelos, acompanhe as execuções e o score das unidades, as não conformidades e quem está atrasado.</p>
         </div>
-        <div className="flex flex-wrap rounded-xl border border-line bg-white p-1" role="tablist" aria-label="Seções da gestão">
+        <div className="flex flex-wrap rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="Seções da gestão">
           {(Object.keys(ROTULO_ABA) as Aba[]).map((item) => (
             <button
               key={item}
@@ -138,7 +138,7 @@ export function GestaoChecklistPage() {
               role="tab"
               aria-selected={aba === item}
               onClick={() => { setParams({ aba: item }); setErro(''); setOk('') }}
-              className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', aba === item ? 'bg-ink text-white' : 'text-ink/60 hover:text-ink')}
+              className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', aba === item ? 'bg-ink text-white' : 'text-muted hover:text-ink')}
             >
               {ROTULO_ABA[item]}
             </button>
@@ -158,13 +158,13 @@ export function GestaoChecklistPage() {
               <Plus className="h-4 w-4" aria-hidden="true" /> Novo modelo
             </Button>
             {!dados.modelos.length ? <Vazio titulo="Nenhum modelo ainda" texto="Crie o checklist de abertura, fechamento, limpeza ou vistoria." /> : null}
-            <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
+            <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
               {[...dados.modelos].sort((a, b) => Number(b.ativo) - Number(a.ativo) || a.titulo.localeCompare(b.titulo, 'pt-BR')).map((m) => (
                 <li key={m.id}>
                   <button type="button" onClick={() => { setEditando(m); setForm(paraForm(m)); setOk('') }} className={cx('flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-paper', editando?.id === m.id && 'bg-paper')}>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{m.titulo}</span>
-                      <span className="text-xs text-ink/45">
+                      <span className="text-xs text-muted">
                         {ROTULO_TIPO_CK[m.tipo]} · {ROTULO_FREQ[m.frequencia]} · {m.totalItens} itens · v{m.versao} · {m.publico ? 'rede toda' : `${m.unidades.length} unidade(s)`}{m.geradoPorIA ? ` · IA: ${m.iaModelo}` : ''}
                       </span>
                     </span>
@@ -175,7 +175,7 @@ export function GestaoChecklistPage() {
             </ul>
           </section>
           {form ? (
-            <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
+            <section className="space-y-3 rounded-3xl border border-line bg-surface p-5 shadow-sm">
               <h2 className="text-lg font-bold">{editando ? `Editar modelo (v${editando.versao})` : 'Novo modelo'}</h2>
               <Campo label="Título"><input className={inputClass} maxLength={120} value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} /></Campo>
               <Campo label="Descrição / instruções"><textarea className={inputClass} rows={2} maxLength={1000} value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} /></Campo>
@@ -197,11 +197,11 @@ export function GestaoChecklistPage() {
                 {form.itens.map((it, i) => (
                   <div key={it.id} className="space-y-1.5 rounded-xl bg-paper p-2.5">
                     <div className="flex items-center gap-1.5">
-                      <span className="w-6 text-xs font-bold text-ink/45">{i + 1}.</span>
+                      <span className="w-6 text-xs font-bold text-muted">{i + 1}.</span>
                       <input className={cx(inputClass, 'py-1.5')} maxLength={300} placeholder="Ex.: Conferir o fundo de troco do caixa" aria-label={`Texto do item ${i + 1}`} value={it.texto} onChange={(e) => mudarItem(i, { texto: e.target.value })} />
-                      <button type="button" className="rounded-lg p-1.5 text-ink/50 hover:bg-white" aria-label={`Subir item ${i + 1}`} onClick={() => moverItem(i, -1)}><ArrowUp className="h-4 w-4" /></button>
-                      <button type="button" className="rounded-lg p-1.5 text-ink/50 hover:bg-white" aria-label={`Descer item ${i + 1}`} onClick={() => moverItem(i, 1)}><ArrowDown className="h-4 w-4" /></button>
-                      <button type="button" className="rounded-lg p-1.5 text-red-600 hover:bg-white disabled:opacity-30" aria-label={`Remover item ${i + 1}`} disabled={form.itens.length <= 1} onClick={() => setForm({ ...form, itens: form.itens.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></button>
+                      <button type="button" className="rounded-lg p-1.5 text-muted hover:bg-surface" aria-label={`Subir item ${i + 1}`} onClick={() => moverItem(i, -1)}><ArrowUp className="h-4 w-4" /></button>
+                      <button type="button" className="rounded-lg p-1.5 text-muted hover:bg-surface" aria-label={`Descer item ${i + 1}`} onClick={() => moverItem(i, 1)}><ArrowDown className="h-4 w-4" /></button>
+                      <button type="button" className="rounded-lg p-1.5 text-red-600 hover:bg-surface disabled:opacity-30" aria-label={`Remover item ${i + 1}`} disabled={form.itens.length <= 1} onClick={() => setForm({ ...form, itens: form.itens.filter((_, j) => j !== i) })}><Trash2 className="h-4 w-4" /></button>
                     </div>
                     <div className="flex flex-wrap items-center gap-3 pl-7 text-xs">
                       <input className={cx(inputClass, 'w-36 py-1 text-xs')} maxLength={60} placeholder="Seção (opcional)" aria-label={`Seção do item ${i + 1}`} value={it.secao} onChange={(e) => mudarItem(i, { secao: e.target.value })} />
@@ -216,7 +216,7 @@ export function GestaoChecklistPage() {
                 <Button type="button" variant="secondary" disabled={form.itens.length >= MAX_ITENS} onClick={() => setForm({ ...form, itens: [...form.itens, { id: novoItemId(form.itens), texto: '', secao: form.itens[form.itens.length - 1]?.secao ?? '', peso: 1, exigeEvidencia: false, exigeObs: false }] })}>
                   <Plus className="h-4 w-4" aria-hidden="true" /> Adicionar item
                 </Button>
-                {editando ? <p className="text-[11px] text-ink/50">Mudar itens, pesos ou exigências sobe a versão do modelo; as execuções antigas guardam a versão que usaram.</p> : null}
+                {editando ? <p className="text-[11px] text-muted">Mudar itens, pesos ou exigências sobe a versão do modelo; as execuções antigas guardam a versão que usaram.</p> : null}
               </fieldset>
 
               <div className="space-y-2 rounded-2xl border border-line p-3">
@@ -225,12 +225,12 @@ export function GestaoChecklistPage() {
                 </label>
                 {!form.publico ? (
                   <fieldset className="max-h-40 space-y-1 overflow-y-auto">
-                    <legend className="text-xs text-ink/55">Unidades que recebem (até 30)</legend>
-                    {!unidades.length ? <p className="text-xs text-ink/55">Nenhuma unidade disponível para escolher.</p> : null}
+                    <legend className="text-xs text-muted">Unidades que recebem (até 30)</legend>
+                    {!unidades.length ? <p className="text-xs text-muted">Nenhuma unidade disponível para escolher.</p> : null}
                     {unidades.map((u) => (
                       <label key={u.id} className="flex items-center gap-2 text-sm">
                         <input type="checkbox" checked={form.unidades.includes(u.id)} onChange={(e) => setForm({ ...form, unidades: e.target.checked ? [...form.unidades, u.id] : form.unidades.filter((x) => x !== u.id) })} />
-                        {u.nome}{!u.checklist ? <span className="text-[11px] text-ink/45">(sem o módulo)</span> : null}
+                        {u.nome}{!u.checklist ? <span className="text-[11px] text-muted">(sem o módulo)</span> : null}
                       </label>
                     ))}
                   </fieldset>
@@ -275,7 +275,7 @@ export function GestaoChecklistPage() {
           />
           {!dados.carregando ? (
             <>
-              <div className="flex flex-wrap items-center gap-4 text-sm text-ink/65">
+              <div className="flex flex-wrap items-center gap-4 text-sm text-muted">
                 <span>{execucoes.length} checklist(s)</span>
                 {media !== null ? <span className="inline-flex items-center gap-1.5">score médio <ScoreSelo score={media} /></span> : null}
                 <span>{ncs.length} não conformidade(s)</span>
@@ -303,13 +303,13 @@ function PendenciasRede({ ehAdmin }: { ehAdmin: boolean }) {
   if (!unidades.length) return <Vazio titulo="Nenhuma unidade para acompanhar" texto="Libere o módulo Checklist para as unidades." />
   return (
     <section className="space-y-2">
-      <p className="text-sm text-ink/60">
+      <p className="text-sm text-muted">
         Atrasado: o período anterior ficou sem checklist. Pendente: ainda falta no período atual. Baseado nos últimos 2 meses.
         {!ehAdmin ? ' Como equipe da franqueadora, você vê as unidades que já enviaram checklists.' : ''}
       </p>
-      <div className="overflow-x-auto rounded-2xl border border-line bg-white">
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
         <table className="w-full text-left text-sm">
-          <thead className="bg-paper text-xs uppercase tracking-wide text-ink/50">
+          <thead className="bg-paper text-xs uppercase tracking-wide text-muted">
             <tr>
               <th className="px-4 py-2.5 font-semibold">Unidade</th>
               {recorrentes.map((m) => <th key={m.id} className="px-4 py-2.5 font-semibold">{m.titulo} <span className="font-normal normal-case">({ROTULO_FREQ[m.frequencia].toLowerCase()})</span></th>)}
@@ -327,7 +327,7 @@ function PendenciasRede({ ehAdmin }: { ehAdmin: boolean }) {
                     return (
                       <td key={m.id} className="px-4 py-2.5">
                         <SituacaoSelo situacao={s.situacao} />
-                        <span className="block text-[11px] text-ink/45">{s.ultimaMs ? formatarData(s.ultimaMs) : 'nunca'}</span>
+                        <span className="block text-[11px] text-muted">{s.ultimaMs ? formatarData(s.ultimaMs) : 'nunca'}</span>
                       </td>
                     )
                   })}
