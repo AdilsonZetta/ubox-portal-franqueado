@@ -2871,5 +2871,295 @@ service cloud.firestore {
         ) : false;
       allow delete: if false;
     }
+
+    // ===== Módulo 10: Controle de Estoque =====
+    function gereEstoque(dados) {
+      return contaAtiva(dados)
+        && (
+          dados.papel == 'admin'
+          || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'estoque'))
+        );
+    }
+
+    function unidadeEstoque(dados) {
+      return contaAtiva(dados)
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && temLista(dados, 'estoque')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados);
+    }
+
+    function itemEstoquePath(id) {
+      return /databases/$(database)/documents/estoqueItens/$(id);
+    }
+
+    function contagemPath(id) {
+      return /databases/$(database)/documents/estoqueContagens/$(id);
+    }
+
+    function pedidoEstoquePath(id) {
+      return /databases/$(database)/documents/estoquePedidos/$(id);
+    }
+
+    function isValidItemEstoque(data) {
+      return data.keys().hasOnly(['nome', 'codigo', 'categoria', 'unidadeMedida', 'estoqueMinimo', 'precoSugeridoCentavos', 'descricao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['nome', 'codigo', 'categoria', 'unidadeMedida', 'estoqueMinimo', 'precoSugeridoCentavos', 'descricao', 'ativo', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && validName(data.nome)
+        && validShort(data.codigo, 40)
+        && data.categoria in ['insumos', 'cadeados', 'caixas', 'embalagens', 'limpeza', 'uniformes', 'outro']
+        && data.unidadeMedida in ['un', 'cx', 'pct', 'par', 'kg', 'l', 'm', 'rolo']
+        && data.estoqueMinimo is int && data.estoqueMinimo >= 0 && data.estoqueMinimo <= 100000
+        && data.precoSugeridoCentavos is int && data.precoSugeridoCentavos >= 0 && data.precoSugeridoCentavos <= 10000000
+        && validShort(data.descricao, 500)
+        && data.ativo is bool
+        && iaOk(data)
+        && data.criadoEm is timestamp
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    // Movimento novo: autoria, unidade e sinal do saldo (entrada soma, saída/venda subtraem, ajuste tem sinal).
+    function movimentoOk(data, dados) {
+      return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itemId', 'itemNome', 'unidadeMedida', 'tipo', 'quantidade', 'delta', 'motivo', 'origem', 'origemId', 'indice', 'uid', 'nome', 'criadoEm'])
+        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itemId', 'itemNome', 'unidadeMedida', 'tipo', 'quantidade', 'delta', 'motivo', 'origem', 'origemId', 'indice', 'uid', 'nome', 'criadoEm'])
+        && data.unidadeId == dados.unidadeId
+        && data.unidadeNome == dados.get('unidade', '')
+        && data.itemId is string && data.itemId.size() > 0 && data.itemId.size() <= 64
+        && validName(data.itemNome)
+        && validShort(data.unidadeMedida, 10)
+        && data.quantidade is int && data.quantidade > 0 && data.quantidade <= 100000
+        && (data.tipo == 'entrada' ? data.delta == data.quantidade
+          : (data.tipo in ['saida', 'venda'] ? data.delta == -data.quantidade
+          : (data.tipo == 'ajuste' && (data.delta == data.quantidade || data.delta == -data.quantidade))))
+        && validShort(data.motivo, 300)
+        && (data.tipo in ['entrada', 'venda'] || data.motivo.size() >= 2)
+        && data.origemId is string && data.origemId.size() <= 64
+        && data.indice is int && data.indice >= 0 && data.indice < 60
+        && data.nome == dados.nome
+        && data.criadoEm == request.time;
+    }
+
+    // Linha da contagem confirmada: mesmo item, contado e sistema inteiros de 0 a 100.000 e diferença coerente com o ajuste.
+    function linhaContagemOk(l, mov) {
+      return l.itemId == mov.itemId
+        && l.contado is int && l.contado >= 0 && l.contado <= 100000
+        && l.sistema is int && l.sistema >= 0 && l.sistema <= 100000
+        && l.diferenca == l.contado - l.sistema
+        && l.diferenca == mov.delta;
+    }
+
+    function isValidContagem(data) {
+      return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'criadoPor', 'criadoPorNome', 'criadoEm', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 60
+        && data.totalItens == data.itens.size()
+        && data.totalDivergencias is int && data.totalDivergencias >= 0 && data.totalDivergencias <= data.totalItens
+        && validShort(data.obs, 1000)
+        && data.status in ['aberta', 'confirmada', 'cancelada']
+        && data.criadoEm is timestamp
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    function isValidPedidoEstoque(data) {
+      return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'status', 'obsUnidade', 'obsFranqueadora', 'solicitanteUid', 'solicitanteNome', 'criadoEm', 'aprovadoEm', 'enviadoEm', 'recebidoEm', 'canceladoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'itens', 'totalItens', 'status', 'obsUnidade', 'obsFranqueadora', 'solicitanteUid', 'solicitanteNome', 'criadoEm', 'aprovadoEm', 'enviadoEm', 'recebidoEm', 'canceladoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.itens is list && data.itens.size() >= 1 && data.itens.size() <= 40
+        && data.totalItens == data.itens.size()
+        && data.status in ['aberto', 'aprovado', 'enviado', 'recebido', 'cancelado']
+        && validShort(data.obsUnidade, 1000)
+        && validShort(data.obsFranqueadora, 1000)
+        && data.criadoEm is timestamp
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    match /estoqueItens/{itemId} {
+      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
+      // Unidade: o catálogo da rede (inclusive inativos, para o saldo que sobrou continuar visível).
+      allow read: if signedIn() && exists(userPath()) && unidadeEstoque(userData());
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereEstoque(userData())
+          && isValidItemEstoque(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.criadoEm == request.time
+        ) : false;
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereEstoque(userData())
+          && isValidItemEstoque(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.criadoEm == resource.data.criadoEm
+        ) : false;
+      // Sem exclusão: o item é desativado.
+      allow delete: if false;
+    }
+
+    match /estoqueMovimentos/{movimentoId} {
+      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
+      allow read: if signedIn() && exists(userPath())
+        && unidadeEstoque(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+
+      // Manual: entrada, saída ou venda por quem tem o módulo na unidade (ajuste só vem de contagem).
+      allow create: if request.resource.data.origem == 'manual' && request.resource.data.uid == request.auth.uid ? (
+          request.resource.data.tipo in ['entrada', 'saida', 'venda']
+          && request.resource.data.origemId == ''
+          && request.resource.data.indice == 0
+          && signedIn() && exists(userPath())
+          && unidadeEstoque(userData())
+          && movimentoOk(request.resource.data, userData())
+          && get(itemEstoquePath(request.resource.data.itemId)).data.nome == request.resource.data.itemNome
+          && (request.resource.data.tipo != 'entrada' || get(itemEstoquePath(request.resource.data.itemId)).data.ativo == true)
+        ) : false;
+
+      // Contagem: ajuste no mesmo lote em que o franqueado confirma; id = contagem_indice (um por linha).
+      allow create: if request.resource.data.origem == 'contagem' && request.resource.data.uid == request.auth.uid
+          && movimentoId == request.resource.data.origemId + '_' + string(request.resource.data.indice) ? (
+          request.resource.data.tipo == 'ajuste'
+          && signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && unidadeEstoque(userData())
+          && movimentoOk(request.resource.data, userData())
+          && get(contagemPath(request.resource.data.origemId)).data.status == 'aberta'
+          && getAfter(contagemPath(request.resource.data.origemId)).data.status == 'confirmada'
+          && getAfter(contagemPath(request.resource.data.origemId)).data.unidadeId == request.resource.data.unidadeId
+          && getAfter(contagemPath(request.resource.data.origemId)).data.itens.size() > request.resource.data.indice
+          && linhaContagemOk(getAfter(contagemPath(request.resource.data.origemId)).data.itens[request.resource.data.indice], request.resource.data)
+        ) : false;
+
+      // Pedido: entrada no mesmo lote em que o franqueado confirma o recebimento; id = pedido_indice.
+      allow create: if request.resource.data.origem == 'pedido' && request.resource.data.uid == request.auth.uid
+          && movimentoId == request.resource.data.origemId + '_' + string(request.resource.data.indice) ? (
+          request.resource.data.tipo == 'entrada'
+          && signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && unidadeEstoque(userData())
+          && movimentoOk(request.resource.data, userData())
+          && get(pedidoEstoquePath(request.resource.data.origemId)).data.status == 'enviado'
+          && getAfter(pedidoEstoquePath(request.resource.data.origemId)).data.status == 'recebido'
+          && getAfter(pedidoEstoquePath(request.resource.data.origemId)).data.unidadeId == request.resource.data.unidadeId
+          && getAfter(pedidoEstoquePath(request.resource.data.origemId)).data.itens.size() > request.resource.data.indice
+          && getAfter(pedidoEstoquePath(request.resource.data.origemId)).data.itens[request.resource.data.indice].itemId == request.resource.data.itemId
+          && getAfter(pedidoEstoquePath(request.resource.data.origemId)).data.itens[request.resource.data.indice].quantidadeEnviada == request.resource.data.quantidade
+        ) : false;
+      // Movimentos são imutáveis.
+      allow update, delete: if false;
+    }
+
+    match /estoqueContagens/{contagemId} {
+      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
+      allow read: if signedIn() && exists(userPath())
+        && unidadeEstoque(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+
+      allow create: if request.resource.data.criadoPor == request.auth.uid && request.resource.data.status == 'aberta' ? (
+          signedIn() && exists(userPath())
+          && unidadeEstoque(userData())
+          && isValidContagem(request.resource.data)
+          && request.resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.unidadeNome == userData().get('unidade', '')
+          && request.resource.data.criadoPorNome == userData().nome
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.confirmadoPor == ''
+          && request.resource.data.confirmadoNome == ''
+          && request.resource.data.confirmadoEm == null
+        ) : false;
+
+      // Enquanto aberta: a equipe e o franqueado da unidade atualizam a contagem.
+      allow update: if resource.data.status == 'aberta' && request.resource.data.status == 'aberta' && request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && unidadeEstoque(userData())
+          && resource.data.unidadeId == userData().unidadeId
+          && isValidContagem(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itens', 'totalItens', 'totalDivergencias', 'obs', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        ) : false;
+
+      // Só o franqueado confirma (gerando os ajustes no mesmo lote) ou cancela.
+      allow update: if resource.data.status == 'aberta' && request.resource.data.status in ['confirmada', 'cancelada'] && request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && unidadeEstoque(userData())
+          && resource.data.unidadeId == userData().unidadeId
+          && isValidContagem(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && (request.resource.data.status == 'cancelada'
+            ? request.resource.data.confirmadoPor == '' && request.resource.data.confirmadoEm == null
+            : (request.resource.data.confirmadoPor == request.auth.uid
+              && request.resource.data.confirmadoNome == userData().nome
+              && request.resource.data.confirmadoEm == request.time))
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /estoquePedidos/{pedidoId} {
+      allow read: if signedIn() && exists(userPath()) && gereEstoque(userData());
+      allow read: if signedIn() && exists(userPath())
+        && unidadeEstoque(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+
+      // Só o franqueado envia o pedido.
+      allow create: if request.resource.data.solicitanteUid == request.auth.uid && request.resource.data.status == 'aberto' ? (
+          signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && unidadeEstoque(userData())
+          && isValidPedidoEstoque(request.resource.data)
+          && request.resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.unidadeNome == userData().get('unidade', '')
+          && request.resource.data.solicitanteNome == userData().nome
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.obsFranqueadora == ''
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.aprovadoEm == null
+          && request.resource.data.enviadoEm == null
+          && request.resource.data.recebidoEm == null
+          && request.resource.data.canceladoEm == null
+        ) : false;
+
+      // Franqueado: edita enquanto aberto, cancela enquanto aberto, confirma o recebimento (com as entradas no mesmo lote).
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid && resource.data.status in ['aberto', 'enviado'] ? (
+          signedIn() && exists(userPath())
+          && userData().papel == 'franqueado'
+          && unidadeEstoque(userData())
+          && resource.data.unidadeId == userData().unidadeId
+          && isValidPedidoEstoque(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && (
+            (resource.data.status == 'aberto' && request.resource.data.status == 'aberto'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itens', 'totalItens', 'obsUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm']))
+            || (resource.data.status == 'aberto' && request.resource.data.status == 'cancelado'
+              && request.resource.data.canceladoEm == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'canceladoEm', 'obsUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm']))
+            || (resource.data.status == 'enviado' && request.resource.data.status == 'recebido'
+              && request.resource.data.recebidoEm == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'recebidoEm', 'obsUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm']))
+          )
+        ) : false;
+
+      // Franqueadora: aprova, envia (com a quantidade enviada por item) ou cancela com justificativa.
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid && resource.data.status in ['aberto', 'aprovado'] ? (
+          signedIn() && exists(userPath())
+          && gereEstoque(userData())
+          && isValidPedidoEstoque(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && (
+            (resource.data.status == 'aberto' && request.resource.data.status == 'aprovado'
+              && request.resource.data.aprovadoEm == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'aprovadoEm', 'obsFranqueadora', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm']))
+            || (resource.data.status == 'aprovado' && request.resource.data.status == 'enviado'
+              && request.resource.data.enviadoEm == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'enviadoEm', 'itens', 'obsFranqueadora', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm']))
+            || (request.resource.data.status == 'cancelado'
+              && request.resource.data.canceladoEm == request.time
+              && request.resource.data.obsFranqueadora.size() >= 2
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'canceladoEm', 'obsFranqueadora', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm']))
+          )
+        ) : false;
+      allow delete: if false;
+    }
   }
 }
