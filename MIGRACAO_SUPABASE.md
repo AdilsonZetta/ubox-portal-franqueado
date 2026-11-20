@@ -272,3 +272,11 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - Nenhuma função definer devolve colunas do segredo; os predicados em `app` devolvem só booleanos.
 - App: `src/lib/senhasSupabase.ts` atrás de `VITE_BACKEND=supabase` (listas por polling de 15 s).
 - Testes: `supabase/tests/fase6_senhas.test.sql` — 80 casos (35 das regras do Firestore + privacidade de admin/franqueadora, anon e mesmo lote), local e remoto com rollback.
+
+## 16. O que a fase 7 entregou (Central de Marketing)
+
+- Migração `20261120155013_fase7_marketing` (aplicada no projeto): `marketing_materiais`, `marketing_campanhas`, `marketing_solicitacoes`. Materiais só com link https (sem Storage). Sem DELETE; anon sem nada.
+- Leitura igual às regras: gestores de Marketing (admin / equipe da franqueadora com `marketing`) leem tudo; consultor com `acompanhamento` lê as solicitações (só leitura); o autor lê os próprios pedidos; o franqueado lê os da unidade; material direcionado só para as unidades da lista; inativos e sem módulo não leem.
+- Autoria, datas, campos imutáveis e transições de status nos gatilhos (`42501`). Cada ação grava uma linha, então não há RPC de lote.
+- App: `src/lib/marketingSupabase.ts` atrás de `VITE_BACKEND=supabase` (polling de 15 s).
+- Testes: `supabase/tests/fase7_marketing.test.sql` — 90 casos (66 das regras do Firestore + privacidade e anon), local e remoto com rollback.
