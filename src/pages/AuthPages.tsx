@@ -1,3 +1,4 @@
+// Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Logo } from '../components/Logo'
@@ -145,9 +146,11 @@ export function CadastroPage() {
 }
 
 export function RecuperarPage() {
-  const { recuperar } = useAuth()
+  const { recuperar, linkSenhaInvalido } = useAuth()
   const [email, setEmail] = useState('')
-  const [erro, setErro] = useState('')
+  const [erro, setErro] = useState(
+    linkSenhaInvalido ? 'Link inválido ou expirado. Peça outro em Esqueci a senha pelo formulário abaixo.' : '',
+  )
   const [ok, setOk] = useState(false)
   const [ocupado, setOcupado] = useState(false)
 
@@ -169,7 +172,7 @@ export function RecuperarPage() {
     <Moldura>
       <h2 className="text-2xl font-extrabold">Recuperar senha</h2>
       <form onSubmit={enviar} className="mt-6 space-y-4">
-        {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+        {erro ? <div role="alert"><Aviso tom="erro">{erro}</Aviso></div> : null}
         {ok ? <Aviso tom="ok">Enviamos o link de redefinição para o seu e-mail.</Aviso> : null}
         <Campo label="E-mail">
           <input className={inputClass} type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />

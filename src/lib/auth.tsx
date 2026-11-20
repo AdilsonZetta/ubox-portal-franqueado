@@ -1,9 +1,11 @@
+// Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { createUserWithEmailAndPassword, onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut, updateProfile, type User } from 'firebase/auth'
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore'
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { mapUsuario } from './api'
 import { BACKEND } from './backend'
 import { requireAuth, requireDb } from './firebase'
+import { tratarLinkSenha } from './linkSenha'
 import { requireSupabase } from './supabase'
 import { cadastrarSupabase, carregarEstado, definirNovaSenha, entrarSupabase, gravarPerfilProprio, recuperarSupabase, sairSupabase } from './supabaseAuth'
 import type { Usuario } from '../types'
@@ -18,6 +20,7 @@ interface AuthValue {
   nomeSugerido: string
   /** Supabase: a pessoa chegou pelo link de redefinição e precisa escolher a nova senha. */
   recuperandoSenha: boolean
+  linkSenhaInvalido: boolean
   definirSenha: (senha: string) => Promise<void>
   erro: string
   refresh: () => Promise<void>
@@ -30,14 +33,32 @@ interface AuthValue {
 
 const AuthContext = createContext<AuthValue | null>(null)
 
+// Uma verificação por abertura do app, inclusive com StrictMode.
+const linkSenhaInicial = BACKEND === 'supabase' && typeof window !== 'undefined'
+  ? tratarLinkSenha(window, requireSupabase)
+  : undefined
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StatusAuth>('loading')
   const [user, setUser] = useState<Usuario | null>(null)
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null)
   const [nomeSupabase, setNomeSupabase] = useState('')
   const [recuperandoSenha, setRecuperandoSenha] = useState(false)
+  const [resultadoLinkSenha, setResultadoLinkSenha] = useState<Awaited<typeof linkSenhaInicial>>()
+  const verificandoLinkSenha = linkSenhaInicial !== undefined && resultadoLinkSenha === undefined
   const [erro, setErro] = useState('')
   const [versao, setVersao] = useState(0)
+
+  useEffect(() => {
+    if (!linkSenhaInicial) return
+    let vivo = true
+    void linkSenhaInicial.then((resultado) => {
+      if (!vivo) return
+      if (resultado === 'recuperacao') setRecuperandoSenha(true)
+      setResultadoLinkSenha(resultado)
+    })
+    return () => { vivo = false }
+  }, [])
 
   // Backend Supabase (migração, atrás de VITE_BACKEND=supabase).
   useEffect(() => {
@@ -64,7 +85,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setStatus('error')
         })
     }
-    void sb.auth.getSession().then(({ data }) => vivo && aplicar(data.session))
+    const sessaoInicial = linkSenhaInicial
+      ? linkSenhaInicial.then(() => sb.auth.getSession())
+      : sb.auth.getSession()
+    void sessaoInicial.then(({ data }) => vivo && aplicar(data.session))
     const { data: assinatura } = sb.auth.onAuthStateChange((evento, sessao) => {
       if (evento === 'PASSWORD_RECOVERY') setRecuperandoSenha(true)
       if (evento === 'SIGNED_IN' || evento === 'SIGNED_OUT' || evento === 'USER_UPDATED') setTimeout(() => vivo && aplicar(sessao), 0)
@@ -132,11 +156,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const valor = useMemo<AuthValue>(
     () => ({
-      status,
+      status: verificandoLinkSenha ? 'loading' : status,
       user,
       firebaseUser,
       nomeSugerido: BACKEND === 'supabase' ? nomeSupabase : firebaseUser?.displayName ?? '',
       recuperandoSenha,
+      linkSenhaInvalido: resultadoLinkSenha === 'invalido',
       definirSenha: async (senha) => {
         await definirNovaSenha(senha)
         setRecuperandoSenha(false)
@@ -202,7 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await signOut(requireAuth())
       },
     }),
-    [status, user, firebaseUser, nomeSupabase, recuperandoSenha, erro],
+    [status, user, firebaseUser, nomeSupabase, recuperandoSenha, resultadoLinkSenha, verificandoLinkSenha, erro],
   )
 
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>

@@ -1,3 +1,4 @@
+// Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { lazy, Suspense, type ReactNode } from 'react'
 import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
@@ -72,7 +73,7 @@ function Admin({ children }: { children: ReactNode }) {
 }
 
 function Area() {
-  const { status, recuperandoSenha } = useAuth()
+  const { status, recuperandoSenha, linkSenhaInvalido } = useAuth()
   if (recuperandoSenha) return <NovaSenhaPage />
   if (status === 'loading') {
     return (
@@ -81,7 +82,7 @@ function Area() {
       </div>
     )
   }
-  if (status === 'error') return <AguardandoPage />
+  if (status === 'error' && !linkSenhaInvalido) return <AguardandoPage />
   return (
     <HashRouter>
       <Routes>

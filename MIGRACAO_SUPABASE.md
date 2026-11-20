@@ -89,7 +89,7 @@ O Firebase não exporta hashes que o Supabase aceite: o scrypt do Firebase é di
 3. Em seguida grava `usuarios` com `firebase_uid` e mapeia as referências.
 4. No dia do corte, cada pessoa recebe pelo Supabase o e-mail "Defina sua senha do Portal Ubox", que é o link de recuperação.
 5. A tela `#/entrar` ganha o aviso "Primeiro acesso no portal novo? Clique em *Esqueci a senha*".
-6. O link volta ao app (fluxo PKCE), e o evento `PASSWORD_RECOVERY` abre a tela **Criar nova senha** (`NovaSenhaPage`, já pronta nesta fase).
+6. O link do modelo da seção 24.3 abre a tela **Criar nova senha** (`NovaSenhaPage`) após a verificação pelo Supabase. O retorno PKCE com `?code=` continua compatível no navegador que iniciou o pedido.
 
 **Impacto para quem usa:**
 
@@ -348,7 +348,7 @@ Produção segue no Firebase. Esta fase prepara o corte para o Supabase `zmrefls
 
 - [ ] 1. Implementar `scripts/migrar-usuarios.mjs exportar` e `aplicar`. Hoje são stubs e só `ensaio` funciona.
 - [ ] 2. Criar `scripts/exportar-firestore.mjs` e `scripts/carregar-supabase.mjs`, previstos na seção 5. Incluir a inicialização de `estoque_saldos` a partir dos movimentos importados.
-- [ ] 3. Alterar o passo de build de `.github/workflows/pages.yml` para ler `VITE_BACKEND`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` das variáveis do repositório. Hoje o workflow não passa nenhuma das três.
+- [x] 3. Alterar o passo de build de `.github/workflows/pages.yml` para ler `VITE_BACKEND`, `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` das variáveis do repositório (feito na Fase 15b).
 - [ ] 4. Revisar e aprovar o PR **Fase 15b** (scripts e ajuste do workflow) antes do dia do corte. Confirmar nele a sintaxe dos comandos propostos abaixo e ensaiar a carga e o build com os dois backends.
 
 ### 24.2 O que o Adilson roda na própria máquina
@@ -393,9 +393,16 @@ O SMTP padrão do Supabase envia cerca de 2 e-mails por hora no projeto e serve 
 
 - [ ] 1. Em **Authentication > Emails > SMTP Settings**, habilitar o SMTP próprio e preencher servidor, porta, usuário e remetente. Guardar `SMTP_PASSWORD` (senha da caixa, senha de app ou credencial SMTP do provedor) nas configurações SMTP do dashboard do Supabase, fora do repo e do frontend.
 - [ ] 2. Em **Authentication > Rate Limits**, elevar o limite de e-mails após habilitar o SMTP próprio, respeitando a vazão horária e a cota diária do provedor.
-- [ ] 3. Em **Authentication > URL Configuration**, usar `https://adilsonzetta.github.io/ubox-portal-franqueado/` como **Site URL** e permitir a mesma raiz em **Redirect URLs**. No fluxo da seção 4, o app recebe o retorno na raiz e `PASSWORD_RECOVERY` abre **Criar nova senha** (`#/nova-senha` no roteiro do usuário, sem usar o fragmento como URL de retorno).
-- [ ] 4. Em **Email Templates > Reset Password**, definir o assunto **Defina sua senha do Portal Ubox**. Testar entrega, abertura do link, definição de senha e novo login com 2–3 contas internas antes do envio à rede.
-- [ ] 5. Validar o disparo no navegador do destinatário. O PKCE atual exige o verificador do navegador que iniciou o pedido. Se o link disparado pelo operador falhar, validar antes do corte um fluxo compatível ou enviar a instrução de primeiro acesso para cada pessoa iniciar **Esqueci a senha** e abrir o link no mesmo navegador. Enviar em lotes dentro dos limites do Supabase e do provedor. [Fluxo PKCE](https://supabase.com/docs/guides/auth/sessions/pkce-flow)
+- [ ] 3. Em **Authentication > URL Configuration**, usar `https://adilsonzetta.github.io/ubox-portal-franqueado/` como **Site URL** e permitir a mesma raiz em **Redirect URLs** para o retorno PKCE.
+- [ ] 4. Em **Email Templates > Reset Password**, usar o assunto **Defina sua senha do Portal Ubox** e este corpo HTML.
+
+  ```html
+  <p>Olá! Use o link abaixo para definir sua senha do Portal Ubox.</p>
+  <p><a href="{{ .SiteURL }}?token_hash={{ .TokenHash }}&type=recovery">Definir minha senha</a></p>
+  <p>Se você não esperava este e-mail, pode ignorá-lo.</p>
+  ```
+
+- [ ] 5. Testar entrega, abertura do link em outro navegador ou dispositivo, definição de senha e novo login com 2–3 contas internas. O link funciona em qualquer navegador ou dispositivo, tem uso único e expira conforme a configuração **Email OTP Expiration** do Supabase. Enviar em lotes dentro dos limites do Supabase e do provedor. [Modelos de e-mail](https://supabase.com/docs/guides/auth/auth-email-templates) · [Validade dos links](https://supabase.com/docs/guides/auth/auth-email-passwordless)
 
 ### 24.4 Ordem do dia do corte
 

@@ -45,15 +45,21 @@ export function planejarImportacao({ auth, usuarios, unidades, config }, {
   const avisos = []
   const authUsers = []
   let contasDuplicadas = 0
+  let contasSemEmail = 0
 
   for (const conta of auth) {
+    if (typeof conta.email !== 'string' || !conta.email.trim()) {
+      contasSemEmail++
+      avisos.push(`Conta Firebase "${conta.uid}" ignorada por falta de e-mail.`)
+      continue
+    }
     const email = normalizarEmail(conta.email)
     if (emails.has(email)) {
       contasDuplicadas++
       avisos.push(`Conta Firebase "${conta.uid}" ignorada por e-mail duplicado.`)
       continue
     }
-    const id = gerarId()
+    const id = gerarId(conta.uid)
     ids.set(conta.uid, id)
     emails.add(email)
     authUsers.push({ id, email })
@@ -141,6 +147,7 @@ export function planejarImportacao({ auth, usuarios, unidades, config }, {
       contasSemPerfil: authUsers.length - perfis.length,
       perfisIgnorados: usuarios.length - perfis.length,
       contasDuplicadas,
+      contasSemEmail,
     },
   }
 }
