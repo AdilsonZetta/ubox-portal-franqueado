@@ -26,6 +26,25 @@ import {
   type TentativaProva,
 } from './universidade'
 import type { Usuario } from '../types'
+import { BACKEND } from './backend'
+import {
+  listarCursosSb,
+  obterProvaSb,
+  listarProvasSb,
+  listarGabaritosSb,
+  listarMinhasTentativasSb,
+  listarMeusReestudosSb,
+  listarResultadosSb,
+  listarFolhasSb,
+  fecharTentativaPendenteSb,
+  salvarCursoSb,
+  salvarProvaSb,
+  corrigirTentativaSb,
+  enviarTentativaSb,
+  emitirCertificadoCursoSb,
+  iniciarOuReiniciarReestudoSb,
+  concluirReestudoSb,
+} from './universidadeSupabase'
 
 function texto(valor: unknown, padrao = ''): string {
   return typeof valor === 'string' ? valor : padrao
@@ -111,12 +130,14 @@ export function mapReestudo(id: string, data: DocumentData): Reestudo {
 
 /** Aluno lê só os publicados; a franqueadora lê todos (inclusive rascunhos). */
 export async function listarCursos(gestor: boolean): Promise<Curso[]> {
+  if (BACKEND === 'supabase') return listarCursosSb(gestor)
   const base = collection(requireDb(), 'cursos')
   const snap = await getDocs(gestor ? base : query(base, where('publicado', '==', true)))
   return snap.docs.map((d) => mapCurso(d.id, d.data()))
 }
 
 export async function obterProva(cursoId: string): Promise<Prova | null> {
+  if (BACKEND === 'supabase') return obterProvaSb(cursoId)
   try {
     const snap = await getDoc(doc(requireDb(), 'provas', cursoId))
     return snap.exists() ? mapProva(snap.id, snap.data()) : null
@@ -127,22 +148,26 @@ export async function obterProva(cursoId: string): Promise<Prova | null> {
 }
 
 export async function listarProvas(): Promise<Prova[]> {
+  if (BACKEND === 'supabase') return listarProvasSb()
   const snap = await getDocs(collection(requireDb(), 'provas'))
   return snap.docs.map((d) => mapProva(d.id, d.data()))
 }
 
 /** Só a franqueadora consegue (as rules recusam para qualquer outra pessoa). */
 export async function listarGabaritos(): Promise<Map<string, number[]>> {
+  if (BACKEND === 'supabase') return listarGabaritosSb()
   const snap = await getDocs(collection(requireDb(), 'provasGabarito'))
   return new Map(snap.docs.map((d) => [d.id, listaNumero(d.data().corretas)]))
 }
 
 export async function listarMinhasTentativas(uid: string): Promise<TentativaProva[]> {
+  if (BACKEND === 'supabase') return listarMinhasTentativasSb(uid)
   const snap = await getDocs(query(collection(requireDb(), 'tentativasProva'), where('uid', '==', uid)))
   return snap.docs.map((d) => mapTentativa(d.id, d.data()))
 }
 
 export async function listarMeusReestudos(uid: string): Promise<Reestudo[]> {
+  if (BACKEND === 'supabase') return listarMeusReestudosSb(uid)
   const snap = await getDocs(query(collection(requireDb(), 'reestudos'), where('uid', '==', uid)))
   return snap.docs.map((d) => mapReestudo(d.id, d.data()))
 }
@@ -152,6 +177,7 @@ export async function listarMeusReestudos(uid: string): Promise<Reestudo[]> {
  * O doc da tentativa não tem respostas; a folha (subdocumento) só a franqueadora e o dono leem.
  */
 export async function listarResultados(usuario: Usuario, gestor: boolean): Promise<TentativaProva[]> {
+  if (BACKEND === 'supabase') return listarResultadosSb(usuario, gestor)
   const base = collection(requireDb(), 'tentativasProva')
   if (!gestor && (usuario.papel !== 'franqueado' || !usuario.unidadeId)) return []
   const snap = await getDocs(gestor ? base : query(base, where('unidadeId', '==', usuario.unidadeId)))
@@ -160,6 +186,7 @@ export async function listarResultados(usuario: Usuario, gestor: boolean): Promi
 
 /** Só a franqueadora: folhas de respostas das tentativas, para calcular a nota. */
 export async function listarFolhas(tentativas: TentativaProva[]): Promise<Map<string, number[]>> {
+  if (BACKEND === 'supabase') return listarFolhasSb(tentativas)
   const banco = requireDb()
   const pares = await Promise.all(
     tentativas.map(async (t) => {
@@ -172,6 +199,7 @@ export async function listarFolhas(tentativas: TentativaProva[]): Promise<Map<st
 
 /** Só a franqueadora: fecha como reprovada uma tentativa que ficou sem correção. */
 export async function fecharTentativaPendente(id: string): Promise<void> {
+  if (BACKEND === 'supabase') return fecharTentativaPendenteSb(id)
   await updateDoc(doc(requireDb(), 'tentativasProva', id), { aprovado: false, corrigidoEm: serverTimestamp() })
 }
 
@@ -185,6 +213,7 @@ export interface CursoEdicao {
 }
 
 export async function salvarCurso(autor: Usuario, curso: CursoEdicao): Promise<void> {
+  if (BACKEND === 'supabase') return salvarCursoSb(autor, curso)
   await setDoc(doc(requireDb(), 'cursos', curso.id), {
     titulo: curso.titulo.trim().slice(0, 120),
     descricao: curso.descricao.trim().slice(0, 1000),
@@ -209,6 +238,7 @@ export interface ProvaEdicao {
 
 /** Grava a prova pública e o gabarito no mesmo lote, sempre numa versão nova. */
 export async function salvarProva(autor: Usuario, prova: ProvaEdicao, versaoAtual: number): Promise<number> {
+  if (BACKEND === 'supabase') return salvarProvaSb(autor, prova, versaoAtual)
   const banco = requireDb()
   const versao = versaoAtual + 1
   const { publicas, corretas } = separarGabarito(prova.perguntas)
@@ -245,6 +275,7 @@ export async function salvarProva(autor: Usuario, prova: ProvaEdicao, versaoAtua
  * e o fluxo acima resolve isso sozinho, sem deixar a tentativa presa.
  */
 export async function corrigirTentativa(id: string): Promise<boolean> {
+  if (BACKEND === 'supabase') return corrigirTentativaSb(id)
   const ref = doc(requireDb(), 'tentativasProva', id)
   try {
     await updateDoc(ref, { aprovado: true, corrigidoEm: serverTimestamp() })
@@ -272,6 +303,7 @@ export async function enviarTentativa(
   numero: number,
   respostas: number[],
 ): Promise<{ id: string; aprovado: boolean; provaAtualizada: boolean }> {
+  if (BACKEND === 'supabase') return enviarTentativaSb(usuario, prova, ciclo, numero, respostas)
   const banco = requireDb()
   const id = idTentativa(usuario.uid, prova.cursoId, ciclo, numero)
   const lote = writeBatch(banco)
@@ -310,6 +342,7 @@ export async function enviarTentativa(
  * não deixam ler o que não é seu). Se já existir, a criação é recusada e nada muda.
  */
 export async function emitirCertificadoCurso(usuario: Usuario, curso: Curso, tentativaId: string): Promise<string> {
+  if (BACKEND === 'supabase') return emitirCertificadoCursoSb(usuario, curso, tentativaId)
   const id = idCertificado(usuario.uid, curso.id)
   await setDoc(doc(requireDb(), 'certificados', id), {
     uid: usuario.uid,
@@ -325,6 +358,7 @@ export async function emitirCertificadoCurso(usuario: Usuario, curso: Curso, ten
 
 /** Entrar (ou voltar) no reestudo: cria o registro ou reinicia o cronômetro do servidor. */
 export async function iniciarOuReiniciarReestudo(usuario: Usuario, prova: Prova, ciclo: number): Promise<Reestudo | null> {
+  if (BACKEND === 'supabase') return iniciarOuReiniciarReestudoSb(usuario, prova, ciclo)
   const ref = doc(requireDb(), 'reestudos', idReestudo(usuario.uid, prova.cursoId, ciclo))
   const atual = await getDoc(ref)
   if (atual.exists()) {
@@ -349,6 +383,7 @@ export async function iniciarOuReiniciarReestudo(usuario: Usuario, prova: Prova,
 }
 
 export async function concluirReestudo(usuario: Usuario, cursoId: string, ciclo: number): Promise<void> {
+  if (BACKEND === 'supabase') return concluirReestudoSb(usuario, cursoId, ciclo)
   await updateDoc(doc(requireDb(), 'reestudos', idReestudo(usuario.uid, cursoId, ciclo)), {
     status: 'concluido',
     concluidoEm: serverTimestamp(),

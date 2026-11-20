@@ -257,30 +257,35 @@ select ok((select count(*) from public.manuais_trilha) = 3 and (select count(*) 
 
 select tests.sair();
 
--- A produção só passa a aceitar reestudo e certificado de curso com as tabelas da Universidade.
+-- Curso e prova inexistentes não liberam reestudo nem certificado.
 select tests.entrar('eqU2');
 select throws_ok($$
   insert into public.reestudos (id, uid, curso_id, documento_id)
   values (tests.id('eqU2') || '_curso-a_1', tests.id('eqU2'), 'curso-a', 'man-1')
-$$, '42501', null, 'reestudo é recusado enquanto as tabelas da Universidade estiverem ausentes');
+$$, '42501', null, 'reestudo é recusado para curso sem prova');
 select throws_ok($$
   insert into public.certificados (id, uid, trilha_id, nome, trilha_titulo, codigo, tentativa_id)
   values (tests.id('eqU2') || '_curso-a', tests.id('eqU2'), 'curso-a', 'Aluno Dois',
           'Curso A', 'UBOX-ABC123', tests.id('eqU2') || '_curso-a_1_1')
-$$, '42501', null, 'certificado de curso é recusado enquanto a Universidade estiver ausente');
+$$, '42501', null, 'certificado de curso é recusado para curso inexistente');
 select tests.sair();
 
--- Dependências da próxima fase, restritas à transação deste teste.
-create table public.cursos (id text primary key);
-create table public.provas (id text primary key, manual_retorno_id text, tempo_reestudo_seg int);
-create table public.tentativas_prova (id text primary key, uid uuid, curso_id text, aprovado boolean);
-insert into public.cursos values ('curso-a');
-insert into public.provas values ('curso-a', 'man-1', 60);
-insert into public.tentativas_prova
-select tests.id(a) || '_curso-a_' || sufixo, tests.id(a), 'curso-a', aprovado
-from (values ('fr1', '1_2', true), ('eqU2', '1_3', false), ('eqU2', '9_3', false)) d(a, sufixo, aprovado);
-insert into public.reestudos (id, uid, curso_id, ciclo, documento_id, iniciado_em)
-values (tests.id('eqU2') || '_curso-a_1', tests.id('eqU2'), 'curso-a', 1, 'man-1', now() - interval '2 hours');
+-- Dados da Universidade, importados como postgres.
+insert into public.cursos (id, titulo, descricao, ordem, aulas, publicado, atualizado_por, atualizado_por_nome)
+values ('curso-a', 'Curso A', 'Abertura', 1, '{man-1}', true, tests.id('admin'), 'Admin Rede'),
+       ('curso-rascunho', 'Rascunho', '', 2, '{}', false, tests.id('admin'), 'Admin Rede');
+insert into public.provas (id, titulo, nota_minima, perguntas, total_perguntas, manual_retorno_id,
+                           tempo_reestudo_seg, versao, publicado, atualizado_por, atualizado_por_nome)
+values ('curso-a', 'Prova A', 75, '[{"id":"p1","enunciado":"Questão","opcoes":["A","B"]}]', 1, 'man-1', 60, 1, true, tests.id('admin'), 'Admin Rede');
+insert into public.provas_gabarito (id, corretas, versao, atualizado_por)
+values ('curso-a', '{0}', 1, tests.id('admin'));
+insert into public.tentativas_prova (id, uid, curso_id, ciclo, numero, nome, unidade_id, unidade_nome, versao, aprovado, corrigido_em)
+select tests.id(a) || '_curso-a_' || ciclo || '_' || numero, tests.id(a), 'curso-a',
+       ciclo, numero, nome, 'un-1', 'Uberaba Centro', 1, aprovado, now()
+from (values ('fr1', 1, 2, 'Franqueado Um', true), ('eqU2', 1, 3, 'Aluno Dois', false),
+             ('eqU2', 9, 3, 'Aluno Dois', false)) d(a, ciclo, numero, nome, aprovado);
+insert into public.reestudos (id, uid, curso_id, ciclo, documento_id)
+values (tests.id('eqU2') || '_curso-a_1', tests.id('eqU2'), 'curso-a', 1, 'man-1');
 
 select tests.entrar('fr1');
 select throws_ok($$insert into public.reestudos (id, uid, curso_id, ciclo, documento_id) values (tests.id('fr1') || '_curso-a_1', tests.id('fr1'), 'curso-a', 1, 'man-1')$$, '42501', null, '[regras] reestudo só depois de reprovar 3x');
