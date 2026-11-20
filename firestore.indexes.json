@@ -1,6 +1,22 @@
 {
   "indexes": [
     {
+      "collectionGroup": "nuvemLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "dono", "order": "ASCENDING" },
+        { "fieldPath": "visibilidade", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nuvemLinks",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "dono", "order": "ASCENDING" },
+        { "fieldPath": "unidades", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
       "collectionGroup": "checklistModelos",
       "queryScope": "COLLECTION",
       "fields": [

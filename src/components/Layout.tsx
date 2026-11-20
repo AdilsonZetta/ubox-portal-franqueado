@@ -38,6 +38,8 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/estoque')) return 'estoque'
   if (pathname.startsWith('/crm')) return 'crm'
   if (pathname.startsWith('/clientes')) return 'cliente'
+  if (pathname.startsWith('/nuvem/rede')) return 'nuvem-rede'
+  if (pathname.startsWith('/nuvem')) return 'nuvem'
   // Auditorias da unidade: não dependem de módulo (a auditoria é da franqueadora; as rules limitam à própria unidade).
   if (pathname.startsWith('/auditorias')) return null
   // Acompanhamento da unidade: também não depende de módulo (só os registros compartilhados).

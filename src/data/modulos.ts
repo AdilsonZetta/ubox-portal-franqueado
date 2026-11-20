@@ -147,8 +147,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: Cloud,
-    descricao: 'Pasta de arquivos da unidade.',
-    recursos: ['Pasta da unidade', 'Enviar link', 'Arquivos recentes', 'Limite de tamanho'],
+    descricao: 'Links do Google Drive organizados por pasta e etiqueta: os da franqueadora e a área privada da unidade.',
+    recursos: ['Área privada da unidade', 'Links da rede', 'Pastas e etiquetas', 'Adicionados recentemente'],
+    ativo: true,
+    para: '/nuvem',
   },
   {
     slug: 'gestao-franqueadora',
@@ -200,8 +202,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos da franqueadora',
     audiencia: 'franqueadora',
     icon: Cloud,
-    descricao: 'Pastas de todas as unidades e a pasta da franqueadora.',
-    recursos: ['Todas as unidades', 'Pasta da franqueadora', 'Arquivos recentes', 'Acessos'],
+    descricao: 'Links do Google Drive para a rede toda, para unidades escolhidas ou só para a franqueadora.',
+    recursos: ['Rede toda', 'Unidades escolhidas', 'Pasta da franqueadora', 'Pastas e etiquetas'],
+    ativo: true,
+    para: '/nuvem/rede',
   },
 ]
 

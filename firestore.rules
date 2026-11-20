@@ -3579,5 +3579,51 @@ service cloud.firestore {
       allow create: if itemGrava(token) && recOk(novo());
       allow update, delete: if false;
     }
+
+    // ===== Módulo 13: Armazenamento em Nuvem =====
+    // Só links do Google Drive/Docs com metadados (o Spark não tem Storage; o compartilhamento no Drive não muda).
+    // dono '' = da franqueadora (rede toda, unidades escolhidas ou só a franqueadora);
+    // dono = unidadeId = área privada da unidade, que a franqueadora não lê.
+    function gereNuvem(u) {
+      return contaAtiva(u) && (u.papel == 'admin' || (u.papel == 'equipe_franqueadora' && temLista(u, 'nuvem-rede')));
+    }
+
+    function unidadeNuvem(u) {
+      return contaAtiva(u) && u.papel in ['franqueado', 'equipe_franqueado'] && temLista(u, 'nuvem')
+        && unidadeAtiva(u) && unidadeIdPreenchido(u);
+    }
+
+    function nuvemLe(d, u) {
+      return d.dono == ''
+        ? (gereNuvem(u) || (unidadeNuvem(u) && (d.visibilidade == 'rede' || u.unidadeId in d.unidades)))
+        : (unidadeNuvem(u) && d.dono == u.unidadeId);
+    }
+
+    function nuvemGrava(d, u) {
+      return d.dono == '' ? gereNuvem(u) : (unidadeNuvem(u) && d.dono == u.unidadeId);
+    }
+
+    function linkNuvemOk(d, u) {
+      return d.keys().hasOnly(['titulo', 'descricao', 'url', 'pasta', 'tags', 'visibilidade', 'unidades', 'dono', 'geradoPorIA', 'iaModelo', 'criadoPor', 'criadoPorNome', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && d.keys().size() == 16
+        && validName(d.titulo) && validShort(d.descricao, 1000) && iaOk(d)
+        && d.url is string && d.url.size() <= 600 && d.url.matches('https://(drive|docs)[.]google[.]com/[^ ]*')
+        && d.pasta is string && d.pasta.matches('[^/]{1,60}')
+        && d.tags is string && d.tags.matches('([^,]{1,30}(,[^,]{1,30}){0,9})?')
+        && d.unidades is list && d.dono is string && nuvemGrava(d, u)
+        && (d.dono == ''
+          ? (d.visibilidade == 'unidades' ? d.unidades.size() >= 1 && d.unidades.size() <= 50 : d.visibilidade in ['rede', 'franqueadora'] && d.unidades.size() == 0)
+          : d.visibilidade == 'privada' && d.unidades.size() == 0)
+        && nomeAutorOk() && atualizadoAgora();
+    }
+
+    match /nuvemLinks/{id} {
+      allow read: if userExists() && nuvemLe(velho(), userData());
+      allow create: if autorOk() ? (userExists() && linkNuvemOk(novo(), userData())
+        && novo().criadoPor == uid() && novo().criadoPorNome == userData().nome && criadoAgora()) : false;
+      allow update: if autorOk() ? (userExists() && nuvemGrava(velho(), userData()) && linkNuvemOk(novo(), userData())
+        && !mudou().hasAny(['dono', 'criadoPor', 'criadoPorNome', 'criadoEm'])) : false;
+      allow delete: if userExists() && nuvemGrava(velho(), userData());
+    }
   }
 }

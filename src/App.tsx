@@ -47,6 +47,7 @@ import { GestaoCrmPage } from './pages/crm/GestaoCrm'
 import { ClientesPage } from './pages/cliente/Clientes'
 import { ClientePage } from './pages/cliente/Cliente'
 import { PainelClientePage } from './pages/cliente/PainelPublico'
+import { NuvemRedePage, NuvemUnidadePage } from './pages/nuvem/Nuvem'
 import { GestaoAuditoriaPage } from './pages/auditoria/GestaoAuditoria'
 import { EditorAuditoriaPage } from './pages/auditoria/EditorAuditoria'
 import { AuditoriaPage } from './pages/auditoria/Auditoria'
@@ -137,6 +138,8 @@ function Area() {
           <Route path="/crm/gestao" element={<GestaoCrmPage />} />
           <Route path="/clientes" element={<ClientesPage />} />
           <Route path="/clientes/:id" element={<ClientePage />} />
+          <Route path="/nuvem" element={<NuvemUnidadePage />} />
+          <Route path="/nuvem/rede" element={<NuvemRedePage />} />
           <Route path="/auditoria" element={<GestaoAuditoriaPage />} />
           <Route path="/auditoria/nova" element={<EditorAuditoriaPage />} />
           <Route path="/auditoria/editar/:id" element={<EditorAuditoriaPage />} />
