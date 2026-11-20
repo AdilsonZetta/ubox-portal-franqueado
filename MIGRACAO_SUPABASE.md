@@ -169,7 +169,7 @@ Se a confirmação de e-mail estiver ligada, a alternativa é uma Edge Function 
 
 ## 10. O que a fase 1 entregou
 
-- **Migrações aplicadas no projeto:** `20261120130030_fase1_fundacao` e `20261120130132_fase1_indice_trava`.
+- **Migrações aplicadas no projeto:** `20261120130030_fase1_fundacao`, `20261120130132_fase1_indice_trava` e `20261120131437_fase1_trava_so_gatilho`. A última corrige um achado LOW da revisão: a trava do 1º admin só pode ser gravada pelo gatilho da promoção.
 - **Tabelas:**
   - `usuarios`: id = `auth.users.id`, com `firebase_uid`;
   - `unidades`: id text;
@@ -180,7 +180,7 @@ Se a confirmação de e-mail estiver ligada, a alternativa é uma Edge Function 
     - no cadastro próprio, `criado_por` só pode ser nulo ou a própria pessoa;
     - o bootstrap do admin exige `recusado = false`;
     - as datas são carimbadas pelo servidor.
-- **Testes:** 71 pgTAP, ok no local e no remoto, com rollback. Os advisors de segurança não apontaram nada. Com a chave publicável e sem login, o REST devolve 401 para as três tabelas.
+- **Testes:** 75 pgTAP, ok no local e no remoto, com rollback. Os advisors de segurança não apontaram nada. Com a chave publicável e sem login, o REST devolve 401 para as três tabelas.
 - **App:**
   - `@supabase/supabase-js`, `src/lib/supabase.ts`, `src/supabaseConfig.ts` e `src/lib/backend.ts`;
   - o caminho Supabase em `auth.tsx` e a `NovaSenhaPage`;

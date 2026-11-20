@@ -68,7 +68,7 @@ from (values
 ) as v(a, n, p, at, u, m);
 update public.unidades set uid = tests.id('dono3') where id = 'un-3';
 
-select plan(71);
+select plan(75);
 
 -- ===== usuarios: leitura =============================================
 select tests.entrar('pend');
@@ -188,6 +188,13 @@ select is(tests.linhas($$delete from public.unidades where id = 'un-nova'$$), 1,
 -- ===== primeiro admin (config/adminCriado) ===========================
 select tests.entrar('fr1');
 select throws_ok($$insert into public.admin_lock (uid, email) values (tests.id('fr1'), 'fr1@ubox.test')$$, '42501', null, 'quem não é admin não grava a trava');
+-- Revisão (LOW): chamar a função da trava direto não pode plantar a trava.
+select tests.entrar('pend');
+select throws_ok($$select app.travar_primeiro_admin(tests.id('pend'), 'pend@ubox.test')$$, '42501', null, 'chamada direta da função da trava é recusada');
+select tests.sair();
+select is((select count(*)::int from public.admin_lock), 0, 'a chamada direta não deixa trava');
+select ok(not has_function_privilege('authenticated', 'app.travar_primeiro_admin(uuid, text)', 'execute'), 'authenticated não tem EXECUTE na função da trava');
+select throws_ok($$select app.travar_primeiro_admin(tests.id('pend'), 'pend@ubox.test')$$, '42501', null, 'fora de gatilho nem o dono grava a trava');
 select tests.entrar('pend');
 select is(tests.linhas($$update public.usuarios set papel = 'admin', ativo = true where id = tests.id('pend')$$), 1, 'sem trava, o franqueado inativo vira o primeiro admin');
 select tests.sair();
