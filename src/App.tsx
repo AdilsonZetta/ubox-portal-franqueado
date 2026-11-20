@@ -44,6 +44,9 @@ import { GestaoEstoquePage } from './pages/estoque/GestaoEstoque'
 import { CrmPage } from './pages/crm/Crm'
 import { LeadPage } from './pages/crm/Lead'
 import { GestaoCrmPage } from './pages/crm/GestaoCrm'
+import { ClientesPage } from './pages/cliente/Clientes'
+import { ClientePage } from './pages/cliente/Cliente'
+import { PainelClientePage } from './pages/cliente/PainelPublico'
 import { GestaoAuditoriaPage } from './pages/auditoria/GestaoAuditoria'
 import { EditorAuditoriaPage } from './pages/auditoria/EditorAuditoria'
 import { AuditoriaPage } from './pages/auditoria/Auditoria'
@@ -85,6 +88,8 @@ function Area() {
         <Route path="/recuperar" element={<RecuperarPage />} />
         <Route path="/aguardando" element={<AguardandoPage />} />
         <Route path="/completar" element={<CompletarPage />} />
+        {/* Link público do locatário (Painel do Cliente): sem login, só lê o painel do token. */}
+        <Route path="/painel/:token" element={<PainelClientePage />} />
         <Route
           element={
             status === 'ready' ? (
@@ -130,6 +135,8 @@ function Area() {
           <Route path="/crm" element={<CrmPage />} />
           <Route path="/crm/lead/:id" element={<LeadPage />} />
           <Route path="/crm/gestao" element={<GestaoCrmPage />} />
+          <Route path="/clientes" element={<ClientesPage />} />
+          <Route path="/clientes/:id" element={<ClientePage />} />
           <Route path="/auditoria" element={<GestaoAuditoriaPage />} />
           <Route path="/auditoria/nova" element={<EditorAuditoriaPage />} />
           <Route path="/auditoria/editar/:id" element={<EditorAuditoriaPage />} />

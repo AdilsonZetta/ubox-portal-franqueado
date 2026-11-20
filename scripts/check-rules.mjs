@@ -133,6 +133,24 @@ exigir(rules.includes("dados.papel == 'equipe_franqueadora' && temLista(dados, '
 }
 exigir(!/match \/crm\w+\/\{\w+\}[^}]*allow delete: if (?!false)/.test(rules), 'exclusão liberada no CRM')
 
+// Módulo 12: Painel do Cliente
+exigir(rules.includes('match /clientes/{clienteId}') && rules.includes('match /clientePaineis/{token}'), 'coleções do Painel do Cliente ausentes')
+{
+  const ini = rules.indexOf('// ===== Módulo 12: Painel do Cliente =====')
+  const bloco = rules.slice(ini)
+  exigir(ini > 0 && !bloco.includes('isAdmin') && !bloco.includes('equipe_franqueadora'), 'Painel do Cliente acessível pela franqueadora')
+  const painel = bloco.slice(bloco.indexOf('function painelOk'), bloco.indexOf('match /clientes/{clienteId}'))
+  exigir(!/'(nome|telefone|email|obs)'/.test(painel), 'dado pessoal do cliente no painel público')
+  exigir(painel.includes("matches('^[^ ]{1,40}$')"), 'painel público sem limitar ao primeiro nome')
+  const itens = bloco.slice(bloco.indexOf('function cobOk'), bloco.indexOf('function itemLe'))
+  exigir(itens.includes('iaOk(r)') && !/'(nome|telefone|email)'/.test(itens), 'itens do painel sem chaves fixas ou sem autoria de IA')
+  exigir(bloco.includes('pnAfter(resource.data.painelToken).ativo == false') && bloco.includes("d.status == 'ativo' || pnAfter(d.painelToken).ativo == false"), 'troca de link ou encerramento sem desativar o painel')
+  const pn = bloco.slice(bloco.indexOf('match /clientePaineis/{token}'))
+  exigir(pn.includes('allow list: if unidadeCli()') && !/allow (read|list): if resource\.data\.ativo/.test(pn), 'painel público listável')
+  exigir(!/allow delete: if (?!false)/.test(bloco), 'exclusão liberada no Painel do Cliente')
+  for (const sub of ['cobrancas', 'visitas', 'recados']) exigir(bloco.includes(`match /clientePaineis/{token}/${sub}/{id} {\n      allow read: if itemLe(token);`), `itens do painel (${sub}) sem a leitura condicionada ao painel ativo`)
+}
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)

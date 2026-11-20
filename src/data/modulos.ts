@@ -136,8 +136,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: Users,
-    descricao: 'O que o locatário consulta: contrato, cobrança e visitas.',
+    descricao: 'Clientes da unidade com contrato, cobranças, visitas e recados, e um link secreto para o locatário acompanhar sem senha.',
     recursos: ['Contrato', 'Cobrança', 'Visitas', 'Recados'],
+    ativo: true,
+    para: '/clientes',
   },
   {
     slug: 'nuvem',

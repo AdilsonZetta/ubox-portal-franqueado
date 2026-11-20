@@ -76,6 +76,18 @@ service cloud.firestore {
       return signedIn() && exists(userPath());
     }
 
+    function nomeAutorOk() {
+      return request.resource.data.atualizadoPorNome == userData().nome;
+    }
+
+    function criadoAgora() {
+      return request.resource.data.criadoEm == request.time;
+    }
+
+    function atualizadoAgora() {
+      return request.resource.data.atualizadoEm == request.time;
+    }
+
     function userData() {
       return get(userPath()).data;
     }
@@ -507,10 +519,10 @@ service cloud.firestore {
     }
 
     function atualizacaoValida() {
-      return request.resource.data.atualizadoEm == request.time
+      return atualizadoAgora()
         && (
           (resource.data.criadoEm is timestamp && request.resource.data.criadoEm == resource.data.criadoEm)
-          || (!(resource.data.criadoEm is timestamp) && request.resource.data.criadoEm == request.time)
+          || (!(resource.data.criadoEm is timestamp) && criadoAgora())
         );
     }
 
@@ -561,8 +573,8 @@ service cloud.firestore {
           && request.resource.data.email == request.auth.token.email
           && request.resource.data.recusado == false
           && (!('unidadeId' in request.resource.data) || request.resource.data.unidadeId == null || request.resource.data.unidadeId == '')
-          && request.resource.data.criadoEm == request.time
-          && request.resource.data.atualizadoEm == request.time
+          && criadoAgora()
+          && atualizadoAgora()
       ) : false;
 
       allow create: if request.resource.data.papel in ['franqueado', 'equipe_franqueadora', 'equipe_franqueado'] ? (
@@ -571,8 +583,8 @@ service cloud.firestore {
           && request.resource.data.papel in ['franqueado', 'equipe_franqueadora', 'equipe_franqueado']
           && request.resource.data.recusado == false
           && request.resource.data.criadoPor == request.auth.uid
-          && request.resource.data.criadoEm == request.time
-          && request.resource.data.atualizadoEm == request.time
+          && criadoAgora()
+          && atualizadoAgora()
           && modulosCabemNaUnidade(request.resource.data)
       ) : false;
 
@@ -585,8 +597,8 @@ service cloud.firestore {
           && request.resource.data.ativo == true
           && request.resource.data.recusado == false
           && request.resource.data.criadoPor == request.auth.uid
-          && request.resource.data.criadoEm == request.time
-          && request.resource.data.atualizadoEm == request.time
+          && criadoAgora()
+          && atualizadoAgora()
           && modulosCabemNaUnidade(request.resource.data)
       ) : false;
 
@@ -594,7 +606,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'atualizadoEm'])
         && validName(request.resource.data.nome)
         && emailConfere(request.resource.data)
-        && request.resource.data.atualizadoEm == request.time
+        && atualizadoAgora()
         && request.resource.data.papel == resource.data.papel
         && request.resource.data.email == resource.data.email;
       allow update: if resource != null && isSelf(uid)
@@ -604,7 +616,7 @@ service cloud.firestore {
         && request.resource.data.papel == 'admin'
         && request.resource.data.ativo == true
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['papel', 'ativo', 'atualizadoEm'])
-        && request.resource.data.atualizadoEm == request.time;
+        && atualizadoAgora();
       allow update: if resource != null && userExists() && atualizaComPerfil(uid);
 
       allow delete: if isAdmin();
@@ -617,7 +629,7 @@ service cloud.firestore {
           && chaves.hasOnly(['nome', 'atualizadoEm'])
           && validName(request.resource.data.nome)
           && emailConfere(request.resource.data)
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
           && request.resource.data.papel == resource.data.papel
           && request.resource.data.email == resource.data.email
         )
@@ -629,7 +641,7 @@ service cloud.firestore {
           && request.resource.data.papel == 'admin'
           && request.resource.data.ativo == true
           && chaves.hasOnly(['papel', 'ativo', 'atualizadoEm'])
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
         )
         || (userExists() && atualizaComPerfil(uid));
     }
@@ -645,7 +657,7 @@ service cloud.firestore {
           && request.resource.data.email == resource.data.email
           && request.resource.data.uid == resource.data.uid
           && request.resource.data.criadoEm == resource.data.criadoEm
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
           && (!('criadoPor' in resource.data) || request.resource.data.criadoPor == resource.data.criadoPor)
           && modulosCabemNaUnidade(request.resource.data)
         )
@@ -660,7 +672,7 @@ service cloud.firestore {
           && request.resource.data.modulosLiberados is list
           && request.resource.data.modulosLiberados.hasOnly(dados.modulosLiberados)
           && request.resource.data.papel == 'equipe_franqueado'
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'ativo', 'modulosLiberados', 'atualizadoEm'])
           && modulosCabemNaUnidade(request.resource.data)
         );
@@ -704,13 +716,13 @@ service cloud.firestore {
       allow create: if isAdmin()
         && isValidUnidade(request.resource.data)
         && request.resource.data.criadoPor == request.auth.uid
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+        && criadoAgora()
+        && atualizadoAgora();
       allow update: if isAdmin()
         && isValidUnidade(request.resource.data)
         && request.resource.data.criadoPor == resource.data.criadoPor
         && request.resource.data.criadoEm == resource.data.criadoEm
-        && request.resource.data.atualizadoEm == request.time;
+        && atualizadoAgora();
       allow delete: if isAdmin();
     }
 
@@ -721,7 +733,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['uid', 'email', 'criadoEm'])
         && request.resource.data.uid == request.auth.uid
         && request.resource.data.email == request.auth.token.email
-        && request.resource.data.criadoEm == request.time;
+        && criadoAgora();
       allow update, delete: if false;
     }
 
@@ -733,8 +745,8 @@ service cloud.firestore {
 
       allow create: if isAdmin()
         && isValidCategoria(request.resource.data)
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+        && criadoAgora()
+        && atualizadoAgora();
       allow update: if isAdmin()
         && isValidCategoria(request.resource.data)
         && atualizacaoValida();
@@ -754,8 +766,8 @@ service cloud.firestore {
 
       allow create: if isAdmin()
         && isValidDocumento(request.resource.data)
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+        && criadoAgora()
+        && atualizadoAgora();
       allow update: if isAdmin()
         && isValidDocumento(request.resource.data)
         && atualizacaoValida();
@@ -783,8 +795,8 @@ service cloud.firestore {
 
       allow create: if isAdmin()
         && isValidTrilha(request.resource.data)
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+        && criadoAgora()
+        && atualizadoAgora();
       allow update: if isAdmin()
         && isValidTrilha(request.resource.data)
         && atualizacaoValida();
@@ -797,8 +809,8 @@ service cloud.firestore {
 
       allow create: if isAdmin()
         && isValidQuiz(request.resource.data)
-        && request.resource.data.criadoEm == request.time
-        && request.resource.data.atualizadoEm == request.time;
+        && criadoAgora()
+        && atualizadoAgora();
       allow update: if isAdmin()
         && isValidQuiz(request.resource.data)
         && atualizacaoValida();
@@ -983,7 +995,7 @@ service cloud.firestore {
         && request.resource.data.abertoPorNome == resource.data.abertoPorNome
         && request.resource.data.slaHoras == resource.data.slaHoras
         && request.resource.data.criadoEm == resource.data.criadoEm
-        && request.resource.data.atualizadoEm == request.time;
+        && atualizadoAgora();
     }
 
     function isValidEventoChamado(data) {
@@ -1138,10 +1150,10 @@ service cloud.firestore {
       allow update: if request.resource.data.status == 'aberto' && resource.data.status in ['fechado', 'resolvido'] ? (
         resource != null && request.resource.data.status == 'aberto' && request.auth.uid != resource.data.abertoPor && podeEncerrarChamado(resource.data) && reabreChamado()
       ) : false;
-      allow update: if resource.data.status != 'fechado' && request.resource.data.atualizadoEm == request.time ? (
+      allow update: if resource.data.status != 'fechado' && atualizadoAgora() ? (
         resource != null && resource.data.status != 'fechado' && (isAdmin() || operaRede()) && conduzChamado()
       ) : false;
-      allow update: if resource.data.status == 'fechado' && request.resource.data.atualizadoEm == request.time ? (
+      allow update: if resource.data.status == 'fechado' && atualizadoAgora() ? (
         resource != null && resource.data.status == 'fechado' && (isAdmin() || operaRede()) && tiraDeFechado()
       ) : false;
       allow delete: if false;
@@ -1480,7 +1492,7 @@ service cloud.firestore {
         && request.resource.data.status in ['aprovada', 'recusada', 'concluida']
         && request.resource.data.decididoPor == request.auth.uid
         && request.resource.data.decididoPorNome == dados.nome
-        && request.resource.data.atualizadoEm == request.time
+        && atualizadoAgora()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'decididoPor', 'decididoPorNome', 'atualizadoEm']);
     }
 
@@ -1489,7 +1501,7 @@ service cloud.firestore {
       allow create: if request.resource.data.escopo in ['unidade', 'rede'] && request.resource.data.criadoPor == request.auth.uid ? (
         userExists() && isValidAcesso(request.resource.data) && podeCriarAcesso(request.resource.data)
       ) : false;
-      allow update: if request.resource.data.escopo == resource.data.escopo && request.resource.data.atualizadoEm == request.time ? (
+      allow update: if request.resource.data.escopo == resource.data.escopo && atualizadoAgora() ? (
         userExists() && resource != null && isValidAcesso(request.resource.data) && podeAtualizarAcesso(acessoId, resource.data, request.resource.data)
       ) : false;
       allow delete: if false;
@@ -1620,7 +1632,7 @@ service cloud.firestore {
           userExists()
           && gereTrilhaManuais(userData())
           && isValidItemTrilha(request.resource.data, id)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && exists(/databases/$(database)/documents/documentos/$(id))
         ) : false;
       allow delete: if false;
@@ -1973,7 +1985,7 @@ service cloud.firestore {
           userExists()
           && gereUniversidade(userData())
           && isValidCurso(request.resource.data, cursoId)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
         ) : false;
       allow delete: if false;
     }
@@ -1986,7 +1998,7 @@ service cloud.firestore {
           userExists()
           && gereUniversidade(userData())
           && isValidProva(request.resource.data, cursoId)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && (resource == null || request.resource.data.versao == resource.data.versao + 1)
           && exists(cursoPath(cursoId))
           && existsAfter(gabaritoProvaPath(cursoId))
@@ -2025,7 +2037,7 @@ service cloud.firestore {
           && isValidTentativaProva(request.resource.data)
           && tentativaId == idTentativa(request.resource.data.cursoId, request.resource.data.ciclo, request.resource.data.numero)
           && request.resource.data.corrigidoEm == null
-          && request.resource.data.criadoEm == request.time
+          && criadoAgora()
           && alunoConfere(userData(), request.resource.data)
           && exists(provaPath(request.resource.data.cursoId))
           && provaAceita(get(provaPath(request.resource.data.cursoId)).data, request.resource.data)
@@ -2088,7 +2100,7 @@ service cloud.firestore {
           && request.resource.data.iniciadoEm == request.time
           && request.resource.data.reinicios == 0
           && request.resource.data.concluidoEm == null
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
           && alunoUniversidade(userData())
           && exists(provaPath(request.resource.data.cursoId))
           && request.resource.data.documentoId == get(provaPath(request.resource.data.cursoId)).data.manualRetornoId
@@ -2099,13 +2111,13 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['iniciadoEm', 'reinicios', 'atualizadoEm'])
           && request.resource.data.iniciadoEm == request.time
           && request.resource.data.reinicios == resource.data.reinicios + 1
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
         ) : false;
 
       allow update: if resource.data.uid == request.auth.uid && resource.data.status == 'em_andamento' && request.resource.data.status == 'concluido' ? (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'concluidoEm', 'atualizadoEm'])
           && request.resource.data.concluidoEm == request.time
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
           && exists(provaPath(resource.data.cursoId))
           && request.time >= resource.data.iniciadoEm + duration.value(get(provaPath(resource.data.cursoId)).data.tempoReestudoSeg, 's')
         ) : false;
@@ -2239,7 +2251,7 @@ service cloud.firestore {
           && isValidMaterial(request.resource.data)
           && autoriaMarketing(request.resource.data, userData())
           && (resource == null || request.resource.data.criadoEm == resource.data.criadoEm)
-          && (resource != null || request.resource.data.criadoEm == request.time)
+          && (resource != null || criadoAgora())
         ) : false;
       allow delete: if false;
     }
@@ -2441,16 +2453,16 @@ service cloud.firestore {
           userExists()
           && gereChecklist(userData())
           && isValidModeloChecklist(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.versao == 1
-          && request.resource.data.criadoEm == request.time
+          && criadoAgora()
         ) : false;
       // Edição: itens, título, tipo, frequência ou peso total novos sobem a versão (execuções antigas guardam a versão que usaram).
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
           userExists()
           && gereChecklist(userData())
           && isValidModeloChecklist(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.criadoEm == resource.data.criadoEm
           && request.resource.data.versao == (
             request.resource.data.itens == resource.data.itens
@@ -2614,15 +2626,15 @@ service cloud.firestore {
           userExists()
           && gereAuditoria(userData())
           && isValidModeloAuditoria(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.versao == 1
-          && request.resource.data.criadoEm == request.time
+          && criadoAgora()
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
           userExists()
           && gereAuditoria(userData())
           && isValidModeloAuditoria(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.criadoEm == resource.data.criadoEm
           && request.resource.data.versao == (
             request.resource.data.itens == resource.data.itens
@@ -2648,7 +2660,7 @@ service cloud.firestore {
           && gereAuditoria(userData())
           && isValidAuditoria(request.resource.data)
           && request.resource.data.auditorNome == userData().nome
-          && request.resource.data.criadoEm == request.time
+          && criadoAgora()
           && assinaturaVazia(request.resource.data)
           && cienciaVazia(request.resource.data)
           && exists(unidadePath(request.resource.data.unidadeId))
@@ -2682,7 +2694,7 @@ service cloud.firestore {
           && request.resource.data.status == 'concluida'
           && request.resource.data.cienciaNome == userData().nome
           && request.resource.data.cienciaEm == request.time
-          && request.resource.data.atualizadoEm == request.time
+          && atualizadoAgora()
           && validShort(request.resource.data.contestacao, 2000)
         ) : false;
       allow delete: if false;
@@ -2698,8 +2710,8 @@ service cloud.firestore {
           userExists()
           && gereAuditoria(userData())
           && isValidAcao(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.criadoEm == request.time
+          && nomeAutorOk()
+          && criadoAgora()
           && request.resource.data.evidenciaUrl == ''
           && request.resource.data.comentarioUnidade == ''
           && exists(auditoriaPath(request.resource.data.auditoriaId))
@@ -2712,7 +2724,7 @@ service cloud.firestore {
           userExists()
           && gereAuditoria(userData())
           && isValidAcao(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'descricao', 'responsavel', 'prazo', 'comentarioFranqueadora', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
           && (request.resource.data.status == resource.data.status
             || (resource.data.status == 'concluida_unidade' && request.resource.data.status in ['validada', 'reaberta']))
@@ -2726,7 +2738,7 @@ service cloud.firestore {
           && userData().papel == 'franqueado'
           && daUnidadeAuditada(userData(), resource.data.unidadeId)
           && isValidAcao(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'evidenciaUrl', 'comentarioUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
           && (request.resource.data.status == 'em_andamento' || linkHttps(request.resource.data.evidenciaUrl, false))
         ) : false;
@@ -2804,15 +2816,15 @@ service cloud.firestore {
           && gereAcompanhamento(userData())
           && isValidRegistroAc(request.resource.data)
           && request.resource.data.autorNome == userData().nome
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.criadoEm == request.time
+          && nomeAutorOk()
+          && criadoAgora()
           && exists(unidadePath(request.resource.data.unidadeId))
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
           userExists()
           && gereAcompanhamento(userData())
           && isValidRegistroAc(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['data', 'tipo', 'notas', 'compartilhado', 'geradoPorIA', 'iaModelo', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
         ) : false;
       allow delete: if false;
@@ -2832,8 +2844,8 @@ service cloud.firestore {
           userExists()
           && gereAcompanhamento(userData())
           && isValidPassoAc(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.criadoEm == request.time
+          && nomeAutorOk()
+          && criadoAgora()
           && request.resource.data.comentarioUnidade == ''
           && existsAfter(registroAcPath(request.resource.data.registroId))
           && getAfter(registroAcPath(request.resource.data.registroId)).data.unidadeId == request.resource.data.unidadeId
@@ -2845,7 +2857,7 @@ service cloud.firestore {
           userExists()
           && gereAcompanhamento(userData())
           && isValidPassoAc(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && getAfter(registroAcPath(resource.data.registroId)).data.compartilhado == request.resource.data.compartilhado
           && (resource.data.status == 'validado'
             ? request.resource.data.diff(resource.data).affectedKeys().hasOnly(['compartilhado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
@@ -2865,7 +2877,7 @@ service cloud.firestore {
           && daUnidadeAcompanhada(userData(), resource.data.unidadeId)
           && registroCompartilhadoCom(resource.data.registroId, resource.data.unidadeId)
           && isValidPassoAc(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'comentarioUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
           && request.resource.data.comentarioUnidade.size() >= 2
         ) : false;
@@ -2982,14 +2994,14 @@ service cloud.firestore {
           userExists()
           && gereEstoque(userData())
           && isValidItemEstoque(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.criadoEm == request.time
+          && nomeAutorOk()
+          && criadoAgora()
         ) : false;
       allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
           userExists()
           && gereEstoque(userData())
           && isValidItemEstoque(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.criadoEm == resource.data.criadoEm
         ) : false;
       // Sem exclusão: o item é desativado.
@@ -3061,8 +3073,8 @@ service cloud.firestore {
           && request.resource.data.unidadeId == userData().unidadeId
           && request.resource.data.unidadeNome == userData().get('unidade', '')
           && request.resource.data.criadoPorNome == userData().nome
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.criadoEm == request.time
+          && nomeAutorOk()
+          && criadoAgora()
           && request.resource.data.confirmadoPor == ''
           && request.resource.data.confirmadoNome == ''
           && request.resource.data.confirmadoEm == null
@@ -3074,7 +3086,7 @@ service cloud.firestore {
           && unidadeEstoque(userData())
           && resource.data.unidadeId == userData().unidadeId
           && isValidContagem(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itens', 'totalItens', 'totalDivergencias', 'obs', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
         ) : false;
 
@@ -3085,7 +3097,7 @@ service cloud.firestore {
           && unidadeEstoque(userData())
           && resource.data.unidadeId == userData().unidadeId
           && isValidContagem(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itens', 'totalItens', 'totalDivergencias', 'obs', 'status', 'confirmadoPor', 'confirmadoNome', 'confirmadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
           && (request.resource.data.status == 'cancelada'
             ? request.resource.data.confirmadoPor == '' && request.resource.data.confirmadoEm == null
@@ -3111,9 +3123,9 @@ service cloud.firestore {
           && request.resource.data.unidadeId == userData().unidadeId
           && request.resource.data.unidadeNome == userData().get('unidade', '')
           && request.resource.data.solicitanteNome == userData().nome
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.obsFranqueadora == ''
-          && request.resource.data.criadoEm == request.time
+          && criadoAgora()
           && request.resource.data.aprovadoEm == null
           && request.resource.data.enviadoEm == null
           && request.resource.data.recebidoEm == null
@@ -3127,7 +3139,7 @@ service cloud.firestore {
           && unidadeEstoque(userData())
           && resource.data.unidadeId == userData().unidadeId
           && isValidPedidoEstoque(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && (
             (resource.data.status == 'aberto' && request.resource.data.status == 'aberto'
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['itens', 'totalItens', 'obsUnidade', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm']))
@@ -3145,7 +3157,7 @@ service cloud.firestore {
           userExists()
           && gereEstoque(userData())
           && isValidPedidoEstoque(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && (
             (resource.data.status == 'aberto' && request.resource.data.status == 'aprovado'
               && request.resource.data.aprovadoEm == request.time
@@ -3258,8 +3270,8 @@ service cloud.firestore {
           && request.resource.data.keys().size() == 5
           && listaTextosCrm(request.resource.data.origens)
           && listaTextosCrm(request.resource.data.motivosPerda)
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.atualizadoEm == request.time
+          && nomeAutorOk()
+          && atualizadoAgora()
         ) : false;
       allow delete: if false;
     }
@@ -3277,9 +3289,9 @@ service cloud.firestore {
           && isValidLeadCrm(request.resource.data)
           && request.resource.data.unidadeId == userData().unidadeId
           && request.resource.data.unidadeNome == userData().get('unidade', '')
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.arquivado == false
-          && request.resource.data.criadoEm == request.time
+          && criadoAgora()
           && request.resource.data.etapaEm == request.time
           && request.resource.data.ultimaAtividadeEm == null
           && origemCrmOk(request.resource.data.origem)
@@ -3295,7 +3307,7 @@ service cloud.firestore {
           && unidadeCrm(userData())
           && resource.data.unidadeId == userData().unidadeId
           && isValidLeadCrm(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
+          && nomeAutorOk()
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['origem', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
           && (resource.data.etapa in ['ganho', 'perdido']
             ? request.resource.data.diff(resource.data).affectedKeys().hasOnly(['arquivado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
@@ -3354,7 +3366,7 @@ service cloud.firestore {
           && request.resource.data.tipo in ['ligacao', 'whatsapp', 'visita', 'email', 'nota']
           && request.resource.data.texto is string && request.resource.data.texto.size() >= 2 && request.resource.data.texto.size() <= 2000
           && iaOk(request.resource.data)
-          && request.resource.data.criadoEm == request.time
+          && criadoAgora()
           && request.resource.data.leadId is string && request.resource.data.leadId.size() > 0 && request.resource.data.leadId.size() <= 64
           && get(crmLeadPath(request.resource.data.leadId)).data.unidadeId == request.resource.data.unidadeId
         ) : false;
@@ -3378,9 +3390,9 @@ service cloud.firestore {
           && request.resource.data.validade is timestamp && request.resource.data.validade > request.time
           && validShort(request.resource.data.obs, 1000)
           && iaOk(request.resource.data)
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.criadoEm == request.time
-          && request.resource.data.atualizadoEm == request.time
+          && nomeAutorOk()
+          && criadoAgora()
+          && atualizadoAgora()
           && request.resource.data.leadId is string && request.resource.data.leadId.size() > 0 && request.resource.data.leadId.size() <= 64
           && get(crmLeadPath(request.resource.data.leadId)).data.unidadeId == request.resource.data.unidadeId
         ) : false;
@@ -3391,10 +3403,168 @@ service cloud.firestore {
           && resource.data.unidadeId == userData().unidadeId
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
           && request.resource.data.status in ['aceita', 'recusada', 'expirada']
-          && request.resource.data.atualizadoPorNome == userData().nome
-          && request.resource.data.atualizadoEm == request.time
+          && nomeAutorOk()
+          && atualizadoAgora()
         ) : false;
       allow delete: if false;
+    }
+
+    // ===== Módulo 12: Painel do Cliente =====
+    // clientes: cadastro e contrato do locatário (nome, telefone, e-mail): só a unidade; nem admin nem franqueadora.
+    // clientePaineis/{token}: o que o locatário vê por link secreto (token aleatório de 128 bits), sem login,
+    // só por get (nunca list) e só enquanto ativo e for o link atual do cliente. Sem telefone, e-mail ou sobrenome.
+    function unidadeCli() {
+      return userExists()
+        && contaAtiva(userData())
+        && userData().papel in ['franqueado', 'equipe_franqueado']
+        && temLista(userData(), 'cliente')
+        && unidadeAtiva(userData())
+        && unidadeIdPreenchido(userData());
+    }
+
+    function cliPath(id) {
+      return /databases/$(database)/documents/clientes/$(id);
+    }
+
+    function contratoCliOk(d) {
+      return unidadeCli()
+        && d.unidadeId == userData().unidadeId
+        && d.box is string && d.box.size() >= 1 && d.box.size() <= 60
+        && d.contratoInicio is timestamp
+        && (d.contratoFim == null || d.contratoFim is timestamp)
+        && d.valorMensalCentavos is int && d.valorMensalCentavos >= 0 && d.valorMensalCentavos <= 100000000
+        && d.diaVencimento is int && d.diaVencimento >= 1 && d.diaVencimento <= 28
+        && d.atualizadoEm == request.time;
+    }
+
+    function clienteOk(d, id) {
+      return contratoCliOk(d)
+        && d.keys().hasOnly(['unidadeId', 'nome', 'telefone', 'email', 'box', 'contratoInicio', 'contratoFim', 'valorMensalCentavos', 'diaVencimento', 'status', 'painelToken', 'obs', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && d.keys().size() == 16
+        && validName(d.nome)
+        && d.telefone is string && d.telefone.matches('^[0-9 ()+.-]{0,30}$')
+        && d.email is string && d.email.size() <= 120 && (d.email == '' || d.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+        && d.status in ['ativo', 'encerrado']
+        && d.painelToken is string && d.painelToken.matches('^[0-9a-f]{32}$')
+        && validShort(d.obs, 1000)
+        && d.atualizadoPorNome == userData().nome
+        // O painel atual nasce/existe no mesmo lote e aponta para este cliente; contrato encerrado = link desativado.
+        && pnAfter(d.painelToken).clienteId == id
+        && (d.status == 'ativo' || pnAfter(d.painelToken).ativo == false);
+    }
+
+    function pnPath(t) {
+      return /databases/$(database)/documents/clientePaineis/$(t);
+    }
+
+    function pnAfter(t) {
+      return getAfter(pnPath(t)).data;
+    }
+
+    function dataIso(v) {
+      return v is string && v.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    // Itens do painel (um documento por item, em subcoleções do painel): chaves fixas, sem contato do cliente.
+    function cobOk(c, id) {
+      return c.keys().hasOnly(['competencia', 'valorCentavos', 'vencimento', 'status', 'pagoEm']) && c.keys().size() == 5
+        && c.competencia == id && id.matches('^[0-9]{4}-[0-9]{2}$')
+        && c.valorCentavos is int && c.valorCentavos >= 0 && c.valorCentavos <= 100000000
+        && dataIso(c.vencimento) && c.status in ['pendente', 'pago'] && (c.pagoEm == '' || dataIso(c.pagoEm));
+    }
+
+    function visOk(v) {
+      return v.keys().hasOnly(['data', 'hora', 'motivo', 'status']) && v.keys().size() == 4
+        && dataIso(v.data) && v.hora is string && v.hora.matches('^[0-9]{2}:[0-9]{2}$')
+        && validShort(v.motivo, 200) && v.status in ['agendada', 'realizada', 'cancelada'];
+    }
+
+    function recOk(r) {
+      return r.keys().hasOnly(['texto', 'criadoEm', 'autor', 'geradoPorIA', 'iaModelo']) && r.keys().size() == 5
+        && r.texto is string && r.texto.size() >= 2 && r.texto.size() <= 500
+        && r.criadoEm is timestamp && r.criadoEm <= request.time && validShort(r.autor, 40) && iaOk(r);
+    }
+
+    // Itens: o público lê enquanto o painel está ativo; a unidade lê e grava os do seu painel (getAfter: vale no lote da troca de link).
+    function itemLe(t) {
+      return get(pnPath(t)).data.ativo == true
+        || (unidadeCli() && get(pnPath(t)).data.unidadeId == userData().unidadeId);
+    }
+
+    function itemGrava(t) {
+      return unidadeCli() && pnAfter(t).unidadeId == userData().unidadeId;
+    }
+
+    function painelOk(d) {
+      return contratoCliOk(d)
+        && d.keys().hasOnly(['unidadeId', 'unidadeNome', 'contatoUnidade', 'clienteId', 'primeiroNome', 'box', 'contratoInicio', 'contratoFim', 'valorMensalCentavos', 'diaVencimento', 'ativo', 'atualizadoEm'])
+        && d.keys().size() == 12
+        && d.unidadeNome == userData().get('unidade', '')
+        && validShort(d.contatoUnidade, 120)
+        && d.clienteId is string && d.clienteId.size() >= 1 && d.clienteId.size() <= 64
+        // Só o primeiro nome (uma palavra) vai para o link público.
+        && d.primeiroNome is string && d.primeiroNome.matches('^[^ ]{1,40}$')
+        && d.ativo is bool;
+    }
+
+    match /clientes/{clienteId} {
+      allow read: if unidadeCli() && resource.data.unidadeId == userData().unidadeId;
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          clienteOk(request.resource.data, clienteId) && criadoAgora()
+        ) : false;
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          clienteOk(request.resource.data, clienteId)
+          && resource.data.unidadeId == request.resource.data.unidadeId
+          && resource.data.criadoEm == request.resource.data.criadoEm
+          // Trocar o link exige o painel antigo desativado no mesmo lote.
+          && (request.resource.data.painelToken == resource.data.painelToken
+            || (pnAfter(resource.data.painelToken).ativo == false
+              // ...e o painel novo nasce neste lote (não dá para voltar a um link antigo).
+              && !exists(/databases/$(database)/documents/clientePaineis/$(request.resource.data.painelToken))))
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /clientePaineis/{token} {
+      // Link público: quem tem o token lê o painel ativo. Sem list para ninguém de fora da unidade.
+      allow get: if resource.data.ativo == true
+        || (unidadeCli() && resource.data.unidadeId == userData().unidadeId);
+      allow list: if unidadeCli() && resource.data.unidadeId == userData().unidadeId;
+      allow create: if token.matches('^[0-9a-f]{32}$') ? (
+          painelOk(request.resource.data)
+          && getAfter(cliPath(request.resource.data.clienteId)).data.unidadeId == request.resource.data.unidadeId
+          && getAfter(cliPath(request.resource.data.clienteId)).data.painelToken == token
+        ) : false;
+      allow update: if resource.data.clienteId == request.resource.data.clienteId ? (
+          painelOk(request.resource.data)
+          && resource.data.unidadeId == request.resource.data.unidadeId
+          // Só o link atual (antes e depois do lote) pode estar ativo: link trocado não volta a valer.
+          && (request.resource.data.ativo == false
+            || (get(cliPath(resource.data.clienteId)).data.painelToken == token && getAfter(cliPath(resource.data.clienteId)).data.painelToken == token))
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /clientePaineis/{token}/cobrancas/{id} {
+      allow read: if itemLe(token);
+      allow create: if itemGrava(token) && cobOk(request.resource.data, id);
+      allow update: if itemGrava(token) && cobOk(request.resource.data, id)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'pagoEm']);
+      allow delete: if false;
+    }
+
+    match /clientePaineis/{token}/visitas/{id} {
+      allow read: if itemLe(token);
+      allow create: if itemGrava(token) && visOk(request.resource.data);
+      allow update: if itemGrava(token) && visOk(request.resource.data) && resource.data.status == 'agendada'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status']);
+      allow delete: if false;
+    }
+
+    match /clientePaineis/{token}/recados/{id} {
+      allow read: if itemLe(token);
+      allow create: if itemGrava(token) && recOk(request.resource.data);
+      allow update, delete: if false;
     }
   }
 }
