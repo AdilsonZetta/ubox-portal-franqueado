@@ -140,15 +140,15 @@ export function GestaoTrilhaPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="cabecalho-pagina flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Manuais e Processos · Franqueadora</p>
-          <h1 className="text-2xl font-black text-ink">Gestão da trilha de manuais</h1>
-          <p className="mt-0.5 max-w-2xl text-sm text-ink/65">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Manuais e Processos · Franqueadora</p>
+          <h1 className="text-2xl font-bold text-ink">Gestão da trilha de manuais</h1>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted">
             Defina a ordem em que os manuais abrem para as unidades e o tempo mínimo de cada um. Acompanhe quem já concluiu.
           </p>
         </div>
-        <div className="flex rounded-xl border border-line bg-white p-1" role="tablist" aria-label="Seções da gestão">
+        <div className="flex rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="Seções da gestão">
           {(['ordem', 'progresso'] as Aba[]).map((item) => (
             <button
               key={item}
@@ -156,7 +156,7 @@ export function GestaoTrilhaPage() {
               role="tab"
               aria-selected={aba === item}
               onClick={() => setAba(item)}
-              className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', aba === item ? 'bg-ink text-white' : 'text-ink/60 hover:text-ink')}
+              className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', aba === item ? 'bg-ink text-white' : 'text-muted hover:text-ink')}
             >
               {item === 'ordem' ? 'Ordem e tempo' : 'Progresso'}
             </button>
@@ -168,10 +168,10 @@ export function GestaoTrilhaPage() {
         <Link to="/admin/documento/novo" className="rounded-xl bg-brand-dark px-3 py-2 text-sm font-semibold text-white">
           Novo documento
         </Link>
-        <Link to="/biblioteca" className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+        <Link to="/biblioteca" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
           Editar na biblioteca
         </Link>
-        <Link to="/admin/categorias" className="rounded-xl border border-line bg-white px-3 py-2 text-sm font-semibold">
+        <Link to="/admin/categorias" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
           Gerenciar categorias
         </Link>
       </nav>
@@ -181,11 +181,11 @@ export function GestaoTrilhaPage() {
       {carregando ? <Carregando texto="Carregando a trilha…" /> : null}
 
       {!carregando && aba === 'ordem' ? (
-        <section className="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">
+        <section className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
           <div className="flex flex-col gap-3 border-b border-line p-5 md:flex-row md:items-end md:justify-between">
             <div>
               <h2 className="text-lg font-bold text-ink">Ordem e tempo mínimo</h2>
-              <p className="text-xs text-ink/55">
+              <p className="text-xs text-muted">
                 {ativos.length} {ativos.length === 1 ? 'manual ativo' : 'manuais ativos'} · tempo total{' '}
                 {formatarDuracao(ativos.reduce((soma, i) => soma + i.tempoMinimoSeg, 0))}. O sugerido soma a leitura (200 palavras por minuto) e o vídeo.
               </p>
@@ -223,11 +223,11 @@ export function GestaoTrilhaPage() {
                 return (
                   <li key={item.documentoId} className={cx('grid gap-3 px-5 py-4 lg:grid-cols-[auto_minmax(0,1fr)_12rem_7rem_13rem_auto] lg:items-center', !item.ativo && 'bg-paper/50')}>
                     <div className="flex items-center gap-1">
-                      <span className="w-7 text-center text-sm font-black text-ink/40">{indice + 1}</span>
-                      <button type="button" onClick={() => mover(indice, -1)} disabled={indice === 0} className="rounded-lg p-1.5 text-ink/50 hover:bg-paper disabled:opacity-30" aria-label={`Subir ${item.titulo}`}>
+                      <span className="w-7 text-center text-sm font-bold text-muted">{indice + 1}</span>
+                      <button type="button" onClick={() => mover(indice, -1)} disabled={indice === 0} className="rounded-lg p-1.5 text-muted hover:bg-paper disabled:opacity-30" aria-label={`Subir ${item.titulo}`}>
                         <ArrowUp className="h-4 w-4" />
                       </button>
-                      <button type="button" onClick={() => mover(indice, 1)} disabled={indice === itens.length - 1} className="rounded-lg p-1.5 text-ink/50 hover:bg-paper disabled:opacity-30" aria-label={`Descer ${item.titulo}`}>
+                      <button type="button" onClick={() => mover(indice, 1)} disabled={indice === itens.length - 1} className="rounded-lg p-1.5 text-muted hover:bg-paper disabled:opacity-30" aria-label={`Descer ${item.titulo}`}>
                         <ArrowDown className="h-4 w-4" />
                       </button>
                     </div>
@@ -240,11 +240,11 @@ export function GestaoTrilhaPage() {
                       ) : null}
                       {semDocumento ? <p className="text-xs text-red-700">Documento não encontrado ou sem permissão de leitura.</p> : null}
                     </div>
-                    <label className="text-xs text-ink/60">
+                    <label className="text-xs text-muted">
                       Etapa
                       <input className={cx(inputClass, 'mt-1 py-1.5 text-xs')} maxLength={80} value={item.etapa} onChange={(e) => mudar(indice, { etapa: e.target.value })} />
                     </label>
-                    <label className="text-xs text-ink/60">
+                    <label className="text-xs text-muted">
                       Vídeo (min)
                       <input
                         type="number"
@@ -255,7 +255,7 @@ export function GestaoTrilhaPage() {
                         onChange={(e) => mudar(indice, { videoMinutos: Math.max(0, Math.min(600, Number(e.target.value) || 0)) })}
                       />
                     </label>
-                    <div className="text-xs text-ink/60">
+                    <div className="text-xs text-muted">
                       <label htmlFor={`tempo-${item.documentoId}`}>Tempo mínimo (min)</label>
                       <div className="mt-1 flex items-center gap-1.5">
                         <input
@@ -298,7 +298,7 @@ export function GestaoTrilhaPage() {
       {!carregando && aba === 'progresso' ? (
         <section className="space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
-            <p className="text-sm text-ink/60">
+            <p className="text-sm text-muted">
               {resumo.length} unidade{resumo.length === 1 ? '' : 's'} com alguém na trilha · {ativos.length} manuais ativos. Pessoas que ainda não abriram nenhum manual não aparecem.
             </p>
             <label className="text-xs font-medium text-ink/70" htmlFor="filtro-unidade">
@@ -315,16 +315,16 @@ export function GestaoTrilhaPage() {
           </div>
           {!unidadesVisiveis.length ? <Vazio titulo="Ninguém começou a trilha ainda" texto="Assim que alguém de uma unidade abrir o primeiro manual, o progresso aparece aqui." /> : null}
           {unidadesVisiveis.map((unidade) => (
-            <article key={unidade.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">
+            <article key={unidade.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
               <div className="flex flex-wrap items-center gap-4 border-b border-line px-5 py-4">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-bold text-ink">{unidade.unidadeNome}</h2>
-                  <p className="text-xs text-ink/55">
+                  <p className="text-xs text-muted">
                     {unidade.pessoas.length} pessoa{unidade.pessoas.length === 1 ? '' : 's'} · {unidade.concluidos} de {unidade.possiveis} manuais concluídos
                   </p>
                 </div>
                 <div className="w-48">
-                  <div className="flex justify-between text-xs font-semibold text-ink/60">
+                  <div className="flex justify-between text-xs font-semibold text-muted">
                     <span>Unidade</span>
                     <span>{unidade.percentual}%</span>
                   </div>
@@ -336,7 +336,7 @@ export function GestaoTrilhaPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-line bg-paper/60 text-[11px] font-bold uppercase tracking-wider text-ink/50">
+                    <tr className="border-b border-line bg-paper/60 text-[11px] font-bold uppercase tracking-wider text-muted">
                       <th className="px-5 py-3">Pessoa</th>
                       <th className="px-4 py-3">Concluídos</th>
                       <th className="px-4 py-3">Último concluído</th>
@@ -351,8 +351,8 @@ export function GestaoTrilhaPage() {
                           {p.concluidos} / {p.total}
                           {p.total && p.concluidos === p.total ? <span className="ml-2"><Selo tom="lima">Completa</Selo></span> : null}
                         </td>
-                        <td className="px-4 py-3 text-ink/65">{p.ultimoConcluido || '—'}</td>
-                        <td className="px-5 py-3 text-right text-ink/65">{p.reinicios}</td>
+                        <td className="px-4 py-3 text-muted">{p.ultimoConcluido || '—'}</td>
+                        <td className="px-5 py-3 text-right text-muted">{p.reinicios}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -363,7 +363,7 @@ export function GestaoTrilhaPage() {
         </section>
       ) : null}
 
-      <p className="text-center text-[11px] text-ink/35">Módulo 4 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
+      <p className="text-center text-[11px] text-muted">Módulo 4 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
     </div>
   )
 }

@@ -12,7 +12,7 @@ function Checks({ valor, teto, onChange }: { valor: string[]; teto: string[]; on
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {opcoes.map((modulo) => (
-        <label key={modulo.slug} className="flex items-center gap-2 rounded-xl border border-line bg-white px-3 py-2 text-sm">
+        <label key={modulo.slug} className="flex items-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-sm">
           <input
             type="checkbox"
             checked={valor.includes(modulo.slug)}
@@ -65,15 +65,15 @@ export function FranqueadoraPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <header>
-        <p className="text-sm font-medium text-ink/50">Gestão da Franqueadora</p>
-        <h1 className="text-2xl font-extrabold">Unidades franqueadas</h1>
-        <p className="text-sm text-ink/60">Cadastre a unidade, o responsável e os módulos que ela pode ver.</p>
+      <header className="cabecalho-pagina">
+        <p className="text-sm font-medium text-muted">Gestão da Franqueadora</p>
+        <h1 className="text-2xl font-bold">Unidades franqueadas</h1>
+        <p className="text-sm text-muted">Cadastre a unidade, o responsável e os módulos que ela pode ver.</p>
       </header>
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {criada ? <SenhaCriada email={criada.email} senha={criada.senha} /> : null}
       <form
-        className="space-y-3 rounded-2xl border border-line bg-white p-4"
+        className="space-y-3 rounded-2xl border border-line bg-surface p-4"
         onSubmit={(evento) => {
           evento.preventDefault()
           if (!user) return
@@ -107,10 +107,10 @@ export function FranqueadoraPage() {
       </form>
       <ul className="space-y-2">
         {unidades.map((unidade) => (
-          <li key={unidade.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white px-4 py-3">
+          <li key={unidade.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
             <span>
               <span className="block font-semibold">{unidade.nome}</span>
-              <span className="text-xs text-ink/50">{unidade.responsavel} · {unidade.email} · {unidade.cidade} · {unidade.ativo ? 'Ativa' : 'Inativa'}</span>
+              <span className="text-xs text-muted">{unidade.responsavel} · {unidade.email} · {unidade.cidade} · {unidade.ativo ? 'Ativa' : 'Inativa'}</span>
             </span>
             <span className="flex gap-2">
               <Button variant="secondary" onClick={() => { setEditando(unidade); setCriada(null); setForm({ nome: unidade.nome, cidade: unidade.cidade, responsavel: unidade.responsavel, email: unidade.email, modulos: unidade.modulosLiberados }) }}>Editar</Button>
@@ -144,15 +144,15 @@ export function GestaoUsuariosPage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <header>
-        <p className="text-sm font-medium text-ink/50">Gestão de Usuários</p>
-        <h1 className="text-2xl font-extrabold">Equipe da franqueadora</h1>
-        <p className="text-sm text-ink/60">Cada pessoa vê só os módulos marcados. Gestão da Franqueadora e esta tela ficam só com o admin.</p>
+      <header className="cabecalho-pagina">
+        <p className="text-sm font-medium text-muted">Gestão de Usuários</p>
+        <h1 className="text-2xl font-bold">Equipe da franqueadora</h1>
+        <p className="text-sm text-muted">Cada pessoa vê só os módulos marcados. Gestão da Franqueadora e esta tela ficam só com o admin.</p>
       </header>
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {criada ? <SenhaCriada email={criada.email} senha={criada.senha} /> : null}
       <form
-        className="space-y-3 rounded-2xl border border-line bg-white p-4"
+        className="space-y-3 rounded-2xl border border-line bg-surface p-4"
         onSubmit={(evento) => {
           evento.preventDefault()
           if (!user) return
@@ -184,11 +184,11 @@ export function GestaoUsuariosPage() {
       </form>
       <ul className="space-y-2">
         {equipe.map((pessoa) => (
-          <li key={pessoa.uid} className="rounded-2xl border border-line bg-white px-4 py-3">
+          <li key={pessoa.uid} className="rounded-2xl border border-line bg-surface px-4 py-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span>
                 <span className="font-semibold">{pessoa.nome}</span>
-                <span className="block text-xs text-ink/50">{pessoa.email} · {pessoa.ativo ? 'Ativo' : 'Inativo'}</span>
+                <span className="block text-xs text-muted">{pessoa.email} · {pessoa.ativo ? 'Ativo' : 'Inativo'}</span>
               </span>
               <Button variant="secondary" onClick={() => void atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo }).then(carregar).catch((falha: unknown) => setErro(mensagemErro(falha)))}>
                 {pessoa.ativo ? 'Desativar' : 'Ativar'}
@@ -224,16 +224,16 @@ export function MinhaEquipePage() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-extrabold">Minha equipe</h1>
-        <p className="text-sm text-ink/60">Cada pessoa acessa só módulos que a unidade já tem. Unidade: {user.unidade || 'não vinculada'}.</p>
+      <header className="cabecalho-pagina">
+        <h1 className="text-2xl font-bold">Minha equipe</h1>
+        <p className="text-sm text-muted">Cada pessoa acessa só módulos que a unidade já tem. Unidade: {user.unidade || 'não vinculada'}.</p>
       </header>
       {!user.unidadeId ? <Aviso tom="erro">Esta conta ainda não está ligada a uma unidade criada pela franqueadora.</Aviso> : null}
       {user.modulosLiberados === undefined ? <Aviso>A franqueadora ainda precisa gravar os módulos desta unidade antes da equipe ser criada.</Aviso> : null}
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {criada ? <SenhaCriada email={criada.email} senha={criada.senha} /> : null}
       <form
-        className="space-y-3 rounded-2xl border border-line bg-white p-4"
+        className="space-y-3 rounded-2xl border border-line bg-surface p-4"
         onSubmit={(evento) => {
           evento.preventDefault()
           if (!subconjunto(form.modulos, teto)) {
@@ -268,9 +268,9 @@ export function MinhaEquipePage() {
       </form>
       <ul className="space-y-2">
         {equipe.map((pessoa) => (
-          <li key={pessoa.uid} className="rounded-2xl border border-line bg-white px-4 py-3">
+          <li key={pessoa.uid} className="rounded-2xl border border-line bg-surface px-4 py-3">
             <div className="flex items-center justify-between gap-2">
-              <span className="font-semibold">{pessoa.nome}<span className="block text-xs font-normal text-ink/50">{pessoa.email}</span></span>
+              <span className="font-semibold">{pessoa.nome}<span className="block text-xs font-normal text-muted">{pessoa.email}</span></span>
               <Button variant="secondary" onClick={() => void atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo, teto }).then(carregar).catch((falha: unknown) => setErro(mensagemErro(falha)))}>
                 {pessoa.ativo ? 'Desativar' : 'Ativar'}
               </Button>

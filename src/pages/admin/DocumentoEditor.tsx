@@ -145,8 +145,10 @@ export default function DocumentoEditor() {
 
   return (
     <div className="mx-auto max-w-4xl space-y-4">
-      <Link to="/admin" className="text-sm text-ink/50">Painel</Link>
-      <h1 className="text-3xl font-extrabold">{novo ? 'Novo documento' : 'Editar documento'}</h1>
+      <header className="cabecalho-pagina">
+        <Link to="/admin" className="text-xs font-semibold uppercase tracking-wider text-brand">Painel</Link>
+        <h1 className="text-3xl font-bold">{novo ? 'Novo documento' : 'Editar documento'}</h1>
+      </header>
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       <Campo label="Título">
         <input className={inputClass} maxLength={120} value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} />
@@ -205,7 +207,7 @@ export default function DocumentoEditor() {
         </label>
       </div>
       <form
-        className="flex flex-col gap-2 rounded-2xl border border-line bg-white p-3 sm:flex-row"
+        className="flex flex-col gap-2 rounded-2xl border border-line bg-surface p-3 sm:flex-row"
         onSubmit={(evento) => {
           evento.preventDefault()
           if (!pedidoIa.trim()) return
@@ -230,7 +232,7 @@ export default function DocumentoEditor() {
             <input className={inputClass} value={form.htmlUrl} onChange={(e) => setForm({ ...form, htmlUrl: e.target.value })} placeholder="https://" />
           </Campo>
           {form.htmlConteudo ? (
-            <iframe title="Prévia" sandbox="allow-scripts" srcDoc={form.htmlConteudo} className="h-80 w-full rounded-2xl border border-line bg-white" />
+            <iframe title="Prévia" sandbox="allow-scripts" srcDoc={form.htmlConteudo} className="h-80 w-full rounded-2xl border border-line bg-surface" />
           ) : null}
         </div>
       )}
@@ -241,7 +243,7 @@ export default function DocumentoEditor() {
       ) : null}
       <section className="space-y-2 rounded-2xl border border-line p-4">
         <h2 className="font-semibold">Anexos por link</h2>
-        <p className="text-xs text-ink/55">Google Drive, YouTube ou qualquer URL. O envio de arquivo pelo Storage permanece desligado no plano Spark.</p>
+        <p className="text-xs text-muted">Google Drive, YouTube ou qualquer URL. O envio de arquivo pelo Storage permanece desligado no plano Spark.</p>
         <div className="grid gap-2 md:grid-cols-[1fr_2fr_auto]">
           <input className={inputClass} placeholder="Nome" value={anexoNome} onChange={(e) => setAnexoNome(e.target.value)} />
           <input className={inputClass} placeholder="https://" value={anexoUrl} onChange={(e) => setAnexoUrl(e.target.value)} />
@@ -286,7 +288,7 @@ export default function DocumentoEditor() {
           ))}
         </ul>
       </section>
-      <p className="text-xs text-ink/45">{htmlParaTexto(form.conteudoHtml).length} caracteres de texto pesquisável.</p>
+      <p className="text-xs text-muted">{htmlParaTexto(form.conteudoHtml).length} caracteres de texto pesquisável.</p>
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" disabled={ocupado} onClick={() => void salvar('rascunho')}>Salvar rascunho</Button>
         <Button disabled={ocupado} onClick={() => void salvar('publicado')}>Publicar</Button>

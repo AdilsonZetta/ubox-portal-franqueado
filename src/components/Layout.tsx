@@ -141,25 +141,26 @@ export function Layout() {
   const miolo = (
     <>
       <Link to="/" className="block w-fit rounded-xl outline-none ring-brand/30 focus-visible:ring-2" aria-label="Módulos">
-        <Logo />
+        <Logo claro />
       </Link>
       <form onSubmit={buscar} className="relative mt-4 shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink/35" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-muted" />
         <input
           id="busca-portal"
+          aria-label="Pergunte ou busque um POP"
           value={consulta}
           onChange={(evento) => setConsulta(evento.target.value)}
           placeholder="Pergunte ou busque um POP"
-          className="w-full rounded-xl border border-line bg-paper py-2.5 pl-9 pr-3 text-sm outline-none ring-brand/30 focus:border-brand focus:bg-white focus:ring-2"
+          className="w-full rounded-xl border border-surface/20 bg-surface/10 py-2.5 pl-9 pr-3 text-sm outline-none ring-brand/30 focus:border-brand focus:bg-surface/10 focus:ring-2"
         />
       </form>
-      <nav className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+      <nav className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
         {GRUPOS.map((grupo) => {
           const doGrupo = MODULOS.filter((modulo) => modulo.grupo === grupo && (ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado)))
           if (!doGrupo.length) return null
           return (
           <div key={grupo}>
-            <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink/35">{grupo}</p>
+            <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted">{grupo}</p>
             <div className="mt-1 space-y-0.5">
               {doGrupo.map((modulo) => {
                 const aberto = expandido === modulo.slug
@@ -169,9 +170,9 @@ export function Layout() {
                     <button
                       type="button"
                       onClick={() => alternarModulo(modulo.slug)}
-                      className={cx('flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm', aberto ? 'bg-paper font-semibold text-ink' : 'text-ink/75 hover:bg-paper')}
+                      className={cx('flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm', aberto ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                     >
-                      <Icone className="h-4 w-4 shrink-0 text-brand" />
+                      <Icone className="h-4 w-4 shrink-0" />
                       <span className="min-w-0 flex-1 truncate">{modulo.nome}</span>
                       {modulo.slug === 'chamados' && pendentes > 0 ? (
                         <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{pendentes}</span>
@@ -179,10 +180,10 @@ export function Layout() {
                       {modulo.slug === 'senhas' && solicitacoesAbertas > 0 ? (
                         <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{solicitacoesAbertas}</span>
                       ) : null}
-                      <ChevronDown className={cx('h-3.5 w-3.5 shrink-0 text-ink/35 transition', aberto && 'rotate-180')} />
+                      <ChevronDown className={cx('h-3.5 w-3.5 shrink-0 transition', aberto && 'rotate-180')} />
                     </button>
                     {aberto ? (
-                      <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-line pl-2">
+                      <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-surface/20 pl-2">
                         {modulo.slug === 'manuais'
                           ? itensManuais
                               .filter((item) => (!item.admin || ehAdmin) && (!item.gestao || gereManuais))
@@ -192,7 +193,7 @@ export function Layout() {
                                   to={item.to}
                                   end={item.fim}
                                   onClick={() => setMenuAberto(false)}
-                                  className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                                  className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                                 >
                                   {item.label}
                                 </NavLink>
@@ -206,26 +207,26 @@ export function Layout() {
                                   key={area.id}
                                   to={`/biblioteca/${area.id}`}
                                   onClick={() => setMenuAberto(false)}
-                                  className={({ isActive }) => cx('flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                                  className={({ isActive }) => cx('flex items-center gap-1.5 rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                                 >
-                                  <Folder className="h-3 w-3 shrink-0 text-brand/80" />
+                                  <Folder className="h-3 w-3 shrink-0" />
                                   <span className="min-w-0 flex-1 truncate">{area.nome.replace(/^\d+\s*/, '')}</span>
-                                  <span className="text-[10px] text-ink/35">{quantidade}</span>
+                                  <span className="text-[10px]">{quantidade}</span>
                                 </NavLink>
                               )
                             })
                           : null}
                         {modulo.slug === 'universidade' ? (
                           <>
-                            <NavLink to="/universidade" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/universidade" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Cursos
                             </NavLink>
                             {podeGerirUniversidade(user, ehAdmin) && !comoFranqueado ? (
-                              <NavLink to="/universidade/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              <NavLink to="/universidade/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                 Gestão da Universidade
                               </NavLink>
                             ) : null}
-                            <NavLink to="/meus-certificados" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/meus-certificados" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Meus certificados
                             </NavLink>
                           </>
@@ -234,18 +235,18 @@ export function Layout() {
                           <>
                             {!(podeGerirChecklist(user, ehAdmin) && !comoFranqueado) ? (
                               <>
-                                <NavLink to="/checklist" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                <NavLink to="/checklist" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                   Rotinas da unidade
                                 </NavLink>
-                                <NavLink to="/checklist/historico" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                <NavLink to="/checklist/historico" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                   Histórico
                                 </NavLink>
-                                <NavLink to="/checklist/nao-conformidades" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                                <NavLink to="/checklist/nao-conformidades" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                   Não conformidades
                                 </NavLink>
                               </>
                             ) : (
-                              <NavLink to="/checklist/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              <NavLink to="/checklist/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                 Gestão do checklist
                               </NavLink>
                             )}
@@ -253,65 +254,65 @@ export function Layout() {
                         ) : null}
                         {modulo.slug === 'estoque' ? (
                           podeGerirEstoque(user, ehAdmin) && !comoFranqueado ? (
-                            <NavLink to="/estoque/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/estoque/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Gestão do estoque
                             </NavLink>
                           ) : (
-                            <NavLink to="/estoque" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/estoque" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Estoque da unidade
                             </NavLink>
                           )
                         ) : null}
                         {modulo.slug === 'crm' ? (
                           podeGerirCrm(user, ehAdmin) && !comoFranqueado ? (
-                            <NavLink to="/crm/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/crm/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Desempenho da rede
                             </NavLink>
                           ) : (
-                            <NavLink to="/crm" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/crm" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Funil de locação
                             </NavLink>
                           )
                         ) : null}
                         {modulo.slug === 'cliente' ? (
-                          <NavLink to="/clientes" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                          <NavLink to="/clientes" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                             Clientes e contratos
                           </NavLink>
                         ) : null}
                         {modulo.slug === 'auditoria' ? (
                           <>
-                            <NavLink to="/auditoria" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/auditoria" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Auditorias da rede
                             </NavLink>
-                            <NavLink to="/auditoria/nova" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/auditoria/nova" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Nova auditoria
                             </NavLink>
-                            <Link to="/auditoria?aba=modelos" onClick={() => setMenuAberto(false)} className="block rounded-md px-2 py-1 text-[13px] text-ink/70 hover:bg-paper">
+                            <Link to="/auditoria?aba=modelos" onClick={() => setMenuAberto(false)} className="block rounded-[10px] px-2 py-2 text-[13px] text-line-strong hover:bg-surface/10 hover:text-surface">
                               Modelos
                             </Link>
-                            <Link to="/auditoria?aba=acoes" onClick={() => setMenuAberto(false)} className="block rounded-md px-2 py-1 text-[13px] text-ink/70 hover:bg-paper">
+                            <Link to="/auditoria?aba=acoes" onClick={() => setMenuAberto(false)} className="block rounded-[10px] px-2 py-2 text-[13px] text-line-strong hover:bg-surface/10 hover:text-surface">
                               Planos de ação
                             </Link>
                           </>
                         ) : null}
                         {modulo.slug === 'acompanhamento' ? (
-                          <NavLink to="/acompanhamento" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                          <NavLink to="/acompanhamento" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                             Visão da rede
                           </NavLink>
                         ) : null}
                         {modulo.slug === 'marketing' ? (
                           <>
-                            <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Materiais
                             </NavLink>
-                            <NavLink to="/marketing/calendario" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/marketing/calendario" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Calendário
                             </NavLink>
-                            <NavLink to="/marketing/pedidos" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                            <NavLink to="/marketing/pedidos" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Pedidos de peça
                             </NavLink>
                             {podeGerirMarketing(user, ehAdmin) && !comoFranqueado ? (
-                              <NavLink to="/marketing/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              <NavLink to="/marketing/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                 Gestão do marketing
                               </NavLink>
                             ) : null}
@@ -323,14 +324,14 @@ export function Layout() {
                               to="/senhas"
                               end
                               onClick={() => setMenuAberto(false)}
-                              className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                              className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                             >
                               Cofre da unidade
                             </NavLink>
                             <NavLink
                               to="/senhas/solicitacoes"
                               onClick={() => setMenuAberto(false)}
-                              className={({ isActive }) => cx('flex items-center justify-between rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                              className={({ isActive }) => cx('flex items-center justify-between rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                             >
                               <span>Solicitações</span>
                               {solicitacoesAbertas > 0 ? (
@@ -340,14 +341,14 @@ export function Layout() {
                             <NavLink
                               to="/senhas/permissoes"
                               onClick={() => setMenuAberto(false)}
-                              className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}
+                              className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                             >
                               Permissões
                             </NavLink>
                           </>
                         ) : null}
                         {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'estoque' && modulo.slug !== 'crm' && modulo.slug !== 'cliente' && modulo.slug !== 'auditoria' && modulo.slug !== 'acompanhamento' ? (
-                          <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                          <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                             Abrir
                           </NavLink>
                         ) : null}
@@ -357,7 +358,7 @@ export function Layout() {
                                 key={nome}
                                 to={`/modulos/${modulo.slug}`}
                                 onClick={() => setMenuAberto(false)}
-                                className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-ink/35 hover:bg-paper"
+                                className="flex items-center gap-1.5 rounded-[10px] px-2 py-2 text-[13px] text-sidebar-muted hover:bg-surface/10"
                               >
                                 <span className="min-w-0 flex-1 truncate">{nome}</span>
                                 <span className="shrink-0 rounded bg-ink/5 px-1 text-[9px] font-bold uppercase tracking-wide">Em breve</span>
@@ -375,30 +376,30 @@ export function Layout() {
         })}
       </nav>
       {user?.papel === 'franqueado' && !comoFranqueado ? (
-        <NavLink to="/minha-equipe" onClick={() => setMenuAberto(false)} className="mt-3 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
+        <NavLink to="/minha-equipe" onClick={() => setMenuAberto(false)} className="mt-3 block shrink-0 rounded-xl border border-surface/20 px-3 py-2 text-sm font-semibold hover:bg-surface/10">
           Minha equipe
         </NavLink>
       ) : null}
       {(user?.papel === 'franqueado' || user?.papel === 'equipe_franqueado') && !comoFranqueado ? (
-        <NavLink to="/auditorias" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
+        <NavLink to="/auditorias" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-surface/20 px-3 py-2 text-sm font-semibold hover:bg-surface/10">
           Auditorias da unidade
         </NavLink>
       ) : null}
       {(user?.papel === 'franqueado' || user?.papel === 'equipe_franqueado') && !comoFranqueado ? (
-        <NavLink to="/meu-acompanhamento" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-line px-3 py-2 text-sm font-semibold hover:bg-paper">
+        <NavLink to="/meu-acompanhamento" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-surface/20 px-3 py-2 text-sm font-semibold hover:bg-surface/10">
           Acompanhamento
         </NavLink>
       ) : null}
       {user?.papel === 'admin' ? (
         <div className="mt-3 shrink-0 space-y-2">
-          <button type="button" onClick={alternar} className="w-full rounded-xl border border-brand/40 px-3 py-2 text-left text-sm font-semibold text-brand-dark hover:bg-brand/10">
+          <button type="button" onClick={alternar} className="w-full rounded-xl border border-brand/40 px-3 py-2 text-left text-sm font-semibold text-brand-soft hover:bg-surface/10">
             {comoFranqueado ? 'Voltar para franqueadora' : 'Ver como franqueado'}
           </button>
           {comoFranqueado ? (
             <select
               value={simulado?.uid ?? ''}
               onChange={(evento) => escolher(evento.target.value)}
-              className="w-full rounded-xl border border-line bg-white px-2 py-2 text-sm"
+              className="w-full rounded-xl border border-surface/20 bg-graphite px-2 py-2 text-sm"
             >
               <option value="">Escolha o franqueado</option>
               {franqueados.map((pessoa) => (
@@ -410,12 +411,12 @@ export function Layout() {
           ) : null}
         </div>
       ) : null}
-      <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-line pt-3">
+      <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-surface/20 pt-3">
         <NavLink to="/perfil" className="min-w-0 flex-1" onClick={() => setMenuAberto(false)}>
           <span className="block truncate text-sm font-semibold">{user?.nome}</span>
-          <span className="block truncate text-[11px] text-ink/45">{ehAdmin ? 'Franqueadora' : user?.unidade || 'Franqueado'}</span>
+          <span className="block truncate text-[11px] text-sidebar-muted">{ehAdmin ? 'Franqueadora' : user?.unidade || 'Franqueado'}</span>
         </NavLink>
-        <button onClick={() => void sair()} className="rounded-lg p-2 text-ink/50 hover:bg-paper" aria-label="Sair">
+        <button onClick={() => void sair()} className="rounded-lg p-2 text-line-strong hover:bg-surface/10" aria-label="Sair">
           <LogOut className="h-4 w-4" />
         </button>
       </div>
@@ -424,12 +425,12 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[272px] flex-col border-r border-line bg-white px-3 py-4 lg:flex">{miolo}</aside>
+      <aside className="fixed inset-y-0 left-0 z-30 portal-lateral hidden w-[272px] flex-col bg-graphite px-4 py-5 text-surface lg:flex">{miolo}</aside>
       {menuAberto ? (
         <div className="fixed inset-0 z-40 lg:hidden">
           <button className="absolute inset-0 bg-ink/40" aria-label="Fechar menu" onClick={() => setMenuAberto(false)} />
-          <aside className="absolute inset-y-0 left-0 flex w-[300px] flex-col bg-white px-3 py-4 shadow-xl">
-            <button className="absolute right-3 top-4" onClick={() => setMenuAberto(false)} aria-label="Fechar">
+          <aside className="absolute inset-y-0 left-0 portal-lateral flex w-[min(300px,100%)] flex-col bg-graphite px-4 py-5 text-surface shadow-xl">
+            <button className="absolute right-3 top-4 grid size-11 place-items-center rounded-[10px]" onClick={() => setMenuAberto(false)} aria-label="Fechar">
               <X className="h-5 w-5" />
             </button>
             {miolo}
@@ -437,21 +438,21 @@ export function Layout() {
         </div>
       ) : null}
       <div className="lg:pl-[272px]">
-        <header className="no-print sticky top-0 z-20 flex items-center gap-3 border-b border-line bg-white/90 px-4 py-3 backdrop-blur lg:hidden">
-          <button className="rounded-lg p-2" onClick={() => setMenuAberto(true)} aria-label="Abrir menu">
+        <header className="no-print sticky top-0 z-20 flex items-center gap-2 bg-graphite px-3 py-2 text-surface lg:hidden">
+          <button className="grid size-11 place-items-center rounded-[10px]" onClick={() => setMenuAberto(true)} aria-label="Abrir menu">
             <Menu className="h-5 w-5" />
           </button>
-          <Link to="/" className="flex items-center gap-2" aria-label="Módulos">
+          <Link to="/" className="flex min-h-11 items-center gap-2" aria-label="Módulos">
             <Logo compacto />
             <span className="text-sm font-semibold">Portal Ubox</span>
           </Link>
-          <NavLink to="/notificacoes" className="relative ml-auto rounded-lg p-2" aria-label="Notificações">
+          <NavLink to="/notificacoes" className="relative ml-auto grid size-11 place-items-center rounded-[10px]" aria-label="Notificações">
             <Bell className="h-4 w-4" />
-            {naoLidos > 0 ? <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-brand" /> : null}
+            {naoLidos > 0 ? <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-lime" /> : null}
           </NavLink>
         </header>
         <div className="no-print hidden items-center justify-end gap-2 px-8 pt-4 lg:flex">
-          <NavLink to="/notificacoes" className="relative inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-sm text-ink/70">
+          <NavLink to="/notificacoes" className="relative inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-1.5 text-sm text-ink-soft">
             <Bell className="h-4 w-4" />
             Avisos
             {naoLidos > 0 ? <span className="rounded-full bg-brand px-1.5 text-[11px] font-bold text-white">{naoLidos}</span> : null}
@@ -460,12 +461,12 @@ export function Layout() {
         {comoFranqueado ? (
           <div className="no-print flex items-center justify-between gap-3 bg-brand px-4 py-2 text-sm font-semibold text-white md:px-8">
             <span>Visualizando como franqueado{simulado ? ` · ${simulado.unidade || simulado.nome}` : ''}</span>
-            <button type="button" onClick={alternar} className="rounded-lg bg-white px-3 py-1 text-brand-dark">
+            <button type="button" onClick={alternar} className="rounded-lg bg-surface px-3 py-1 text-brand-dark">
               Voltar para franqueadora
             </button>
           </div>
         ) : null}
-        <main className="px-4 py-5 md:px-8 md:py-6">
+        <main className="portal-conteudo min-w-0 px-4 py-5 md:px-8 md:py-6">
           <Outlet />
         </main>
       </div>

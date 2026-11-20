@@ -166,8 +166,8 @@ export default function ImportarConteudo() {
   const bloqueado = lendo || importando
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-extrabold">Importar pacote de conteúdo</h1>
+      <header className="cabecalho-pagina">
+        <h1 className="text-3xl font-bold">Importar pacote de conteúdo</h1>
         <p className="mt-1 text-sm text-ink-soft">Revise os itens e as ações antes de gravar o conteúdo da rede.</p>
       </header>
 

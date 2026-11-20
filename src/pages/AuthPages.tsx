@@ -2,6 +2,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Logo } from '../components/Logo'
+import { Textura } from '../components/Textura'
 import { Aviso, Button, Campo, inputClass } from '../components/ui'
 import { firebaseConfigured } from '../lib/firebase'
 import { useAuth } from '../lib/auth'
@@ -9,14 +10,24 @@ import { mensagemErro } from '../lib/errors'
 
 function Moldura({ children }: { children: ReactNode }) {
   return (
-    <div className="flex min-h-screen flex-col bg-paper">
-      <header className="flex items-center justify-between px-6 py-5">
-        <Logo />
-        <span className="text-xs text-ink/40">Base da rede Ubox</span>
+    <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-surface md:grid-cols-2 md:grid-rows-1">
+      <header className="relative flex min-w-0 flex-col bg-graphite px-6 py-5 text-surface md:justify-between md:px-10 md:pb-28 md:pt-10 xl:px-16">
+        <div className="flex flex-wrap items-center justify-between gap-3 md:block">
+          <Logo claro />
+          <span className="text-xs font-medium text-line-strong md:mt-8 md:block">Base da rede Ubox</span>
+        </div>
+        <div className="my-auto hidden max-w-xl py-12 md:block">
+          <h1 className="text-4xl font-bold leading-tight xl:text-6xl">Tudo da sua unidade UBOX em um só lugar.</h1>
+          <p className="mt-5 max-w-md text-base font-light leading-relaxed text-line-strong">
+            Consulte manuais, acompanhe as rotinas da unidade e acesse os treinamentos da rede.
+          </p>
+        </div>
+        <Textura className="absolute inset-x-0 bottom-0 hidden h-20 w-full md:block" />
       </header>
-      <div className="flex flex-1 items-center justify-center px-4 pb-16">
-        <div className="rise w-full max-w-md rounded-3xl border border-line bg-white p-6 shadow-sm md:p-8">{children}</div>
-      </div>
+      <main className="flex min-w-0 items-center justify-center px-6 py-10 md:px-10">
+        <div className="rise w-full max-w-md space-y-1 wrap-anywhere">{children}</div>
+      </main>
+      <Textura className="h-7 w-full md:hidden" />
     </div>
   )
 }
@@ -24,8 +35,8 @@ function Moldura({ children }: { children: ReactNode }) {
 export function ConfigPendentePage() {
   return (
     <Moldura>
-      <h2 className="text-2xl font-extrabold">Configuração do Firebase pendente</h2>
-      <p className="mt-3 text-sm leading-relaxed text-ink/70">
+      <h2 className="text-2xl font-bold">Configuração do Firebase pendente</h2>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
         O portal abre, mas ainda não fala com o Firebase. Preencha <code>src/firebaseConfig.ts</code> ou as variáveis{' '}
         <code>VITE_FIREBASE_API_KEY</code>, <code>VITE_FIREBASE_AUTH_DOMAIN</code>, <code>VITE_FIREBASE_PROJECT_ID</code>,{' '}
         <code>VITE_FIREBASE_STORAGE_BUCKET</code>, <code>VITE_FIREBASE_MESSAGING_SENDER_ID</code> e <code>VITE_FIREBASE_APP_ID</code>.
@@ -59,8 +70,8 @@ export function EntrarPage() {
 
   return (
     <Moldura>
-      <h2 className="text-2xl font-extrabold">Entrar</h2>
-      <p className="mt-1 text-sm text-ink/65">Use o e-mail cadastrado na franqueadora.</p>
+      <h2 className="text-2xl font-bold">Entrar</h2>
+      <p className="mt-1 text-sm text-muted">Use o e-mail cadastrado na franqueadora.</p>
       <form onSubmit={enviar} className="mt-6 space-y-4">
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
         <Campo label="E-mail">
@@ -78,7 +89,7 @@ export function EntrarPage() {
           Esqueci a senha
         </Link>
       </p>
-      <p className="mt-2 text-sm text-ink/70">
+      <p className="mt-2 text-sm text-muted">
         Ainda não tem acesso?{' '}
         <Link to="/cadastro" className="font-semibold text-ink">
           Criar conta
@@ -113,8 +124,8 @@ export function CadastroPage() {
 
   return (
     <Moldura>
-      <h2 className="text-2xl font-extrabold">Criar conta</h2>
-      <p className="mt-1 text-sm text-ink/65">A franqueadora aprova o acesso antes da biblioteca abrir.</p>
+      <h2 className="text-2xl font-bold">Criar conta</h2>
+      <p className="mt-1 text-sm text-muted">A franqueadora aprova o acesso antes da biblioteca abrir.</p>
       <form onSubmit={enviar} className="mt-6 space-y-4">
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
         <Campo label="Nome completo">
@@ -170,7 +181,7 @@ export function RecuperarPage() {
 
   return (
     <Moldura>
-      <h2 className="text-2xl font-extrabold">Recuperar senha</h2>
+      <h2 className="text-2xl font-bold">Recuperar senha</h2>
       <form onSubmit={enviar} className="mt-6 space-y-4">
         {erro ? <div role="alert"><Aviso tom="erro">{erro}</Aviso></div> : null}
         {ok ? <Aviso tom="ok">Enviamos o link de redefinição para o seu e-mail.</Aviso> : null}
@@ -217,8 +228,8 @@ export function NovaSenhaPage() {
 
   return (
     <Moldura>
-      <h2 className="text-2xl font-extrabold">Criar nova senha</h2>
-      <p className="mt-2 text-sm text-ink/60">Escolha a senha que você vai usar para entrar no portal.</p>
+      <h2 className="text-2xl font-bold">Criar nova senha</h2>
+      <p className="mt-2 text-sm text-muted">Escolha a senha que você vai usar para entrar no portal.</p>
       <form onSubmit={enviar} className="mt-6 space-y-4">
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
         <Campo label="Nova senha">
@@ -245,8 +256,8 @@ export function AguardandoPage() {
   const recusado = status === 'rejected' || user?.recusado
   return (
     <Moldura>
-      <h2 className="text-2xl font-extrabold">{recusado ? 'Cadastro não aprovado' : 'Aguardando aprovação'}</h2>
-      <p className="mt-3 text-sm leading-relaxed text-ink/70">
+      <h2 className="text-2xl font-bold">{recusado ? 'Cadastro não aprovado' : 'Aguardando aprovação'}</h2>
+      <p className="mt-3 text-sm leading-relaxed text-muted">
         {recusado
           ? 'A franqueadora não liberou este cadastro. Fale com o time Ubox se isso for um engano.'
           : `${user?.nome ?? 'Sua conta'} está na fila da franqueadora. Quando o acesso for liberado, a biblioteca abre neste mesmo login.`}
@@ -277,8 +288,8 @@ export function CompletarPage() {
 
   return (
     <Moldura>
-      <h2 className="text-2xl font-extrabold">Concluir cadastro</h2>
-      <p className="mt-1 text-sm text-ink/65">Sua conta existe, e o perfil da franquia ainda precisa ser gravado.</p>
+      <h2 className="text-2xl font-bold">Concluir cadastro</h2>
+      <p className="mt-1 text-sm text-muted">Sua conta existe, e o perfil da franquia ainda precisa ser gravado.</p>
       <form onSubmit={enviar} className="mt-6 space-y-4">
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
         <Campo label="Nome">

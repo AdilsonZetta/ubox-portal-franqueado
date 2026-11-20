@@ -181,16 +181,16 @@ export function GestaoUniversidadePage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="cabecalho-pagina flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Universidade UBOX · Franqueadora</p>
-          <h1 className="text-2xl font-black text-ink">Gestão da Universidade</h1>
-          <p className="mt-0.5 max-w-2xl text-sm text-ink/65">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Universidade UBOX · Franqueadora</p>
+          <h1 className="text-2xl font-bold text-ink">Gestão da Universidade</h1>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted">
             Monte cursos com aulas da trilha de manuais, escreva a prova com a nota mínima e acompanhe os resultados por unidade e pessoa.
             O gabarito fica guardado à parte e só a franqueadora lê.
           </p>
         </div>
-        <div className="flex rounded-xl border border-line bg-white p-1" role="tablist" aria-label="Seções da gestão">
+        <div className="flex rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="Seções da gestão">
           {(['cursos', 'resultados'] as Aba[]).map((item) => (
             <button
               key={item}
@@ -198,7 +198,7 @@ export function GestaoUniversidadePage() {
               role="tab"
               aria-selected={aba === item}
               onClick={() => setAba(item)}
-              className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', aba === item ? 'bg-ink text-white' : 'text-ink/60 hover:text-ink')}
+              className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', aba === item ? 'bg-ink text-white' : 'text-muted hover:text-ink')}
             >
               {item === 'cursos' ? 'Cursos e provas' : 'Resultados'}
             </button>
@@ -216,20 +216,20 @@ export function GestaoUniversidadePage() {
             <Button type="button" variant="secondary" className="w-full" onClick={() => abrir('')}>
               <Plus className="h-4 w-4" aria-hidden="true" /> Novo curso
             </Button>
-            {!cursos.length ? <p className="text-sm text-ink/55">Nenhum curso ainda.</p> : null}
+            {!cursos.length ? <p className="text-sm text-muted">Nenhum curso ainda.</p> : null}
             {cursos.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 onClick={() => abrir(c.id)}
-                className={cx('block w-full rounded-2xl border bg-white p-3 text-left', selecionado === c.id && curso?.id ? 'border-brand' : 'border-line hover:border-ink/30')}
+                className={cx('block w-full rounded-2xl border bg-surface p-3 text-left', selecionado === c.id && curso?.id ? 'border-brand' : 'border-line hover:border-ink/30')}
               >
                 <span className="flex flex-wrap gap-1.5">
                   {c.publicado ? <Selo tom="lima">Publicado</Selo> : <Selo tom="alerta">Rascunho</Selo>}
                   {provas.get(c.id) ? <Selo>{provas.get(c.id)!.publicado ? `Prova v${provas.get(c.id)!.versao}` : 'Prova em rascunho'}</Selo> : <Selo>Sem prova</Selo>}
                 </span>
                 <span className="mt-1 block font-semibold">{c.titulo}</span>
-                <span className="text-xs text-ink/50">{c.aulas.length} aula{c.aulas.length === 1 ? '' : 's'}</span>
+                <span className="text-xs text-muted">{c.aulas.length} aula{c.aulas.length === 1 ? '' : 's'}</span>
               </button>
             ))}
           </aside>
@@ -238,7 +238,7 @@ export function GestaoUniversidadePage() {
             <Vazio titulo="Escolha um curso" texto="Ou crie um novo para começar." />
           ) : (
             <div className="space-y-5">
-              <section className="space-y-4 rounded-3xl border border-line bg-white p-5 shadow-sm">
+              <section className="space-y-4 rounded-3xl border border-line bg-surface p-5 shadow-sm">
                 <h2 className="text-lg font-bold">{curso.id ? 'Curso' : 'Novo curso'}</h2>
                 <Campo label="Título">
                   <input className={inputClass} value={curso.titulo} maxLength={120} onChange={(e) => setCurso({ ...curso, titulo: e.target.value })} />
@@ -284,10 +284,10 @@ export function GestaoUniversidadePage() {
               </section>
 
               {curso.id && prova ? (
-                <section className="space-y-4 rounded-3xl border border-line bg-white p-5 shadow-sm">
+                <section className="space-y-4 rounded-3xl border border-line bg-surface p-5 shadow-sm">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h2 className="text-lg font-bold">Prova e gabarito</h2>
-                    {provas.get(curso.id) ? <span className="text-xs text-ink/50">Versão atual {provas.get(curso.id)!.versao} · por {provas.get(curso.id)!.atualizadoPorNome}</span> : null}
+                    {provas.get(curso.id) ? <span className="text-xs text-muted">Versão atual {provas.get(curso.id)!.versao} · por {provas.get(curso.id)!.atualizadoPorNome}</span> : null}
                   </div>
                   <Campo label="Título da prova">
                     <input className={inputClass} value={prova.titulo} maxLength={120} onChange={(e) => setProva({ ...prova, titulo: e.target.value })} />
@@ -325,7 +325,7 @@ export function GestaoUniversidadePage() {
                               <input className={inputClass} placeholder={`Alternativa ${k + 1}`} value={o} maxLength={300} onChange={(e) => mudarPergunta(i, { opcoes: q.opcoes.map((x, j) => (j === k ? e.target.value : x)) })} />
                               {q.opcoes.length > MIN_OPCOES ? (
                                 <button type="button" aria-label="Remover alternativa" onClick={() => mudarPergunta(i, { opcoes: q.opcoes.filter((_, j) => j !== k), correta: q.correta === k ? -1 : q.correta > k ? q.correta - 1 : q.correta })}>
-                                  <Trash2 className="h-4 w-4 text-ink/40" />
+                                  <Trash2 className="h-4 w-4 text-muted" />
                                 </button>
                               ) : null}
                             </div>
@@ -333,7 +333,7 @@ export function GestaoUniversidadePage() {
                           {q.opcoes.length < MAX_OPCOES ? (
                             <button type="button" className="text-xs font-semibold text-brand-dark" onClick={() => mudarPergunta(i, { opcoes: [...q.opcoes, ''] })}>+ alternativa</button>
                           ) : null}
-                          <p className="text-xs text-ink/50">Marque a bolinha da alternativa correta. Ela vai só para o gabarito protegido.</p>
+                          <p className="text-xs text-muted">Marque a bolinha da alternativa correta. Ela vai só para o gabarito protegido.</p>
                         </fieldset>
                       </li>
                     ))}
@@ -348,7 +348,7 @@ export function GestaoUniversidadePage() {
                   </div>
                 </section>
               ) : curso && !curso.id ? (
-                <p className="text-sm text-ink/55">Salve o curso para escrever a prova.</p>
+                <p className="text-sm text-muted">Salve o curso para escrever a prova.</p>
               ) : null}
             </div>
           )}
@@ -362,7 +362,7 @@ export function GestaoUniversidadePage() {
               <option value="">Todas as unidades</option>
               {resultados.map((u) => <option key={u.unidadeId} value={u.unidadeId}>{u.unidadeNome}</option>)}
             </select>
-            <span className="text-sm text-ink/55">{tentativas.length} tentativa{tentativas.length === 1 ? '' : 's'} na rede</span>
+            <span className="text-sm text-muted">{tentativas.length} tentativa{tentativas.length === 1 ? '' : 's'} na rede</span>
           </div>
           {pendentes.length ? (
             <Aviso>
@@ -380,15 +380,15 @@ export function GestaoUniversidadePage() {
           ) : null}
           {!unidades.length ? <Vazio titulo="Sem resultados ainda" texto="Quando as unidades fizerem as provas, os resultados aparecem aqui." /> : null}
           {unidades.map((u) => (
-            <article key={u.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">
+            <article key={u.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
               <div className="border-b border-line px-5 py-4">
                 <h2 className="text-lg font-bold">{u.unidadeNome}</h2>
-                <p className="text-xs text-ink/55">{u.pessoas.length} pessoa{u.pessoas.length === 1 ? '' : 's'} · {u.aprovados} aprovação{u.aprovados === 1 ? '' : 'ões'} · {u.tentativas} tentativa{u.tentativas === 1 ? '' : 's'}</p>
+                <p className="text-xs text-muted">{u.pessoas.length} pessoa{u.pessoas.length === 1 ? '' : 's'} · {u.aprovados} aprovação{u.aprovados === 1 ? '' : 'ões'} · {u.tentativas} tentativa{u.tentativas === 1 ? '' : 's'}</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead>
-                    <tr className="border-b border-line bg-paper/60 text-[11px] font-bold uppercase tracking-wider text-ink/50">
+                    <tr className="border-b border-line bg-paper/60 text-[11px] font-bold uppercase tracking-wider text-muted">
                       <th className="px-5 py-3">Pessoa</th>
                       <th className="px-4 py-3">Curso</th>
                       <th className="px-4 py-3">Situação</th>
@@ -406,7 +406,7 @@ export function GestaoUniversidadePage() {
                             {c.aprovado ? <Selo tom="lima">Aprovado</Selo> : c.aguardandoReestudo ? <Selo tom="alerta">Em reestudo</Selo> : <Selo>Reprovado</Selo>}
                           </td>
                           <td className="px-4 py-3">{c.melhorNota === null ? '—' : `${c.melhorNota}%`}</td>
-                          <td className="px-5 py-3 text-right text-ink/65">{c.tentativas}{c.ciclos > 1 ? ` (${c.ciclos} ciclos)` : ''}</td>
+                          <td className="px-5 py-3 text-right text-muted">{c.tentativas}{c.ciclos > 1 ? ` (${c.ciclos} ciclos)` : ''}</td>
                         </tr>
                       )),
                     )}
@@ -418,7 +418,7 @@ export function GestaoUniversidadePage() {
         </section>
       ) : null}
 
-      <p className="text-center text-[11px] text-ink/35">Módulo 5 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
+      <p className="text-center text-[11px] text-muted">Módulo 5 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
     </div>
   )
 }

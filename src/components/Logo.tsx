@@ -1,18 +1,28 @@
-export function Logo({ claro = false, compacto = false }: { claro?: boolean; compacto?: boolean }) {
+import principal from '../assets/marca/ubox-logo.svg?url'
+import fundoEscuro from '../assets/marca/ubox-logo-fundo-escuro.svg?url'
+import simbolo from '../assets/marca/ubox-simbolo.svg?url'
+import horizontal from '../assets/marca/ubox-logo-horizontal.svg?url'
+
+const marcas = { claro: principal, escuro: fundoEscuro, simbolo, horizontal }
+
+export function Logo({ claro = false, compacto = false, variante }: {
+  claro?: boolean
+  compacto?: boolean
+  variante?: keyof typeof marcas
+}) {
+  const marca = compacto ? 'simbolo' : variante ?? (claro ? 'escuro' : 'claro')
+  const corLegenda = marca === 'escuro' ? 'text-line-strong' : 'text-muted'
+
   return (
-    <span className="flex items-center gap-2.5">
-      <span className="grid h-9 w-9 place-items-center rounded-lg bg-brand text-white shadow-sm">
-        <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
-          <rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" strokeWidth="1.8" />
-          <path d="M3 9h18" stroke="#9dbe2e" strokeWidth="1.8" />
-        </svg>
-      </span>
-      {compacto ? null : (
-        <span className="leading-tight">
-          <span className={`block text-[15px] font-extrabold tracking-[0.14em] ${claro ? 'text-white' : 'text-ink'}`}>UBOX</span>
-          <span className={`block text-[10px] font-medium uppercase tracking-[0.16em] ${claro ? 'text-white/70' : 'text-ink/55'}`}>
-            Portal do franqueado
-          </span>
+    <span className="inline-flex max-w-full flex-col items-start gap-1.5 py-1">
+      <img
+        src={marcas[marca]}
+        className={marca === 'simbolo' ? 'h-6 w-auto' : marca === 'horizontal' ? 'h-7 w-auto' : 'h-12 w-auto'}
+        alt="UBOX Self Storage"
+      />
+      {marca === 'simbolo' ? null : (
+        <span className={`text-[10px] font-medium uppercase tracking-[0.14em] ${corLegenda}`}>
+          Portal do franqueado
         </span>
       )}
     </span>

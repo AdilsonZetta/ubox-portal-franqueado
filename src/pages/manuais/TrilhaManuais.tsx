@@ -77,17 +77,17 @@ export function TrilhaManuaisPage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="cabecalho-pagina flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Manuais e Processos</p>
-          <h1 className="text-2xl font-black text-ink">Trilha de manuais</h1>
-          <p className="mt-0.5 max-w-2xl text-sm text-ink/65">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Manuais e Processos</p>
+          <h1 className="text-2xl font-bold text-ink">Trilha de manuais</h1>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted">
             Os manuais abrem um de cada vez, na ordem definida pela franqueadora. Cada um tem um tempo mínimo de leitura e, se você
             sair da tela, o cronômetro recomeça.
           </p>
         </div>
         {gestor && !comoFranqueado ? (
-          <Link to="/manuais/gestao" className="inline-flex items-center justify-center rounded-xl border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink hover:border-ink/30">
+          <Link to="/manuais/gestao" className="inline-flex items-center justify-center rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink hover:border-ink/30">
             Gestão da trilha
           </Link>
         ) : null}
@@ -107,18 +107,18 @@ export function TrilhaManuaisPage() {
 
       {todos.length ? (
         <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo da trilha">
-          <article className="rounded-2xl border border-line bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-ink/40">Concluídos</p>
-            <p className="mt-1.5 text-3xl font-black text-ink">
+          <article className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">Concluídos</p>
+            <p className="mt-1.5 text-3xl font-bold text-ink">
               {concluidos}
-              <span className="text-lg font-bold text-ink/35"> / {todos.length}</span>
+              <span className="text-lg font-bold text-muted"> / {todos.length}</span>
             </p>
             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-paper" role="progressbar" aria-valuenow={percentual} aria-valuemin={0} aria-valuemax={100} aria-label="Progresso da trilha">
               <div className="h-full rounded-full bg-lime" style={{ width: `${percentual}%` }} />
             </div>
           </article>
-          <article className="rounded-2xl border border-line bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-ink/40">Próximo manual</p>
+          <article className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">Próximo manual</p>
             <p className="mt-1.5 line-clamp-2 text-sm font-bold text-ink">{proximo ? proximo.titulo : 'Trilha completa'}</p>
             {proximo && fazTrilha(pessoa) && !comoFranqueado ? (
               <Link to={`/manuais/estudo/${proximo.documentoId}`} className="mt-2 inline-block text-xs font-semibold text-brand-dark hover:underline">
@@ -126,17 +126,17 @@ export function TrilhaManuaisPage() {
               </Link>
             ) : null}
           </article>
-          <article className="rounded-2xl border border-line bg-white p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-ink/40">Tempo mínimo restante</p>
-            <p className="mt-1.5 text-3xl font-black text-ink">{formatarDuracao(tempoRestante)}</p>
-            <p className="mt-1 text-xs text-ink/50">Somando os manuais que faltam</p>
+          <article className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">Tempo mínimo restante</p>
+            <p className="mt-1.5 text-3xl font-bold text-ink">{formatarDuracao(tempoRestante)}</p>
+            <p className="mt-1 text-xs text-muted">Somando os manuais que faltam</p>
           </article>
         </section>
       ) : null}
 
       {etapas.map((etapa) => (
-        <section key={etapa.etapa} className="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">
-          <h2 className="border-b border-line bg-paper/60 px-5 py-3 text-sm font-bold uppercase tracking-wider text-ink/55">{etapa.etapa}</h2>
+        <section key={etapa.etapa} className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
+          <h2 className="border-b border-line bg-paper/60 px-5 py-3 text-sm font-bold uppercase tracking-wider text-muted">{etapa.etapa}</h2>
           <ol className="divide-y divide-line">
             {etapa.itens.map((item) => {
               const progresso = meusPorDoc.get(item.documentoId)
@@ -146,7 +146,7 @@ export function TrilhaManuaisPage() {
                   <span
                     className={cx(
                       'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
-                      item.estado === 'concluido' ? 'bg-lime/20 text-lime-dark' : item.estado === 'bloqueado' ? 'bg-paper text-ink/40' : 'bg-brand/10 text-brand-dark',
+                      item.estado === 'concluido' ? 'bg-lime/20 text-lime-dark' : item.estado === 'bloqueado' ? 'bg-paper text-muted' : 'bg-brand/10 text-brand-dark',
                     )}
                     aria-hidden="true"
                   >
@@ -156,7 +156,7 @@ export function TrilhaManuaisPage() {
                     <span className="block font-semibold text-ink">
                       {item.ordem}. {item.titulo}
                     </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/55">
+                    <span className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
                       <span className="inline-flex items-center gap-1">
                         <Clock className="h-3.5 w-3.5" aria-hidden="true" /> mínimo {formatarDuracao(item.tempoMinimoSeg)}
                       </span>
@@ -171,7 +171,7 @@ export function TrilhaManuaisPage() {
                       to={`/manuais/estudo/${item.documentoId}`}
                       className={cx(
                         'rounded-xl px-3 py-2 text-sm font-semibold',
-                        item.estado === 'concluido' ? 'border border-line bg-white text-ink hover:border-ink/30' : 'bg-brand text-white hover:bg-brand-dark',
+                        item.estado === 'concluido' ? 'border border-line bg-surface text-ink hover:border-ink/30' : 'bg-brand text-white hover:bg-brand-dark',
                       )}
                     >
                       {item.estado === 'concluido' ? 'Rever' : item.estado === 'em_andamento' ? 'Continuar' : 'Começar'}
@@ -185,16 +185,16 @@ export function TrilhaManuaisPage() {
       ))}
 
       {!comoFranqueado && user.papel === 'franqueado' && todos.length ? (
-        <section className="overflow-hidden rounded-3xl border border-line bg-white shadow-sm">
+        <section className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
           <div className="border-b border-line px-5 py-4">
             <h2 className="text-lg font-bold text-ink">Progresso da sua equipe</h2>
-            <p className="text-xs text-ink/55">Quem da unidade já começou a trilha. Pessoas que ainda não abriram nenhum manual não aparecem.</p>
+            <p className="text-xs text-muted">Quem da unidade já começou a trilha. Pessoas que ainda não abriram nenhum manual não aparecem.</p>
           </div>
           {resumoEquipe[0]?.pessoas.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-line bg-paper/60 text-[11px] font-bold uppercase tracking-wider text-ink/50">
+                  <tr className="border-b border-line bg-paper/60 text-[11px] font-bold uppercase tracking-wider text-muted">
                     <th className="px-5 py-3">Pessoa</th>
                     <th className="px-4 py-3">Concluídos</th>
                     <th className="px-4 py-3">Último concluído</th>
@@ -208,15 +208,15 @@ export function TrilhaManuaisPage() {
                       <td className="px-4 py-3">
                         {p.concluidos} / {p.total}
                       </td>
-                      <td className="px-4 py-3 text-ink/65">{p.ultimoConcluido || '—'}</td>
-                      <td className="px-5 py-3 text-right text-ink/65">{p.reinicios}</td>
+                      <td className="px-4 py-3 text-muted">{p.ultimoConcluido || '—'}</td>
+                      <td className="px-5 py-3 text-right text-muted">{p.reinicios}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="px-5 py-6 text-sm text-ink/55">Ninguém da equipe começou a trilha ainda.</p>
+            <p className="px-5 py-6 text-sm text-muted">Ninguém da equipe começou a trilha ainda.</p>
           )}
         </section>
       ) : null}

@@ -39,19 +39,22 @@ export function CategoriasPage() {
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
       <div>
-        <h1 className="text-3xl font-extrabold">Categorias</h1>
+        <header className="cabecalho-pagina mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand">Biblioteca</p>
+          <h1 className="text-3xl font-bold">Categorias</h1>
+        </header>
         {erro ? <div className="mt-3"><Aviso tom="erro">{erro}</Aviso></div> : null}
         {portal.erro ? <Aviso tom="erro">{portal.erro} <button type="button" onClick={() => void portal.atualizar()} className="underline">Tentar novamente</button></Aviso> : null}
         {portal.carregando ? <Carregando texto="Carregando categorias…" /> : null}
         {!portal.carregando && !portal.erro && !portal.categorias.length ? (
           <Vazio titulo="Nenhuma categoria cadastrada" texto="Use o formulário para criar a primeira categoria." />
         ) : null}
-        {portal.categorias.length ? <ul className="mt-4 divide-y divide-line rounded-2xl border border-line bg-white">
+        {portal.categorias.length ? <ul className="mt-4 divide-y divide-line rounded-2xl border border-line bg-surface">
           {[...portal.categorias].sort((a, b) => a.ordem - b.ordem).map((categoria) => (
             <li key={categoria.id} className="flex items-center justify-between gap-3 px-4 py-3">
               <span>
                 <span className="font-medium">{categoria.nome}</span>
-                <span className="block text-xs text-ink/45">{categoria.id}</span>
+                <span className="block text-xs text-muted">{categoria.id}</span>
               </span>
               <span className="flex gap-2">
                 <button
@@ -83,7 +86,7 @@ export function CategoriasPage() {
         </ul> : null}
       </div>
       <form
-        className="space-y-3 rounded-2xl border border-line bg-white p-4"
+        className="space-y-3 rounded-2xl border border-line bg-surface p-4"
         onSubmit={(evento) => {
           evento.preventDefault()
           if (salvando) return
