@@ -25,5 +25,6 @@ grant usage on sequence tests.saida_n_seq to anon, authenticated, service_role;
 `)
 const ASSERT = /^select (plan|ok|is|isnt|throws_ok|lives_ok|results_eq|\* from finish)\(/
 sql = sql.split('\n').map((l) => (ASSERT.test(l) ? `insert into tests.saida (linha) ${l}` : l)).join('\n')
-sql = sql.replace(/^rollback;\s*$/m, () => `do $$ begin raise exception 'TAP%', E'\\n' || (select string_agg(linha, E'\\n' order by n) from tests.saida); end $$;`)
+sql = sql.replace(/^rollback;\s*$/m, () => `reset role;
+do $$ begin raise exception 'TAP%', E'\\n' || (select string_agg(linha, E'\\n' order by n) from tests.saida); end $$;`)
 process.stdout.write(sql)

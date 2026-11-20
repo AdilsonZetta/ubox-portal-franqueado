@@ -253,3 +253,13 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
   - No total são 375 casos, no local e no projeto, com rollback.
 
 Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
+
+## 14. Fase 5 — chamados
+
+- Migração `20261120151537_fase5_chamados` (aplicada no projeto): tabelas `chamados` e `chamado_eventos`, RLS por verbo, anon sem nada.
+- Gatilho `app.chamado_carimbar` (definer, só no schema `app`) valida as transições de status, carimba datas pelo servidor e grava o evento de transição no mesmo comando; histórico imutável e sem DELETE.
+- `public.mudar_status_chamado(...)` (invoker) troca status/responsável e grava o evento atomicamente.
+- `app.chamado_alterar_como_autor` (definer): o autor fecha (resolvido→fechado, nota 1–5) ou reabre, mesmo sem leitura pelo módulo — igual às regras do Firestore. Esse caminho não grava evento (também igual ao Firestore).
+- Privacidade: consultor (acompanhamento) lê chamados, mas não os eventos; outra unidade, conta/unidade inativa e anon não leem nada.
+- App: `src/lib/chamadosSupabase.ts` atrás de `VITE_BACKEND=supabase`; no Supabase a lista é atualizada por polling de 15 s (sem Realtime ainda).
+- Testes: `supabase/tests/fase5_chamados.test.sql` (61 casos; 32 casos das regras do Firestore portados), local e remoto com rollback.
