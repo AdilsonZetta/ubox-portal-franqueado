@@ -288,3 +288,12 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - Gatilhos validam versão, pesos e totais contra o modelo, autoria e datas do servidor; depois do envio só a observação do proprietário (franqueado) muda.
 - App: `src/lib/checklistSupabase.ts` atrás de `VITE_BACKEND=supabase`.
 - Testes: `supabase/tests/fase8_checklist.test.sql` — 90 casos (64 `ck:` + 4 de auditor/consultor das regras, mais privacidade e anon). Cinco casos indiretos que gravam auditorias ficam na fase 9.
+
+## 18. O que a fase 9 entregou (Auditoria e Qualidade)
+
+- Migração `20261120163800_fase9_auditoria` (aplicada no projeto): `auditoria_modelos`, `auditorias`, `auditoria_acoes`. Sem DELETE; anon sem nada.
+- Leitura igual às regras: auditores (admin / franqueadora com `auditoria`) leem tudo; consultor com `acompanhamento` lê só auditorias assinadas (`aguardando_ciencia`/`concluida`) e as ações, nunca rascunhos nem modelos; a unidade auditada (franqueado e equipe, sem depender de módulo) lê só as próprias auditorias assinadas e as próprias ações.
+- Gatilhos conferem modelo ativo na versão certa, unidade existente, checklist de referência da mesma unidade e com score, aprovação pela nota mínima (auditoria e checklist), assinatura e ciência com hora e identidade do servidor, e as transições do plano de ação (evidência https, validação só pela franqueadora).
+- RPC invoker `public.criar_acoes_auditoria(auditoria, acoes jsonb)` grava o plano em lote atômico; helper definer `app` só devolve booleano.
+- App: `src/lib/auditoriaSupabase.ts` atrás de `VITE_BACKEND=supabase`. A consulta agregada do Acompanhamento ainda usa o Firestore (fica para a fase do Acompanhamento).
+- Testes: `supabase/tests/fase9_auditoria.test.sql` — 109 casos (81 das regras do Firestore, incluindo os 5 adiados da fase 8, mais privacidade, lote e anon), local e remoto com rollback.
