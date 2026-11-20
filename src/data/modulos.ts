@@ -116,8 +116,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: Store,
-    descricao: 'Funil de locação e acompanhamento de contatos.',
+    descricao: 'Funil de locação de boxes: leads, follow-ups, propostas e conversão da unidade.',
     recursos: ['Leads', 'Etapas', 'Próxima ação', 'Conversão'],
+    ativo: true,
+    para: '/crm',
   },
   {
     slug: 'acesso',

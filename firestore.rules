@@ -3161,5 +3161,235 @@ service cloud.firestore {
         ) : false;
       allow delete: if false;
     }
+
+    // ===== Módulo 11: CRM e Gestão Comercial =====
+    // Funil de locação de boxes de cada unidade. Os dados pessoais do cliente (nome, telefone, e-mail)
+    // ficam em crmContatos, que só a própria unidade lê; a franqueadora lê só os campos sem PII de crmLeads.
+    // A equipe com o módulo vê e trabalha todos os leads da unidade (padrão escolhido; o responsável é atribuído).
+    function gereCrm(dados) {
+      return contaAtiva(dados)
+        && (
+          dados.papel == 'admin'
+          || (dados.papel == 'equipe_franqueadora' && temLista(dados, 'crm'))
+        );
+    }
+
+    function unidadeCrm(dados) {
+      return contaAtiva(dados)
+        && dados.papel in ['franqueado', 'equipe_franqueado']
+        && temLista(dados, 'crm')
+        && unidadeAtiva(dados)
+        && unidadeIdPreenchido(dados);
+    }
+
+    function crmLeadPath(id) {
+      return /databases/$(database)/documents/crmLeads/$(id);
+    }
+
+    function crmConfigPath() {
+      return /databases/$(database)/documents/crmConfig/rede;
+    }
+
+    function listaTextosCrm(l) {
+      return l is list && l.size() >= 1 && l.size() <= 20;
+    }
+
+    // Origem e motivo de perda vêm da configuração da rede (ou do padrão, se a rede ainda não configurou).
+    function origemCrmOk(origem) {
+      return exists(crmConfigPath())
+        ? origem in get(crmConfigPath()).data.origens
+        : origem in ['Site', 'Instagram', 'Google', 'Indicação', 'Passante', 'WhatsApp', 'Outro'];
+    }
+
+    function motivoPerdaOk(motivo) {
+      return exists(crmConfigPath())
+        ? motivo in get(crmConfigPath()).data.motivosPerda
+        : motivo in ['Preço', 'Sem box do tamanho', 'Escolheu concorrente', 'Desistiu', 'Sem retorno', 'Outro'];
+    }
+
+    // Responsável: pessoa ativa da mesma unidade com o módulo.
+    function responsavelCrmOk(uid, unidadeId) {
+      return exists(/databases/$(database)/documents/usuarios/$(uid))
+        && get(/databases/$(database)/documents/usuarios/$(uid)).data.unidadeId == unidadeId
+        && unidadeCrm(get(/databases/$(database)/documents/usuarios/$(uid)).data);
+    }
+
+    function isValidLeadCrm(data) {
+      return data.keys().hasOnly(['unidadeId', 'unidadeNome', 'origem', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.keys().hasAll(['unidadeId', 'unidadeNome', 'origem', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'criadoEm', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+        && data.origem is string && data.origem.size() >= 1 && data.origem.size() <= 40
+        && validShort(data.interesseTamanho, 60)
+        && validShort(data.interessePeriodo, 60)
+        && validShort(data.interesseUso, 200)
+        && (data.valorEstimadoCentavos == null || (data.valorEstimadoCentavos is int && data.valorEstimadoCentavos >= 0 && data.valorEstimadoCentavos <= 100000000))
+        && data.etapa in ['novo', 'contato', 'visita', 'proposta', 'ganho', 'perdido']
+        && validShort(data.motivoPerda, 60)
+        && (data.etapa == 'perdido') == (data.motivoPerda.size() >= 2)
+        && data.responsavelUid is string && data.responsavelUid.size() > 0 && data.responsavelUid.size() <= 128
+        && validName(data.responsavelNome)
+        && (data.proximoContato == null || data.proximoContato is timestamp)
+        && (data.ultimaAtividadeEm == null || data.ultimaAtividadeEm is timestamp)
+        && data.arquivado is bool
+        && data.criadoEm is timestamp
+        && data.etapaEm is timestamp
+        && (data.etapa in ['ganho', 'perdido']) == (data.fechadoEm is timestamp)
+        && (data.fechadoEm == null || data.fechadoEm is timestamp)
+        && data.atualizadoPor == request.auth.uid
+        && data.atualizadoEm == request.time;
+    }
+
+    match /crmConfig/{configId} {
+      allow read: if signedIn() && exists(userPath()) && (gereCrm(userData()) || unidadeCrm(userData()));
+      allow create, update: if configId == 'rede' && request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && gereCrm(userData())
+          && request.resource.data.keys().hasOnly(['origens', 'motivosPerda', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.keys().hasAll(['origens', 'motivosPerda', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && listaTextosCrm(request.resource.data.origens)
+          && listaTextosCrm(request.resource.data.motivosPerda)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.atualizadoEm == request.time
+        ) : false;
+      allow delete: if false;
+    }
+
+    match /crmLeads/{leadId} {
+      // Franqueadora: só KPIs (o doc não tem nome, telefone nem e-mail).
+      allow read: if signedIn() && exists(userPath()) && gereCrm(userData());
+      allow read: if signedIn() && exists(userPath())
+        && unidadeCrm(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid && request.resource.data.etapa == 'novo' ? (
+          signedIn() && exists(userPath())
+          && unidadeCrm(userData())
+          && isValidLeadCrm(request.resource.data)
+          && request.resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.unidadeNome == userData().get('unidade', '')
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.arquivado == false
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.etapaEm == request.time
+          && request.resource.data.ultimaAtividadeEm == null
+          && origemCrmOk(request.resource.data.origem)
+          && responsavelCrmOk(request.resource.data.responsavelUid, request.resource.data.unidadeId)
+          // O contato (PII) nasce no mesmo lote, com o mesmo id.
+          && getAfter(/databases/$(database)/documents/crmContatos/$(leadId)).data.unidadeId == request.resource.data.unidadeId
+        ) : false;
+
+      // Lead aberto: qualquer pessoa da unidade com o módulo move no funil, reatribui e agenda o próximo contato.
+      // Lead fechado (ganho/perdido): só arquivar/desarquivar.
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && unidadeCrm(userData())
+          && resource.data.unidadeId == userData().unidadeId
+          && isValidLeadCrm(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['origem', 'interesseTamanho', 'interessePeriodo', 'interesseUso', 'valorEstimadoCentavos', 'etapa', 'motivoPerda', 'responsavelUid', 'responsavelNome', 'proximoContato', 'ultimaAtividadeEm', 'arquivado', 'etapaEm', 'fechadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && (resource.data.etapa in ['ganho', 'perdido']
+            ? request.resource.data.diff(resource.data).affectedKeys().hasOnly(['arquivado', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+            : (
+              (request.resource.data.etapa == resource.data.etapa
+                ? request.resource.data.etapaEm == resource.data.etapaEm
+                : request.resource.data.etapaEm == request.time)
+              && (request.resource.data.fechadoEm == null || request.resource.data.fechadoEm == request.time)
+              && (request.resource.data.ultimaAtividadeEm == resource.data.ultimaAtividadeEm || request.resource.data.ultimaAtividadeEm == request.time)
+              && (request.resource.data.origem == resource.data.origem || origemCrmOk(request.resource.data.origem))
+              && (request.resource.data.etapa != 'perdido' || motivoPerdaOk(request.resource.data.motivoPerda))
+              && (request.resource.data.responsavelUid == resource.data.responsavelUid || responsavelCrmOk(request.resource.data.responsavelUid, resource.data.unidadeId))
+            ))
+        ) : false;
+      allow delete: if false;
+    }
+
+    // Dados pessoais do cliente: só a unidade (nem a franqueadora lê).
+    match /crmContatos/{leadId} {
+      allow read: if signedIn() && exists(userPath())
+        && unidadeCrm(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && unidadeCrm(userData())
+          && request.resource.data.keys().hasOnly(['unidadeId', 'nome', 'telefone', 'email', 'atualizadoPor', 'atualizadoEm'])
+          && request.resource.data.keys().hasAll(['unidadeId', 'nome', 'telefone', 'email', 'atualizadoPor', 'atualizadoEm'])
+          && request.resource.data.unidadeId == userData().unidadeId
+          && validName(request.resource.data.nome)
+          && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
+          && request.resource.data.email is string && request.resource.data.email.size() <= 120
+          && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+          && request.resource.data.atualizadoEm == request.time
+          && getAfter(crmLeadPath(leadId)).data.unidadeId == request.resource.data.unidadeId
+        ) : false;
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && unidadeCrm(userData())
+          && resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nome', 'telefone', 'email', 'atualizadoPor', 'atualizadoEm'])
+          && validName(request.resource.data.nome)
+          && request.resource.data.telefone is string && request.resource.data.telefone.matches('^[0-9 ()+.-]{0,30}$')
+          && request.resource.data.email is string && request.resource.data.email.size() <= 120
+          && (request.resource.data.email == '' || request.resource.data.email.matches('^[^@ ]+@[^@ ]+[.][^@ ]+$'))
+          && request.resource.data.atualizadoEm == request.time
+        ) : false;
+      allow delete: if false;
+    }
+
+    // Histórico do lead: imutável, só a unidade (o texto pode ter dados do cliente).
+    match /crmAtividades/{atividadeId} {
+      allow read: if signedIn() && exists(userPath())
+        && unidadeCrm(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+      allow create: if request.resource.data.uid == request.auth.uid ? (
+          signedIn() && exists(userPath())
+          && unidadeCrm(userData())
+          && request.resource.data.keys().hasOnly(['leadId', 'unidadeId', 'tipo', 'texto', 'uid', 'nome', 'geradoPorIA', 'iaModelo', 'criadoEm'])
+          && request.resource.data.keys().hasAll(['leadId', 'unidadeId', 'tipo', 'texto', 'uid', 'nome', 'geradoPorIA', 'iaModelo', 'criadoEm'])
+          && request.resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.nome == userData().nome
+          && request.resource.data.tipo in ['ligacao', 'whatsapp', 'visita', 'email', 'nota']
+          && request.resource.data.texto is string && request.resource.data.texto.size() >= 2 && request.resource.data.texto.size() <= 2000
+          && iaOk(request.resource.data)
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.leadId is string && request.resource.data.leadId.size() > 0 && request.resource.data.leadId.size() <= 64
+          && get(crmLeadPath(request.resource.data.leadId)).data.unidadeId == request.resource.data.unidadeId
+        ) : false;
+      allow update, delete: if false;
+    }
+
+    // Propostas: box, preço, validade e status. Só a unidade.
+    match /crmPropostas/{propostaId} {
+      allow read: if signedIn() && exists(userPath())
+        && unidadeCrm(userData())
+        && resource.data.unidadeId == userData().unidadeId;
+      allow create: if request.resource.data.atualizadoPor == request.auth.uid && request.resource.data.status == 'enviada' ? (
+          signedIn() && exists(userPath())
+          && unidadeCrm(userData())
+          && request.resource.data.keys().hasOnly(['leadId', 'unidadeId', 'box', 'precoMensalCentavos', 'periodoMeses', 'validade', 'status', 'obs', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.keys().hasAll(['leadId', 'unidadeId', 'box', 'precoMensalCentavos', 'periodoMeses', 'validade', 'status', 'obs', 'geradoPorIA', 'iaModelo', 'criadoEm', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.box is string && request.resource.data.box.size() >= 1 && request.resource.data.box.size() <= 60
+          && request.resource.data.precoMensalCentavos is int && request.resource.data.precoMensalCentavos > 0 && request.resource.data.precoMensalCentavos <= 100000000
+          && request.resource.data.periodoMeses is int && request.resource.data.periodoMeses >= 1 && request.resource.data.periodoMeses <= 120
+          && request.resource.data.validade is timestamp && request.resource.data.validade > request.time
+          && validShort(request.resource.data.obs, 1000)
+          && iaOk(request.resource.data)
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.criadoEm == request.time
+          && request.resource.data.atualizadoEm == request.time
+          && request.resource.data.leadId is string && request.resource.data.leadId.size() > 0 && request.resource.data.leadId.size() <= 64
+          && get(crmLeadPath(request.resource.data.leadId)).data.unidadeId == request.resource.data.unidadeId
+        ) : false;
+      // Só o status muda: enviada → aceita, recusada ou expirada (e não volta).
+      allow update: if request.resource.data.atualizadoPor == request.auth.uid && resource.data.status == 'enviada' ? (
+          signedIn() && exists(userPath())
+          && unidadeCrm(userData())
+          && resource.data.unidadeId == userData().unidadeId
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoPor', 'atualizadoPorNome', 'atualizadoEm'])
+          && request.resource.data.status in ['aceita', 'recusada', 'expirada']
+          && request.resource.data.atualizadoPorNome == userData().nome
+          && request.resource.data.atualizadoEm == request.time
+        ) : false;
+      allow delete: if false;
+    }
   }
 }

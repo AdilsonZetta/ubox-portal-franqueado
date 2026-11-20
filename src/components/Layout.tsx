@@ -10,6 +10,7 @@ import { podeGerirUniversidade } from '../lib/universidade'
 import { podeGerirMarketing } from '../lib/marketing'
 import { podeGerirChecklist } from '../lib/checklist'
 import { podeGerirEstoque } from '../lib/estoque'
+import { podeGerirCrm } from '../lib/crm'
 import { observarSolicitacoesAbertas } from '../lib/senhas'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
@@ -35,6 +36,7 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/marketing')) return 'marketing'
   if (pathname.startsWith('/checklist')) return 'checklist'
   if (pathname.startsWith('/estoque')) return 'estoque'
+  if (pathname.startsWith('/crm')) return 'crm'
   // Auditorias da unidade: não dependem de módulo (a auditoria é da franqueadora; as rules limitam à própria unidade).
   if (pathname.startsWith('/auditorias')) return null
   // Acompanhamento da unidade: também não depende de módulo (só os registros compartilhados).
@@ -256,6 +258,17 @@ export function Layout() {
                             </NavLink>
                           )
                         ) : null}
+                        {modulo.slug === 'crm' ? (
+                          podeGerirCrm(user, ehAdmin) && !comoFranqueado ? (
+                            <NavLink to="/crm/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Desempenho da rede
+                            </NavLink>
+                          ) : (
+                            <NavLink to="/crm" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
+                              Funil de locação
+                            </NavLink>
+                          )
+                        ) : null}
                         {modulo.slug === 'auditoria' ? (
                           <>
                             <NavLink to="/auditoria" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
@@ -324,7 +337,7 @@ export function Layout() {
                             </NavLink>
                           </>
                         ) : null}
-                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'estoque' && modulo.slug !== 'auditoria' && modulo.slug !== 'acompanhamento' ? (
+                        {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'estoque' && modulo.slug !== 'crm' && modulo.slug !== 'auditoria' && modulo.slug !== 'acompanhamento' ? (
                           <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-md px-2 py-1 text-[13px]', isActive ? 'font-semibold text-brand-dark' : 'text-ink/70 hover:bg-paper')}>
                             Abrir
                           </NavLink>

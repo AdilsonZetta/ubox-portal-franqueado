@@ -1947,6 +1947,157 @@ await caso('es: unidade não lê pedido de outra', assertFails(daUn(frEs2, 'esto
 await caso('es: suprimentos lê pedidos da rede', assertSucceeds(getDocs(collection(redeEs, 'estoquePedidos'))))
 await caso('es: rede sem o módulo não lê pedidos', assertFails(getDocs(collection(redeNoEs, 'estoquePedidos'))))
 
+// ===== Módulo 11: CRM e Gestão Comercial =====
+await ambiente.withSecurityRulesDisabled(async (contexto) => {
+  const banco = contexto.firestore()
+  for (const [id, nome] of [['un-crm', 'Unidade Crm'], ['un-crm2', 'Outra Crm']]) {
+    await setDoc(doc(banco, 'unidades', id), {
+      nome, cidade: 'Uberaba', responsavel: 'Dono', email: `${id}@ubox.test`, uid: null,
+      modulosLiberados: ['crm'], ativo: true, criadoPor: 'admin-1', criadoEm: criado, atualizadoEm: criado,
+    })
+  }
+  await setDoc(doc(banco, 'usuarios', 'fr-crm'), usuario('fr-crm', { unidadeId: 'un-crm', unidade: 'Unidade Crm', modulos: ['crm'], nome: 'Dono Crm' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-crm'), usuario('eq-crm', { papel: 'equipe_franqueado', unidadeId: 'un-crm', unidade: 'Unidade Crm', modulos: ['crm'], criadoPor: 'fr-crm', nome: 'Vendedora Crm' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-crm-sem'), usuario('eq-crm-sem', { papel: 'equipe_franqueado', unidadeId: 'un-crm', unidade: 'Unidade Crm', modulos: ['manuais'], criadoPor: 'fr-crm', nome: 'Equipe Sem Crm' }))
+  await setDoc(doc(banco, 'usuarios', 'fr-crm2'), usuario('fr-crm2', { unidadeId: 'un-crm2', unidade: 'Outra Crm', modulos: ['crm'], nome: 'Dono Outra Crm' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-crm'), usuario('eq-rede-crm', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['crm'], nome: 'Comercial Rede' }))
+  await setDoc(doc(banco, 'usuarios', 'eq-rede-nocrm'), usuario('eq-rede-nocrm', { papel: 'equipe_franqueadora', unidade: 'Franqueadora', unidadeId: null, modulos: ['checklist'], nome: 'Rede Sem Crm' }))
+  const lead = (unidadeId, etapa, extra = {}) => ({
+    unidadeId, unidadeNome: unidadeId === 'un-crm' ? 'Unidade Crm' : 'Outra Crm', origem: 'Site', interesseTamanho: '6 m²', interessePeriodo: '3 meses', interesseUso: 'Mudança',
+    valorEstimadoCentavos: 28990, etapa, motivoPerda: etapa === 'perdido' ? 'Preço' : '', responsavelUid: 'eq-crm', responsavelNome: 'Vendedora Crm',
+    proximoContato: null, ultimaAtividadeEm: null, arquivado: false, criadoEm: criado, etapaEm: criado, fechadoEm: etapa === 'ganho' || etapa === 'perdido' ? criado : null,
+    atualizadoPor: 'fr-crm', atualizadoPorNome: 'Dono Crm', atualizadoEm: criado, ...extra,
+  })
+  await setDoc(doc(banco, 'crmLeads', 'ld-1'), lead('un-crm', 'contato'))
+  await setDoc(doc(banco, 'crmLeads', 'ld-2'), lead('un-crm', 'proposta'))
+  await setDoc(doc(banco, 'crmLeads', 'ld-ganho'), lead('un-crm', 'ganho'))
+  await setDoc(doc(banco, 'crmLeads', 'ld-outra'), lead('un-crm2', 'novo', { responsavelUid: 'fr-crm2', responsavelNome: 'Dono Outra Crm' }))
+  const contato = (unidadeId) => ({ unidadeId, nome: 'Maria Cliente', telefone: '(34) 99999-0000', email: 'maria@cliente.test', atualizadoPor: 'fr-crm', atualizadoEm: criado })
+  await setDoc(doc(banco, 'crmContatos', 'ld-1'), contato('un-crm'))
+  await setDoc(doc(banco, 'crmContatos', 'ld-outra'), contato('un-crm2'))
+  await setDoc(doc(banco, 'crmAtividades', 'at-1'), { leadId: 'ld-1', unidadeId: 'un-crm', tipo: 'ligacao', texto: 'Ligou pedindo preço', uid: 'eq-crm', nome: 'Vendedora Crm', geradoPorIA: false, iaModelo: '', criadoEm: criado })
+  const futuro = new Date(Date.now() + 7 * 86400000)
+  await setDoc(doc(banco, 'crmPropostas', 'pp-1'), { leadId: 'ld-2', unidadeId: 'un-crm', box: 'Box 12 (6 m²)', precoMensalCentavos: 28990, periodoMeses: 3, validade: futuro, status: 'enviada', obs: '', geradoPorIA: false, iaModelo: '', criadoEm: criado, atualizadoPor: 'fr-crm', atualizadoPorNome: 'Dono Crm', atualizadoEm: criado })
+  await setDoc(doc(banco, 'crmPropostas', 'pp-2'), { leadId: 'ld-2', unidadeId: 'un-crm', box: 'Box 7', precoMensalCentavos: 19990, periodoMeses: 1, validade: futuro, status: 'enviada', obs: '', geradoPorIA: false, iaModelo: '', criadoEm: criado, atualizadoPor: 'fr-crm', atualizadoPorNome: 'Dono Crm', atualizadoEm: criado })
+})
+const frCrm = ambiente.authenticatedContext('fr-crm', { email: 'fr-crm@ubox.test' }).firestore()
+const eqCrm = ambiente.authenticatedContext('eq-crm', { email: 'eq-crm@ubox.test' }).firestore()
+const eqCrmSem = ambiente.authenticatedContext('eq-crm-sem', { email: 'eq-crm-sem@ubox.test' }).firestore()
+const frCrm2 = ambiente.authenticatedContext('fr-crm2', { email: 'fr-crm2@ubox.test' }).firestore()
+const redeCrm = ambiente.authenticatedContext('eq-rede-crm', { email: 'eq-rede-crm@ubox.test' }).firestore()
+const redeNoCrm = ambiente.authenticatedContext('eq-rede-nocrm', { email: 'eq-rede-nocrm@ubox.test' }).firestore()
+const doUn = (db, col, un = 'un-crm') => getDocs(query(collection(db, col), where('unidadeId', '==', un)))
+
+// Leituras e privacidade
+await caso('crm: franqueadora lê os leads (sem PII) da rede', assertSucceeds(getDocs(collection(redeCrm, 'crmLeads'))))
+await caso('crm: franqueadora não lê contatos (PII)', assertFails(getDoc(doc(redeCrm, 'crmContatos', 'ld-1'))))
+await caso('crm: franqueadora não lista contatos', assertFails(getDocs(collection(redeCrm, 'crmContatos'))))
+await caso('crm: admin também não lê contatos', assertFails(getDoc(doc(adminAu, 'crmContatos', 'ld-1'))))
+await caso('crm: franqueadora não lê atividades', assertFails(getDocs(collection(redeCrm, 'crmAtividades'))))
+await caso('crm: franqueadora não lê propostas', assertFails(getDocs(collection(redeCrm, 'crmPropostas'))))
+await caso('crm: rede sem o módulo não lê leads', assertFails(getDocs(collection(redeNoCrm, 'crmLeads'))))
+await caso('crm: equipe lê os leads da unidade toda', assertSucceeds(doUn(eqCrm, 'crmLeads')))
+await caso('crm: equipe lê os contatos da unidade', assertSucceeds(doUn(eqCrm, 'crmContatos')))
+await caso('crm: unidade não lista sem filtrar a unidade', assertFails(getDocs(collection(eqCrm, 'crmLeads'))))
+await caso('crm: unidade não lê lead de outra', assertFails(getDoc(doc(frCrm, 'crmLeads', 'ld-outra'))))
+await caso('crm: unidade não lê contato de outra', assertFails(getDoc(doc(frCrm, 'crmContatos', 'ld-outra'))))
+await caso('crm: equipe sem o módulo não lê leads', assertFails(doUn(eqCrmSem, 'crmLeads')))
+await caso('crm: equipe sem o módulo não lê contatos', assertFails(doUn(eqCrmSem, 'crmContatos')))
+await caso('crm: unidade lê atividades do lead', assertSucceeds(getDocs(query(collection(eqCrm, 'crmAtividades'), where('unidadeId', '==', 'un-crm'), where('leadId', '==', 'ld-1')))))
+await caso('crm: unidade e rede leem a configuração', assertSucceeds(Promise.all([getDoc(doc(eqCrm, 'crmConfig', 'rede')), getDoc(doc(redeCrm, 'crmConfig', 'rede'))])))
+
+// Criação do lead (lead + contato no mesmo lote)
+const novoLead = (extra = {}) => ({
+  unidadeId: 'un-crm', unidadeNome: 'Unidade Crm', origem: 'Instagram', interesseTamanho: '3 m²', interessePeriodo: '1 mês', interesseUso: 'Estoque de loja',
+  valorEstimadoCentavos: null, etapa: 'novo', motivoPerda: '', responsavelUid: 'eq-crm', responsavelNome: 'Vendedora Crm', proximoContato: new Date(Date.now() + 86400000),
+  ultimaAtividadeEm: null, arquivado: false, criadoEm: serverTimestamp(), etapaEm: serverTimestamp(), fechadoEm: null,
+  atualizadoPor: 'eq-crm', atualizadoPorNome: 'Vendedora Crm', atualizadoEm: serverTimestamp(), ...extra,
+})
+const novoContato = (extra = {}) => ({ unidadeId: 'un-crm', nome: 'João Cliente', telefone: '+55 34 98888-1111', email: 'joao@cliente.test', atualizadoPor: 'eq-crm', atualizadoEm: serverTimestamp(), ...extra })
+async function criarLeadLote(db, id, l = {}, c = {}) {
+  const lote = writeBatch(db)
+  lote.set(doc(db, 'crmLeads', id), novoLead(l))
+  lote.set(doc(db, 'crmContatos', id), novoContato(c))
+  return lote.commit()
+}
+await caso('crm: equipe cria lead com contato no lote', assertSucceeds(criarLeadLote(eqCrm, 'ld-n1')))
+await caso('crm: lead sem o contato é recusado', assertFails(setDoc(doc(eqCrm, 'crmLeads', 'ld-x'), novoLead())))
+await caso('crm: contato sem o lead é recusado', assertFails(setDoc(doc(eqCrm, 'crmContatos', 'ld-x2'), novoContato())))
+await caso('crm: lead com nome/telefone no doc sem PII é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x3', { nome: 'João', telefone: '3499' })))
+await caso('crm: origem fora da lista da rede é recusada', assertFails(criarLeadLote(eqCrm, 'ld-x4', { origem: 'TikTok' })))
+await caso('crm: lead já ganho na criação é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x5', { etapa: 'ganho', fechadoEm: serverTimestamp() })))
+await caso('crm: responsável de outra unidade é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x6', { responsavelUid: 'fr-crm2', responsavelNome: 'Dono Outra Crm' })))
+await caso('crm: responsável sem o módulo é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x7', { responsavelUid: 'eq-crm-sem', responsavelNome: 'Equipe Sem Crm' })))
+await caso('crm: lead para outra unidade é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x8', { unidadeId: 'un-crm2', unidadeNome: 'Outra Crm' }, { unidadeId: 'un-crm2' })))
+await caso('crm: telefone com letras é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x9', {}, { telefone: 'liga pra mim' })))
+await caso('crm: e-mail inválido é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x10', {}, { email: 'joao@' })))
+await caso('crm: valor estimado fracionado é recusado', assertFails(criarLeadLote(eqCrm, 'ld-x11', { valorEstimadoCentavos: 10.5 })))
+await caso('crm: equipe sem o módulo não cria lead', assertFails(criarLeadLote(eqCrmSem, 'ld-x12', { atualizadoPor: 'eq-crm-sem', atualizadoPorNome: 'Equipe Sem Crm' }, { atualizadoPor: 'eq-crm-sem' })))
+await caso('crm: franqueadora não cria lead', assertFails(criarLeadLote(redeCrm, 'ld-x13', { atualizadoPor: 'eq-rede-crm', atualizadoPorNome: 'Comercial Rede' }, { atualizadoPor: 'eq-rede-crm' })))
+
+// Movimento no funil
+const atualCrm = (extra = {}) => ({ atualizadoPor: 'eq-crm', atualizadoPorNome: 'Vendedora Crm', atualizadoEm: serverTimestamp(), ...extra })
+await caso('crm: equipe move lead para visita', assertSucceeds(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'visita', etapaEm: serverTimestamp() }))))
+await caso('crm: mudar etapa sem horário do servidor é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'proposta', etapaEm: new Date(Date.now() - 60000) }))))
+await caso('crm: perdido sem motivo é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'perdido', etapaEm: serverTimestamp(), fechadoEm: serverTimestamp() }))))
+await caso('crm: perdido com motivo fora da lista é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'perdido', motivoPerda: 'Não gostei', etapaEm: serverTimestamp(), fechadoEm: serverTimestamp() }))))
+await caso('crm: ganho sem data de fechamento é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'ganho', etapaEm: serverTimestamp() }))))
+await caso('crm: reatribuir para pessoa de outra unidade é recusado', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ responsavelUid: 'fr-crm2', responsavelNome: 'Dono Outra Crm' }))))
+await caso('crm: franqueado reatribui para si', assertSucceeds(updateDoc(doc(frCrm, 'crmLeads', 'ld-1'), { responsavelUid: 'fr-crm', responsavelNome: 'Dono Crm', atualizadoPor: 'fr-crm', atualizadoPorNome: 'Dono Crm', atualizadoEm: serverTimestamp() })))
+await caso('crm: lead não muda de unidade', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ unidadeId: 'un-crm2' }))))
+await caso('crm: lead não muda a data de criação', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ criadoEm: new Date('2020-01-01T00:00:00Z') }))))
+await caso('crm: perdido com motivo da lista é aceito', assertSucceeds(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'perdido', motivoPerda: 'Preço', etapaEm: serverTimestamp(), fechadoEm: serverTimestamp() }))))
+await caso('crm: lead fechado não volta ao funil', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-1'), atualCrm({ etapa: 'contato', motivoPerda: '', etapaEm: serverTimestamp(), fechadoEm: null }))))
+await caso('crm: lead fechado só arquiva', assertSucceeds(updateDoc(doc(eqCrm, 'crmLeads', 'ld-ganho'), atualCrm({ arquivado: true }))))
+await caso('crm: lead fechado não muda valor', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-ganho'), atualCrm({ valorEstimadoCentavos: 1 }))))
+await caso('crm: outra unidade não mexe no lead', assertFails(updateDoc(doc(frCrm2, 'crmLeads', 'ld-2'), { arquivado: true, atualizadoPor: 'fr-crm2', atualizadoPorNome: 'Dono Outra Crm', atualizadoEm: serverTimestamp() })))
+await caso('crm: franqueadora não mexe no lead', assertFails(updateDoc(doc(redeCrm, 'crmLeads', 'ld-2'), { arquivado: true, atualizadoPor: 'eq-rede-crm', atualizadoPorNome: 'Comercial Rede', atualizadoEm: serverTimestamp() })))
+await caso('crm: ninguém apaga lead', assertFails(deleteDoc(doc(adminAu, 'crmLeads', 'ld-2'))))
+await caso('crm: ninguém apaga contato', assertFails(deleteDoc(doc(frCrm, 'crmContatos', 'ld-1'))))
+await caso('crm: unidade edita o contato', assertSucceeds(updateDoc(doc(eqCrm, 'crmContatos', 'ld-1'), { telefone: '34 3333-4444', atualizadoPor: 'eq-crm', atualizadoEm: serverTimestamp() })))
+await caso('crm: contato não muda de unidade', assertFails(updateDoc(doc(eqCrm, 'crmContatos', 'ld-1'), { unidadeId: 'un-crm2', atualizadoPor: 'eq-crm', atualizadoEm: serverTimestamp() })))
+
+// Atividades
+const ativ = (extra = {}) => ({ leadId: 'ld-2', unidadeId: 'un-crm', tipo: 'whatsapp', texto: 'Mandei fotos do box 12', uid: 'eq-crm', nome: 'Vendedora Crm', geradoPorIA: false, iaModelo: '', criadoEm: serverTimestamp(), ...extra })
+{
+  const lote = writeBatch(eqCrm)
+  lote.set(doc(eqCrm, 'crmAtividades', 'at-n1'), ativ())
+  lote.update(doc(eqCrm, 'crmLeads', 'ld-2'), atualCrm({ ultimaAtividadeEm: serverTimestamp(), proximoContato: new Date(Date.now() + 2 * 86400000) }))
+  await caso('crm: atividade + próximo follow-up no lote', assertSucceeds(lote.commit()))
+}
+await caso('crm: atividade com IA sem modelo é recusada', assertFails(setDoc(doc(eqCrm, 'crmAtividades', 'at-x'), ativ({ geradoPorIA: true }))))
+await caso('crm: atividade com IA registra o modelo', assertSucceeds(setDoc(doc(eqCrm, 'crmAtividades', 'at-ia'), ativ({ geradoPorIA: true, iaModelo: 'Grok Bot' }))))
+await caso('crm: tipo de atividade desconhecido é recusado', assertFails(setDoc(doc(eqCrm, 'crmAtividades', 'at-x'), ativ({ tipo: 'fax' }))))
+await caso('crm: atividade em lead de outra unidade é recusada', assertFails(setDoc(doc(eqCrm, 'crmAtividades', 'at-x'), ativ({ leadId: 'ld-outra' }))))
+await caso('crm: atividade em nome de outra pessoa é recusada', assertFails(setDoc(doc(eqCrm, 'crmAtividades', 'at-x'), ativ({ nome: 'Dono Crm' }))))
+await caso('crm: atividade com horário do cliente é recusada', assertFails(setDoc(doc(eqCrm, 'crmAtividades', 'at-x'), ativ({ criadoEm: new Date(Date.now() - 60000) }))))
+await caso('crm: atividade é imutável', assertFails(updateDoc(doc(eqCrm, 'crmAtividades', 'at-1'), { texto: 'mudei' })))
+await caso('crm: ninguém apaga atividade', assertFails(deleteDoc(doc(frCrm, 'crmAtividades', 'at-1'))))
+
+// Propostas
+const prop = (extra = {}) => ({ leadId: 'ld-2', unidadeId: 'un-crm', box: 'Box 9 (4 m²)', precoMensalCentavos: 21990, periodoMeses: 6, validade: new Date(Date.now() + 5 * 86400000), status: 'enviada', obs: '', geradoPorIA: false, iaModelo: '', criadoEm: serverTimestamp(), atualizadoPor: 'eq-crm', atualizadoPorNome: 'Vendedora Crm', atualizadoEm: serverTimestamp(), ...extra })
+await caso('crm: equipe registra proposta', assertSucceeds(setDoc(doc(eqCrm, 'crmPropostas', 'pp-n'), prop())))
+await caso('crm: proposta vencida na criação é recusada', assertFails(setDoc(doc(eqCrm, 'crmPropostas', 'pp-x'), prop({ validade: new Date(Date.now() - 86400000) }))))
+await caso('crm: proposta sem preço é recusada', assertFails(setDoc(doc(eqCrm, 'crmPropostas', 'pp-x'), prop({ precoMensalCentavos: 0 }))))
+await caso('crm: proposta já aceita na criação é recusada', assertFails(setDoc(doc(eqCrm, 'crmPropostas', 'pp-x'), prop({ status: 'aceita' }))))
+await caso('crm: proposta em lead de outra unidade é recusada', assertFails(setDoc(doc(eqCrm, 'crmPropostas', 'pp-x'), prop({ leadId: 'ld-outra' }))))
+await caso('crm: proposta aceita', assertSucceeds(updateDoc(doc(eqCrm, 'crmPropostas', 'pp-1'), atualCrm({ status: 'aceita' }))))
+await caso('crm: proposta aceita não muda mais', assertFails(updateDoc(doc(eqCrm, 'crmPropostas', 'pp-1'), atualCrm({ status: 'recusada' }))))
+await caso('crm: preço da proposta não muda', assertFails(updateDoc(doc(eqCrm, 'crmPropostas', 'pp-2'), atualCrm({ precoMensalCentavos: 1 }))))
+await caso('crm: ninguém apaga proposta', assertFails(deleteDoc(doc(frCrm, 'crmPropostas', 'pp-2'))))
+
+// Configuração da rede
+const cfg = (extra = {}) => ({ origens: ['Site', 'Google', 'Indicação', 'Passante', 'WhatsApp', 'Outro', 'Panfleto'], motivosPerda: ['Preço', 'Desistiu', 'Outro'], atualizadoPor: 'eq-rede-crm', atualizadoPorNome: 'Comercial Rede', atualizadoEm: serverTimestamp(), ...extra })
+await caso('crm: franqueadora não configura com lista vazia', assertFails(setDoc(doc(redeCrm, 'crmConfig', 'rede'), cfg({ motivosPerda: [] }))))
+await caso('crm: franqueadora não cria outro doc de configuração', assertFails(setDoc(doc(redeCrm, 'crmConfig', 'outra'), cfg())))
+await caso('crm: franqueado não configura a rede', assertFails(setDoc(doc(frCrm, 'crmConfig', 'rede'), cfg({ atualizadoPor: 'fr-crm', atualizadoPorNome: 'Dono Crm' }))))
+await caso('crm: rede sem o módulo não configura', assertFails(setDoc(doc(redeNoCrm, 'crmConfig', 'rede'), cfg({ atualizadoPor: 'eq-rede-nocrm', atualizadoPorNome: 'Rede Sem Crm' }))))
+await caso('crm: franqueadora configura origens e motivos', assertSucceeds(setDoc(doc(redeCrm, 'crmConfig', 'rede'), cfg())))
+await caso('crm: origem nova da rede passa a valer', assertSucceeds(criarLeadLote(eqCrm, 'ld-n2', { origem: 'Panfleto' })))
+await caso('crm: motivo retirado da lista deixa de valer', assertFails(updateDoc(doc(eqCrm, 'crmLeads', 'ld-n2'), atualCrm({ etapa: 'perdido', motivoPerda: 'Sem retorno', etapaEm: serverTimestamp(), fechadoEm: serverTimestamp() }))))
+await caso('crm: lead antigo com origem retirada ainda anda no funil', assertSucceeds(updateDoc(doc(eqCrm, 'crmLeads', 'ld-n1'), atualCrm({ etapa: 'contato', etapaEm: serverTimestamp() }))))
+await caso('crm: ninguém apaga a configuração', assertFails(deleteDoc(doc(adminAu, 'crmConfig', 'rede'))))
+
 void manual
 await ambiente.cleanup()
 

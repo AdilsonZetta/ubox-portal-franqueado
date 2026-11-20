@@ -41,6 +41,9 @@ import { HistoricoChecklistPage, NaoConformidadesPage } from './pages/checklist/
 import { GestaoChecklistPage } from './pages/checklist/GestaoChecklist'
 import { EstoquePage } from './pages/estoque/Estoque'
 import { GestaoEstoquePage } from './pages/estoque/GestaoEstoque'
+import { CrmPage } from './pages/crm/Crm'
+import { LeadPage } from './pages/crm/Lead'
+import { GestaoCrmPage } from './pages/crm/GestaoCrm'
 import { GestaoAuditoriaPage } from './pages/auditoria/GestaoAuditoria'
 import { EditorAuditoriaPage } from './pages/auditoria/EditorAuditoria'
 import { AuditoriaPage } from './pages/auditoria/Auditoria'
@@ -124,6 +127,9 @@ function Area() {
           <Route path="/checklist/gestao" element={<GestaoChecklistPage />} />
           <Route path="/estoque" element={<EstoquePage />} />
           <Route path="/estoque/gestao" element={<GestaoEstoquePage />} />
+          <Route path="/crm" element={<CrmPage />} />
+          <Route path="/crm/lead/:id" element={<LeadPage />} />
+          <Route path="/crm/gestao" element={<GestaoCrmPage />} />
           <Route path="/auditoria" element={<GestaoAuditoriaPage />} />
           <Route path="/auditoria/nova" element={<EditorAuditoriaPage />} />
           <Route path="/auditoria/editar/:id" element={<EditorAuditoriaPage />} />
