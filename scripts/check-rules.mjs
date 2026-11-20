@@ -115,6 +115,24 @@ exigir(rules.includes("get(pedidoEstoquePath(request.resource.data.origemId)).da
 
 exigir(rules.includes('&& l.diferenca == l.contado - l.sistema'), 'ajuste de contagem sem conferir contado − sistema')
 
+exigir(rules.includes('match /crmLeads/{leadId}'), 'coleção crmLeads ausente')
+exigir(rules.includes('match /crmContatos/{leadId}'), 'coleção crmContatos ausente')
+exigir(rules.includes('match /crmAtividades/{atividadeId}'), 'coleção crmAtividades ausente')
+exigir(rules.includes('match /crmPropostas/{propostaId}'), 'coleção crmPropostas ausente')
+exigir(rules.includes("dados.papel == 'equipe_franqueadora' && temLista(dados, 'crm')"), 'CRM sem exigir o módulo para a equipe da franqueadora')
+{
+  const ini = rules.indexOf('match /crmContatos/{leadId}')
+  const bloco = rules.slice(ini, rules.indexOf('allow create', ini))
+  exigir(ini > 0 && !bloco.includes('gereCrm') && !bloco.includes('isAdmin'), 'dados pessoais do CRM legíveis pela franqueadora')
+  const lead = rules.slice(rules.indexOf('function isValidLeadCrm'), rules.indexOf('match /crmConfig'))
+  exigir(!/'(nome|telefone|email)'/.test(lead), 'PII voltou para o doc do lead (lido pela franqueadora)')
+  exigir(!lead.includes('interesse'), 'interesse em texto livre no lead do CRM (deve ficar em crmContatos)')
+  exigir(rules.includes('.data.nome == nome') && rules.includes('function responsavelCrmOk(uid, nome, unidadeId)'), 'responsavelNome do CRM sem conferir o perfil')
+  const ativ = rules.slice(rules.indexOf('match /crmAtividades/{atividadeId}'), rules.indexOf('match /crmPropostas/{propostaId}'))
+  exigir(!ativ.includes('gereCrm') && ativ.includes('allow update, delete: if false;'), 'atividades do CRM legíveis pela franqueadora ou editáveis')
+}
+exigir(!/match \/crm\w+\/\{\w+\}[^}]*allow delete: if (?!false)/.test(rules), 'exclusão liberada no CRM')
+
 if (erros.length) {
   console.error(erros.join('\n'))
   process.exit(1)
