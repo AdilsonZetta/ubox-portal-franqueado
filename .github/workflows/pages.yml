@@ -1,3 +1,4 @@
+# Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 name: Deploy GitHub Pages
 
 on:
@@ -33,9 +34,19 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Validar configuração do Supabase
+        env:
+          VITE_BACKEND: ${{ vars.VITE_BACKEND || 'firebase' }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: node scripts/validar-config-pages.mjs
+
       - name: Build
         run: npm run build
         env:
+          VITE_BACKEND: ${{ vars.VITE_BACKEND || 'firebase' }}
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_FIREBASE_API_KEY: ${{ vars.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ vars.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ vars.VITE_FIREBASE_PROJECT_ID }}

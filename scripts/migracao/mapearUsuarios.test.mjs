@@ -158,3 +158,18 @@ describe('planejarImportacao', () => {
     })
   })
 })
+
+it.each([[{}, false], [{ ativo: false }, false], [{ ativo: 'true' }, false], [{ ativo: true }, true]])(
+  'mapeia o estado da unidade %j para %s',
+  (dados, ativo) => {
+    expect(planejar({ unidades: [unidade(dados)] }).unidades[0].ativo).toBe(ativo)
+  },
+)
+
+it('planeja um perfil inativo quando a conta Firebase está desativada', () => {
+  const plano = planejar({
+    auth: [{ ...conta('pessoa'), disabled: true }],
+    usuarios: [perfil('pessoa', { ativo: true })],
+  })
+  expect(plano.usuarios[0].ativo).toBe(false)
+})

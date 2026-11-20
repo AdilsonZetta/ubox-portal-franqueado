@@ -1,0 +1,1 @@
+{"path":"estoqueItens/item","id":"item","pai":null,"data":{"nome":"Item Teste","categoria":"insumos","unidadeMedida":"un","estoqueMinimo":0,"precoSugeridoCentavos":100,"criadoEm":{"__tipo":"timestamp","s":1795125600,"ns":123456789},"atualizadoEm":{"__tipo":"timestamp","s":1795125600,"ns":123456789},"atualizadoPor":"autor","atualizadoPorNome":"Pessoa Teste"}}

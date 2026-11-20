@@ -44,19 +44,27 @@ export function planejarImportacao({ auth, usuarios, unidades, config }, {
   const emails = new Set()
   const avisos = []
   const authUsers = []
+  const idsDesativados = new Set()
   let contasDuplicadas = 0
+  let contasSemEmail = 0
 
   for (const conta of auth) {
+    if (typeof conta.email !== 'string' || !conta.email.trim()) {
+      contasSemEmail++
+      avisos.push(`Conta Firebase "${conta.uid}" ignorada por falta de e-mail.`)
+      continue
+    }
     const email = normalizarEmail(conta.email)
     if (emails.has(email)) {
       contasDuplicadas++
       avisos.push(`Conta Firebase "${conta.uid}" ignorada por e-mail duplicado.`)
       continue
     }
-    const id = gerarId()
+    const id = gerarId(conta.uid)
     ids.set(conta.uid, id)
     emails.add(email)
     authUsers.push({ id, email })
+    if (conta.disabled === true) idsDesativados.add(id)
   }
 
   const idsUnidades = new Set(unidades.map(({ id }) => id))
@@ -84,7 +92,7 @@ export function planejarImportacao({ auth, usuarios, unidades, config }, {
       email: limitarTexto(normalizarEmail(data.email), 199),
       nome,
       papel: data.papel,
-      ativo: data.ativo === true,
+      ativo: data.ativo === true && !idsDesativados.has(id),
       recusado: data.recusado === true,
       unidade: limitarTexto(data.unidade, 120),
       unidade_id: unidadeId,
@@ -105,7 +113,7 @@ export function planejarImportacao({ auth, usuarios, unidades, config }, {
       responsavel: limitarTexto(data.responsavel, 120),
       email: limitarTexto(normalizarEmail(data.email), 199),
       uid,
-      ativo: data.ativo ?? true,
+      ativo: data.ativo === true,
       ...camposComuns(data, ids),
     }
   })
@@ -128,6 +136,7 @@ export function planejarImportacao({ auth, usuarios, unidades, config }, {
 
   return {
     authUsers,
+    idsDesativados: [...idsDesativados],
     usuarios: perfis,
     unidades: unidadesImportadas,
     adminLock,
@@ -141,6 +150,7 @@ export function planejarImportacao({ auth, usuarios, unidades, config }, {
       contasSemPerfil: authUsers.length - perfis.length,
       perfisIgnorados: usuarios.length - perfis.length,
       contasDuplicadas,
+      contasSemEmail,
     },
   }
 }

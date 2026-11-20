@@ -1,0 +1,416 @@
+{
+  "arquivos": {
+    "usuarios.jsonl": {
+      "documentos": 1,
+      "sha256": "cfcfa8e74637f032f1cbf2c6e2fdf8d10ff876d0648a20f7d90ebe601e35c863"
+    },
+    "unidades.jsonl": {
+      "documentos": 1,
+      "sha256": "042dd8d26d704483d02068ef1aa721772cd631a913b311deab5718c5f896376a"
+    },
+    "config.jsonl": {
+      "documentos": 1,
+      "sha256": "b79cacab1f75a3807f23481961fb9cb0d47ec6e41d6fca2f530c9aacf99b4fce"
+    },
+    "categorias.jsonl": {
+      "documentos": 1,
+      "sha256": "acaff291cd9cec6a28ce0fa08e45f2b105bb44c2a33ae107b5c270f8e4b94565"
+    },
+    "documentos.jsonl": {
+      "documentos": 1,
+      "sha256": "0d9ca318244ac9e8a834a0103237b37a2413004d7109a1dd5f84f5e3b084c001"
+    },
+    "documentos__versoes.jsonl": {
+      "documentos": 1,
+      "sha256": "3c55f918918290d283bd2a69732d72e38725d927de8e440cac20a2368e1becb7"
+    },
+    "trilhas.jsonl": {
+      "documentos": 1,
+      "sha256": "32df98dbb33bc81ba64d2797a00218df5195fecd90f1e77f0b771ddfd12c15a3"
+    },
+    "quizzes.jsonl": {
+      "documentos": 1,
+      "sha256": "d2b69552b2fb158fb620f7d9f811fa872ab2639274fc9a462feb6e00d441d6fe"
+    },
+    "quizzes__gabarito.jsonl": {
+      "documentos": 1,
+      "sha256": "93d075c007750710be3bdb6cec6c3261feeb61a937c56ac2a0631ba3b625ce6c"
+    },
+    "gabarito.jsonl": {
+      "documentos": 1,
+      "sha256": "af0117695dce2868c143a8a06352d995e1c9b56a40dcfd63427c6cd59ba4116b"
+    },
+    "avisos.jsonl": {
+      "documentos": 1,
+      "sha256": "c4185c72f3a28c6570b140af6355d3b1c6a96ad33ced9c9cb5594932afa89f01"
+    },
+    "leituras.jsonl": {
+      "documentos": 1,
+      "sha256": "bccd243752b78790966c3e7c3df7b366e492fb08ddc857fbc5f3c6ed38ec0bea"
+    },
+    "aceites.jsonl": {
+      "documentos": 1,
+      "sha256": "a33f5c6b47374f2b8a9a86e183effbd368f45dbb6e43495def90e11a5c2db952"
+    },
+    "tentativas.jsonl": {
+      "documentos": 1,
+      "sha256": "189850fde23f284eb17cba731bbf37030315fa3050aa9cfa51e7ba904fde3481"
+    },
+    "certificados.jsonl": {
+      "documentos": 1,
+      "sha256": "8f3aebcb559e2437d615dfc001aafcf0bc49e187192048b8ada380f9d0c0f41a"
+    },
+    "avisosLeituras.jsonl": {
+      "documentos": 1,
+      "sha256": "b2f0e1159c6211c65e7d77235f8f21dc4cecaa9ea352fba00633fccfe7041158"
+    },
+    "manuaisTrilha.jsonl": {
+      "documentos": 1,
+      "sha256": "7710d6640aaf4032a2df0c93cf967f1ebe189b220207e86d49e25bf06f9bb1f5"
+    },
+    "progressoManuais.jsonl": {
+      "documentos": 1,
+      "sha256": "a681220500b6b415b6b691291e0386e3632d3075eced1d1c84364792ab55f878"
+    },
+    "cursos.jsonl": {
+      "documentos": 1,
+      "sha256": "f5ee25f53d021fe59020e50e482e91e8d2cd2c6397a04dfb437b2e623e467608"
+    },
+    "provas.jsonl": {
+      "documentos": 1,
+      "sha256": "dcef9f46e054f33962b303331071d0f2ba1e606ab0edb950094d60cf689dbff9"
+    },
+    "provasGabarito.jsonl": {
+      "documentos": 1,
+      "sha256": "a3d388b1d566cdeb6b129c40f03847276c830dc45d4defde2a5087a3e2a51750"
+    },
+    "tentativasProva.jsonl": {
+      "documentos": 1,
+      "sha256": "c4449171c98979e3211995eb2f7455b71667b1a5abac2e1a9e54756a795d726c"
+    },
+    "tentativasProva__folha.jsonl": {
+      "documentos": 1,
+      "sha256": "bea7ec05fb5a8e29f9bba87dfd015ad8d6b449331e982e1a96d1924b1e855606"
+    },
+    "reestudos.jsonl": {
+      "documentos": 1,
+      "sha256": "17eae6b235a52fd76884a69a58a2d5110bba9a7b5cb5481fec882129996250fc"
+    },
+    "chamados.jsonl": {
+      "documentos": 1,
+      "sha256": "0876192cf49207053035ff87e5be9614339687f473d276c3e297fd527eba430c"
+    },
+    "chamados__eventos.jsonl": {
+      "documentos": 1,
+      "sha256": "017b648a0093128f928ded483547417852c821d3b418ec50eb0fbac46077e512"
+    },
+    "acessos.jsonl": {
+      "documentos": 1,
+      "sha256": "76fe384b91454502f72edd50589b2ec22eff07245672b1dbd938d2c173e88026"
+    },
+    "acessos__segredo.jsonl": {
+      "documentos": 1,
+      "sha256": "eae309f267d36a073a6426ce095312c87fe9d11704c4025991cfcde22fd949fd"
+    },
+    "acessos__eventos.jsonl": {
+      "documentos": 1,
+      "sha256": "07a59bfd8f7f63fc20812931dd7a59151d3baf89e7376db4840f3b86b07cc821"
+    },
+    "solicitacoesAcesso.jsonl": {
+      "documentos": 1,
+      "sha256": "b09b6ad2b22a244fff03d924f6e163943ba346f5c13a5770ec22caeaee05ef68"
+    },
+    "marketingCampanhas.jsonl": {
+      "documentos": 1,
+      "sha256": "aa6eeedec94f4cb70f468f750230eb02e626dc27fe1404285ae50ea9034efeeb"
+    },
+    "marketingMateriais.jsonl": {
+      "documentos": 1,
+      "sha256": "7c8675d6dd9ba37fd17aa2ea1eb419dd8e7b577c3bb07983241c82a7ceba0ea9"
+    },
+    "marketingSolicitacoes.jsonl": {
+      "documentos": 1,
+      "sha256": "08af6a229c1c4573044aac38fb0a390783ce6bf50d30501863d0cc0de00c91a1"
+    },
+    "checklistModelos.jsonl": {
+      "documentos": 1,
+      "sha256": "a4d2adff6d49df971be7af9da8909e7c611148839d0d61d0679e6c29edcf5798"
+    },
+    "checklistExecucoes.jsonl": {
+      "documentos": 1,
+      "sha256": "7d24cebade3788370089c308a017484704c930939e49c86eef62e79493246cac"
+    },
+    "auditoriaModelos.jsonl": {
+      "documentos": 1,
+      "sha256": "b3e3ea41de3249a834c9a90c6a811b9b2598527e85a5efc211e0f736f1310162"
+    },
+    "auditorias.jsonl": {
+      "documentos": 1,
+      "sha256": "64acaaf599c6a244ba8bfcb7a274c182f8baa2943d582b66955c8b3b4cd48c55"
+    },
+    "auditoriaAcoes.jsonl": {
+      "documentos": 1,
+      "sha256": "1a363c609aa40c06d91a310195c9b68a53140a3359c192f87ca2dc14ada1c6c8"
+    },
+    "acompanhamentoRegistros.jsonl": {
+      "documentos": 1,
+      "sha256": "8023e6cd8fcd4222872bf4b1c8063b6592d22549b35d703d3c7dab8a8498cee6"
+    },
+    "acompanhamentoPassos.jsonl": {
+      "documentos": 1,
+      "sha256": "398d8005064af83c109e1f8bbce68b334bc49ef7c489a2af85619feaf91988aa"
+    },
+    "estoqueItens.jsonl": {
+      "documentos": 1,
+      "sha256": "d9ef9338278f07c89404378bb6162366ab3b55fb4813e83cbeedceca78265643"
+    },
+    "estoqueMovimentos.jsonl": {
+      "documentos": 5,
+      "sha256": "46e22be4e29ea78823639a6d5109625ebd4a27ec50ae6b2f79ffd0ebd353a0b0"
+    },
+    "estoqueContagens.jsonl": {
+      "documentos": 1,
+      "sha256": "b8af2593bbf7bf7bda49230d54257eea260665155b26655c0581e2adad91194c"
+    },
+    "estoquePedidos.jsonl": {
+      "documentos": 1,
+      "sha256": "d007c516451e09c2f158bfb073210ac5c981cba70df68d3927693695b42a3721"
+    },
+    "crmConfig.jsonl": {
+      "documentos": 1,
+      "sha256": "8ab1b9a581d4cd15e17cd7ee7f4735b029f4861fffbe44ed8eccb120e923acf8"
+    },
+    "crmLeads.jsonl": {
+      "documentos": 1,
+      "sha256": "71ab22c2d5a0ceae12e80e77e98233a610ccdf88c2271d72b815bdc7de7d5457"
+    },
+    "crmContatos.jsonl": {
+      "documentos": 1,
+      "sha256": "882c060dfa8e238ce7e492657decb20e23f86b3143584af7241c3f09153868b5"
+    },
+    "crmAtividades.jsonl": {
+      "documentos": 1,
+      "sha256": "b7b78a2d65816c3c56aa07f9128a4c16a19f222fcc1483d83ec8338920d20231"
+    },
+    "crmPropostas.jsonl": {
+      "documentos": 1,
+      "sha256": "14f088393a7d567c897571d9f383991ac470cdcd5311bd8c25a78cab6396e5db"
+    },
+    "clientes.jsonl": {
+      "documentos": 1,
+      "sha256": "2415066b5483ebddbf46880ca2ac20daa74123a471857c96509efd2d65213b5d"
+    },
+    "clientePaineis.jsonl": {
+      "documentos": 1,
+      "sha256": "78db9cbd72b200e152cc9288b3ea715431bc6b85322ba5c6411329722c0c25d2"
+    },
+    "clientePaineis__cobrancas.jsonl": {
+      "documentos": 1,
+      "sha256": "3b60c29c14ce7130ecee64fa3b7ae60deb0f766fe003a07647b0789b69c623bf"
+    },
+    "clientePaineis__visitas.jsonl": {
+      "documentos": 1,
+      "sha256": "fa4d621ec867be99f9de9788956e70460547f193936d1e39d2dcbcf0447e55ef"
+    },
+    "clientePaineis__recados.jsonl": {
+      "documentos": 1,
+      "sha256": "38a38a1e7c0122b5a9826fa05f96b1ea3bea33dbf9d6c7cd81be36d16dd05192"
+    },
+    "nuvemLinks.jsonl": {
+      "documentos": 1,
+      "sha256": "e9f4f62934f54cccec1ed1693d71fc6451b710c32cd685be3266b105ba1e50e8"
+    },
+    "auth.json": {
+      "documentos": 1,
+      "sha256": "b76beb5b7ee7a2dde1890600a9d7bd23f615998ca2ab7552abec746997cb9046"
+    },
+    "usuarios.json": {
+      "documentos": 1,
+      "sha256": "223c71c5a631dcf81d6461cab8fe141cdaf9a14d7680cf364436dda3b5a396aa"
+    },
+    "unidades.json": {
+      "documentos": 1,
+      "sha256": "727dbc318b925fe05da80a48878ca62ec92b93a5c997568f533d357431029553"
+    },
+    "config.json": {
+      "documentos": 1,
+      "sha256": "bed302beb081c5a99704713dd145c31fe1231c4d0e6ba4ee481c33759fbf13b7"
+    }
+  },
+  "colecoes": {
+    "usuarios.jsonl": [
+      "usuarios"
+    ],
+    "unidades.jsonl": [
+      "unidades"
+    ],
+    "config.jsonl": [
+      "config"
+    ],
+    "categorias.jsonl": [
+      "categorias"
+    ],
+    "documentos.jsonl": [
+      "documentos"
+    ],
+    "documentos__versoes.jsonl": [
+      "documentos",
+      "versoes"
+    ],
+    "trilhas.jsonl": [
+      "trilhas"
+    ],
+    "quizzes.jsonl": [
+      "quizzes"
+    ],
+    "quizzes__gabarito.jsonl": [
+      "quizzes",
+      "gabarito"
+    ],
+    "gabarito.jsonl": [
+      "gabarito"
+    ],
+    "avisos.jsonl": [
+      "avisos"
+    ],
+    "leituras.jsonl": [
+      "leituras"
+    ],
+    "aceites.jsonl": [
+      "aceites"
+    ],
+    "tentativas.jsonl": [
+      "tentativas"
+    ],
+    "certificados.jsonl": [
+      "certificados"
+    ],
+    "avisosLeituras.jsonl": [
+      "avisosLeituras"
+    ],
+    "manuaisTrilha.jsonl": [
+      "manuaisTrilha"
+    ],
+    "progressoManuais.jsonl": [
+      "progressoManuais"
+    ],
+    "cursos.jsonl": [
+      "cursos"
+    ],
+    "provas.jsonl": [
+      "provas"
+    ],
+    "provasGabarito.jsonl": [
+      "provasGabarito"
+    ],
+    "tentativasProva.jsonl": [
+      "tentativasProva"
+    ],
+    "tentativasProva__folha.jsonl": [
+      "tentativasProva",
+      "folha"
+    ],
+    "reestudos.jsonl": [
+      "reestudos"
+    ],
+    "chamados.jsonl": [
+      "chamados"
+    ],
+    "chamados__eventos.jsonl": [
+      "chamados",
+      "eventos"
+    ],
+    "acessos.jsonl": [
+      "acessos"
+    ],
+    "acessos__segredo.jsonl": [
+      "acessos",
+      "segredo"
+    ],
+    "acessos__eventos.jsonl": [
+      "acessos",
+      "eventos"
+    ],
+    "solicitacoesAcesso.jsonl": [
+      "solicitacoesAcesso"
+    ],
+    "marketingCampanhas.jsonl": [
+      "marketingCampanhas"
+    ],
+    "marketingMateriais.jsonl": [
+      "marketingMateriais"
+    ],
+    "marketingSolicitacoes.jsonl": [
+      "marketingSolicitacoes"
+    ],
+    "checklistModelos.jsonl": [
+      "checklistModelos"
+    ],
+    "checklistExecucoes.jsonl": [
+      "checklistExecucoes"
+    ],
+    "auditoriaModelos.jsonl": [
+      "auditoriaModelos"
+    ],
+    "auditorias.jsonl": [
+      "auditorias"
+    ],
+    "auditoriaAcoes.jsonl": [
+      "auditoriaAcoes"
+    ],
+    "acompanhamentoRegistros.jsonl": [
+      "acompanhamentoRegistros"
+    ],
+    "acompanhamentoPassos.jsonl": [
+      "acompanhamentoPassos"
+    ],
+    "estoqueItens.jsonl": [
+      "estoqueItens"
+    ],
+    "estoqueMovimentos.jsonl": [
+      "estoqueMovimentos"
+    ],
+    "estoqueContagens.jsonl": [
+      "estoqueContagens"
+    ],
+    "estoquePedidos.jsonl": [
+      "estoquePedidos"
+    ],
+    "crmConfig.jsonl": [
+      "crmConfig"
+    ],
+    "crmLeads.jsonl": [
+      "crmLeads"
+    ],
+    "crmContatos.jsonl": [
+      "crmContatos"
+    ],
+    "crmAtividades.jsonl": [
+      "crmAtividades"
+    ],
+    "crmPropostas.jsonl": [
+      "crmPropostas"
+    ],
+    "clientes.jsonl": [
+      "clientes"
+    ],
+    "clientePaineis.jsonl": [
+      "clientePaineis"
+    ],
+    "clientePaineis__cobrancas.jsonl": [
+      "clientePaineis",
+      "cobrancas"
+    ],
+    "clientePaineis__visitas.jsonl": [
+      "clientePaineis",
+      "visitas"
+    ],
+    "clientePaineis__recados.jsonl": [
+      "clientePaineis",
+      "recados"
+    ],
+    "nuvemLinks.jsonl": [
+      "nuvemLinks"
+    ]
+  }
+}

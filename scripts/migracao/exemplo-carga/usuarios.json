@@ -1,0 +1,23 @@
+[
+  {
+    "id": "autor",
+    "data": {
+      "uid": "autor",
+      "nome": "Pessoa Teste",
+      "email": "autor@example.com",
+      "papel": "admin",
+      "ativo": true,
+      "modulosLiberados": [],
+      "unidade": "Unidade Teste",
+      "unidadeId": "unidade",
+      "criadoEm": {
+        "_seconds": 1795125600,
+        "_nanoseconds": 123456789
+      },
+      "atualizadoEm": {
+        "_seconds": 1795125600,
+        "_nanoseconds": 123456789
+      }
+    }
+  }
+]
