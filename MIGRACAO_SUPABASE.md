@@ -297,3 +297,11 @@ Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 - RPC invoker `public.criar_acoes_auditoria(auditoria, acoes jsonb)` grava o plano em lote atômico; helper definer `app` só devolve booleano.
 - App: `src/lib/auditoriaSupabase.ts` atrás de `VITE_BACKEND=supabase`. A consulta agregada do Acompanhamento ainda usa o Firestore (fica para a fase do Acompanhamento).
 - Testes: `supabase/tests/fase9_auditoria.test.sql` — 109 casos (81 das regras do Firestore, incluindo os 5 adiados da fase 8, mais privacidade, lote e anon), local e remoto com rollback.
+
+## 19. O que a fase 10 entregou (Acompanhamento do Franqueado)
+
+- Migração `20261120171246_fase10_acompanhamento` (aplicada no projeto): `acompanhamento_registros` e `acompanhamento_passos`. Sem DELETE; anon sem nada.
+- Leitura igual às regras: consultor com `acompanhamento` (ou admin) lê tudo; a unidade (franqueado e equipe, sem depender de módulo) lê só registros compartilhados da própria unidade e só os passos compartilhados cujo registro-pai também está compartilhado. Registros internos e seus passos ficam invisíveis para a unidade.
+- RPC invoker `public.salvar_acompanhamento(...)` grava registro + passos no mesmo lote (equivalente a `existsAfter/getAfter`) e propaga o compartilhamento para os passos, inclusive validados. O franqueado só marca o passo como feito, com comentário.
+- **Painel do Acompanhamento no Supabase:** com `VITE_BACKEND=supabase`, o resumo lê as 12 fontes (modelos e execuções de checklist, auditorias e ações, chamados, tentativas e cursos, progresso e trilha de manuais, pedidos de marketing, registros e passos) das tabelas já migradas — sem tocar no Firestore.
+- Testes: `supabase/tests/fase10_acompanhamento.test.sql` — 72 casos; os 73 casos `ac:` das regras estão portados (50 aqui, 23 nas fases anteriores).
