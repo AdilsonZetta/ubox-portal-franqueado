@@ -1,0 +1,39 @@
+[
+  {
+    "id": "centro",
+    "data": {
+      "nome": "Ubox Centro",
+      "cidade": "Cidade Exemplo",
+      "responsavel": "Bruno Demo",
+      "email": "bruno@ubox.test",
+      "uid": "bruno",
+      "modulosLiberados": [
+        "biblioteca"
+      ],
+      "ativo": true,
+      "criadoPor": "ana",
+      "criadoEm": {
+        "seconds": 1735732800,
+        "nanoseconds": 250000000
+      },
+      "atualizadoEm": "2025-01-01T12:00:00.000Z"
+    }
+  },
+  {
+    "id": "sul",
+    "data": {
+      "nome": "Ubox Sul",
+      "cidade": "Cidade Exemplo",
+      "responsavel": "Equipe Demo",
+      "email": "sul@ubox.test",
+      "uid": null,
+      "modulosLiberados": [],
+      "ativo": false,
+      "criadoPor": "ana",
+      "criadoEm": {
+        "_seconds": 1735732800,
+        "_nanoseconds": 500000000
+      }
+    }
+  }
+]

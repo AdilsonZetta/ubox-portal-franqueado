@@ -3,7 +3,17 @@ import { SLUGS_FRANQUEADO, subconjunto } from '../data/modulos'
 import type { Papel, Unidade, Usuario } from '../types'
 import { mapUsuario } from './api'
 import { criarLoginEGravar, senhaProvisoria } from './criarConta'
-import { requireDb } from './firebase'
+import { BACKEND } from './backend'
+import { requireAuth, requireDb } from './firebase'
+import { sendPasswordResetEmail } from 'firebase/auth'
+import {
+  atualizarUnidadeSb,
+  atualizarUsuarioSb,
+  criarContaSb,
+  enviarRedefinicaoSb,
+  listarEquipeDaUnidadeSb,
+  listarUnidadesSb,
+} from './gestaoSupabase'
 
 export interface NovaConta {
   nome: string
@@ -51,6 +61,19 @@ export async function criarUnidade(dados: {
   const senha = senhaProvisoria()
   const modulos = dados.modulosLiberados.filter((slug) => SLUGS_FRANQUEADO.includes(slug))
   const id = `un-${crypto.randomUUID().slice(0, 8)}`
+  if (BACKEND === 'supabase') {
+    const uid = await criarContaSb({
+      tipo: 'unidade',
+      unidadeId: id,
+      nome: dados.nome.trim(),
+      cidade: dados.cidade.trim(),
+      responsavel: dados.responsavel.trim(),
+      email: dados.email.trim(),
+      senha,
+      modulosLiberados: modulos,
+    })
+    return { id, senha, uid }
+  }
   const banco = requireDb()
   const uid = await criarLoginEGravar(dados.email, senha, async (novoUid) => {
     await runTransaction(banco, async (tx) => {
@@ -88,8 +111,12 @@ export async function atualizarUnidade(
   unidade: Unidade,
   patch: { nome: string; cidade: string; responsavel: string; modulosLiberados: string[]; ativo: boolean },
 ): Promise<void> {
-  const banco = requireDb()
   const modulos = patch.modulosLiberados.filter((slug) => SLUGS_FRANQUEADO.includes(slug))
+  if (BACKEND === 'supabase') {
+    // Uma chamada só: unidade, responsável e equipe na mesma transação (função atualizar_unidade).
+    return atualizarUnidadeSb(unidade.id, { ...patch, nome: patch.nome.trim(), cidade: patch.cidade.trim(), responsavel: patch.responsavel.trim(), modulosLiberados: modulos })
+  }
+  const banco = requireDb()
   const equipe = await getDocs(
     query(collection(banco, 'usuarios'), where('unidadeId', '==', unidade.id), where('papel', '==', 'equipe_franqueado')),
   )
@@ -129,6 +156,7 @@ export async function atualizarUnidade(
 }
 
 export async function listarUnidades(): Promise<Unidade[]> {
+  if (BACKEND === 'supabase') return listarUnidadesSb()
   const snap = await getDocs(collection(requireDb(), 'unidades'))
   return snap.docs
     .map((item) => {
@@ -152,11 +180,27 @@ export async function listarUnidades(): Promise<Unidade[]> {
 
 export async function criarUsuarioEquipe(conta: Omit<NovaConta, 'senha'> & { senha?: string }): Promise<string> {
   const senha = conta.senha || senhaProvisoria()
+  if (BACKEND === 'supabase') {
+    await criarContaSb({
+      tipo: 'equipe',
+      email: conta.email.trim(),
+      senha,
+      nome: conta.nome.trim(),
+      papel: conta.papel,
+      ativo: conta.ativo,
+      unidade: conta.unidade.trim(),
+      cidade: conta.cidade.trim(),
+      unidadeId: conta.unidadeId,
+      modulosLiberados: conta.modulosLiberados,
+    })
+    return senha
+  }
   await criarLoginEGravar(conta.email, senha, (uid) => criarPerfil(uid, { ...conta, senha }))
   return senha
 }
 
 export async function listarEquipeDaUnidade(unidadeId: string): Promise<Usuario[]> {
+  if (BACKEND === 'supabase') return listarEquipeDaUnidadeSb(unidadeId)
   const snap = await getDocs(
     query(collection(requireDb(), 'usuarios'), where('unidadeId', '==', unidadeId), where('papel', '==', 'equipe_franqueado')),
   )
@@ -167,10 +211,23 @@ export async function atualizarModulosDoUsuario(uid: string, patch: { nome?: str
   const modulos = patch.modulosLiberados && patch.teto && !subconjunto(patch.modulosLiberados, patch.teto)
     ? patch.modulosLiberados.filter((slug) => patch.teto?.includes(slug))
     : patch.modulosLiberados
+  if (BACKEND === 'supabase') {
+    return atualizarUsuarioSb(uid, {
+      ...(patch.nome ? { nome: patch.nome.trim() } : {}),
+      ...(patch.ativo === undefined ? {} : { ativo: patch.ativo }),
+      ...(modulos ? { modulosLiberados: modulos } : {}),
+    })
+  }
   await updateDoc(doc(requireDb(), 'usuarios', uid), {
     ...(patch.nome ? { nome: patch.nome.trim() } : {}),
     ...(patch.ativo === undefined ? {} : { ativo: patch.ativo }),
     ...(modulos ? { modulosLiberados: modulos } : {}),
     atualizadoEm: serverTimestamp(),
   })
+}
+
+/** E-mail de redefinição de senha para a pessoa recém-cadastrada. */
+export async function enviarEmailRedefinicao(email: string): Promise<void> {
+  if (BACKEND === 'supabase') return enviarRedefinicaoSb(email)
+  await sendPasswordResetEmail(requireAuth(), email)
 }

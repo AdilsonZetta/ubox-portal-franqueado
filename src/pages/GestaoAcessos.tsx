@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react'
-import { sendPasswordResetEmail } from 'firebase/auth'
 import { Aviso, Button, Campo, inputClass } from '../components/ui'
 import { SLUGS_FRANQUEADO, MODULOS, subconjunto } from '../data/modulos'
-import { atualizarModulosDoUsuario, atualizarUnidade, criarUnidade, criarUsuarioEquipe, listarEquipeDaUnidade, listarUnidades } from '../lib/gestao'
+import { atualizarModulosDoUsuario, atualizarUnidade, criarUnidade, criarUsuarioEquipe, enviarEmailRedefinicao, listarEquipeDaUnidade, listarUnidades } from '../lib/gestao'
 import { listarUsuarios } from '../lib/api'
 import { useAuth } from '../lib/auth'
-import { requireAuth } from '../lib/firebase'
 import { mensagemErro } from '../lib/errors'
 import type { Unidade, Usuario } from '../types'
 
@@ -38,7 +36,7 @@ function SenhaCriada({ email, senha }: { email: string; senha: string }) {
         type="button"
         className="mt-2 font-semibold text-brand"
         onClick={() => {
-          void sendPasswordResetEmail(requireAuth(), email)
+          void enviarEmailRedefinicao(email)
             .then(() => setAviso('E-mail de redefinição enviado.'))
             .catch((falha: unknown) => setAviso(mensagemErro(falha)))
         }}

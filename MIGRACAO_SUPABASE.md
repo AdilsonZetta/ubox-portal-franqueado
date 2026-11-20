@@ -186,3 +186,29 @@ Se a confirmação de e-mail estiver ligada, a alternativa é uma Edge Function 
   - o caminho Supabase em `auth.tsx` e a `NovaSenhaPage`;
   - testes Vitest do mapeamento e do status.
 - Nenhum usuário nem dado foi migrado.
+
+## 11. O que a fase 2 entregou (gestão de acessos)
+
+- **Migração `20261120132140_fase2_gestao_acessos`** (aplicada): duas funções `security invoker`. Elas rodam como quem chama, então o RLS e os gatilhos da fase 1 continuam decidindo. Só `authenticated` pode executá-las; `anon` não tem acesso.
+  - `criar_unidade_com_responsavel`: cria a unidade e o perfil do responsável, tudo ou nada.
+  - `atualizar_unidade`: edita a unidade e passa as mudanças para o responsável e para a equipe numa transação só. A equipe perde os módulos que a unidade deixou de ter.
+- **Edge Function `criar-conta`** (publicada, gratuita no plano Free): cria o login da equipe ou do responsável da unidade.
+  - A `service_role` existe só no servidor do Supabase e serve apenas para criar e apagar o login.
+  - O perfil é gravado com o token de quem chamou, então o RLS decide. Se a gravação for recusada, o login recém-criado é apagado.
+  - Sem sessão válida, a função responde 401.
+  - Foi publicada com `verify_jwt: false` porque ela mesma valida a sessão com `auth.getUser()`.
+- **App:** com `VITE_BACKEND=supabase`, `gestao.ts` e `api.ts` usam o Supabase em:
+  - listar usuários, unidades e equipe;
+  - criar unidade e equipe;
+  - editar unidade e usuário, inclusive o próprio nome;
+  - enviar o e-mail de redefinição de senha.
+
+  `reidratarAcessos` não faz nada no Supabase até a fase 3. **O padrão continua Firebase.**
+- **Ensaio da importação de usuários:** `npm run migracao:ensaio` roda `scripts/migrar-usuarios.mjs ensaio` com dados fictícios em `scripts/migracao/exemplo`.
+  - Ele carrega tudo num PGlite em memória, com as migrações reais, e confere as contagens.
+  - `aplicar` e `exportar` ainda não importam nada: a importação real fica para o corte, com aprovação explícita.
+  - Senhas e hashes nunca são lidos.
+- **Testes:**
+  - `supabase/tests/fase2_gestao.test.sql` tem 46 casos pgTAP. Desses, 31 foram portados de `tests/regras.mjs` (marcados `[regras]`) e 15 cobrem as funções novas.
+  - Com a fase 1, são 121 casos no local e no projeto (com rollback).
+  - O Vitest cobre o mapeamento e o ensaio de importação.

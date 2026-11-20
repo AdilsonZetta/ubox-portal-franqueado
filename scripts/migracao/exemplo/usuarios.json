@@ -1,0 +1,114 @@
+[
+  {
+    "id": "ana",
+    "data": {
+      "uid": "ana",
+      "email": "ana@ubox.test",
+      "nome": "Ana Demo",
+      "papel": "admin",
+      "ativo": true,
+      "recusado": false,
+      "criadoEm": "2025-01-01T12:00:00.000Z",
+      "atualizadoEm": {
+        "seconds": 1735732800,
+        "nanoseconds": 250000000
+      }
+    }
+  },
+  {
+    "id": "bruno",
+    "data": {
+      "uid": "bruno",
+      "email": "bruno@ubox.test",
+      "nome": "Bruno Demo",
+      "papel": "franqueado",
+      "ativo": true,
+      "recusado": false,
+      "unidade": "Ubox Centro",
+      "cidade": "Cidade Exemplo",
+      "unidadeId": "centro",
+      "modulosLiberados": [
+        "biblioteca"
+      ],
+      "criadoPor": "ana",
+      "criadoEm": {
+        "_seconds": 1735732800,
+        "_nanoseconds": 500000000
+      }
+    }
+  },
+  {
+    "id": "carla",
+    "data": {
+      "uid": "carla",
+      "email": "carla@ubox.test",
+      "nome": "Carla Demo",
+      "papel": "equipe_franqueado",
+      "ativo": true,
+      "recusado": false,
+      "unidade": "Ubox Centro",
+      "cidade": "Cidade Exemplo",
+      "unidadeId": "centro",
+      "modulosLiberados": [
+        "biblioteca"
+      ],
+      "criadoPor": "bruno",
+      "criadoEm": {
+        "seconds": 1735732800,
+        "nanoseconds": 250000000
+      }
+    }
+  },
+  {
+    "id": "diego",
+    "data": {
+      "uid": "diego",
+      "email": "diego@ubox.test",
+      "nome": "Diego Demo",
+      "papel": "equipe_franqueadora",
+      "ativo": true,
+      "recusado": false,
+      "criadoPor": "ana",
+      "criadoEm": "2025-01-01T12:00:00.000Z"
+    }
+  },
+  {
+    "id": "elisa",
+    "data": {
+      "uid": "elisa",
+      "email": "elisa@ubox.test",
+      "nome": "Elisa Demo",
+      "papel": "franqueado",
+      "ativo": false,
+      "recusado": false,
+      "unidadeId": null
+    }
+  },
+  {
+    "id": "gabi",
+    "data": {
+      "uid": "gabi",
+      "email": "gabi@ubox.test",
+      "nome": "Gabi Demo",
+      "papel": "franqueado",
+      "ativo": true,
+      "recusado": false
+    }
+  },
+  {
+    "id": "heitor",
+    "data": {
+      "uid": "heitor",
+      "email": "heitor@ubox.test",
+      "nome": "Heitor Demo",
+      "papel": "franqueado",
+      "ativo": true,
+      "recusado": false,
+      "unidadeId": "unidade-ausente",
+      "criadoEm": {
+        "_seconds": 1735732800,
+        "_nanoseconds": 500000000
+      }
+    }
+  }
+]

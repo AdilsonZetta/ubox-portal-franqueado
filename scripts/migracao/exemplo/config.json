@@ -1,0 +1,10 @@
+{
+  "adminCriado": {
+    "uid": "ana",
+    "email": "ana@ubox.test",
+    "criadoEm": {
+      "_seconds": 1735732800,
+      "_nanoseconds": 500000000
+    }
+  }
+}
