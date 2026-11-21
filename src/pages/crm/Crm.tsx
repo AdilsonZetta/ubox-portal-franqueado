@@ -21,7 +21,7 @@ import {
   type LeadForm,
 } from '../../lib/crm'
 import { atualizarLead, criarLead } from '../../lib/crmApi'
-import { Barra, EtapaSelo, Numero, RodapeModulo11, useCrm, useResponsaveis, type UsoCrm } from './partes'
+import { Barra, EtapaSelo, Numero, useCrm, useResponsaveis, type UsoCrm } from './partes'
 
 type Aba = 'funil' | 'followups' | 'painel'
 const ROTULO_ABA: Record<Aba, string> = { funil: 'Funil', followups: 'Follow-ups', painel: 'Painel' }
@@ -62,20 +62,19 @@ export function CrmPage() {
 
       {dados.simulando ? <Aviso>Na simulação, o admin vê só os campos sem dados pessoais e não grava nada.</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando o funil…" /> : null}
       {novo ? <NovoLead dados={dados} onFechar={() => setNovo(false)} onFeito={(m) => { setNovo(false); setOk(m); dados.recarregar() }} /> : null}
 
-      {!dados.carregando && aba === 'funil' ? <Kanban dados={dados} agora={agora} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
-      {!dados.carregando && aba === 'followups' ? (
+      {!dados.carregando && !dados.erro && aba === 'funil' ? <Kanban dados={dados} agora={agora} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
+      {!dados.carregando && !dados.erro && aba === 'followups' ? (
         <section className="grid gap-4 lg:grid-cols-3">
           <ListaFollowUp titulo="Atrasados" vazio="Nenhum follow-up atrasado." leads={fu.atrasados} contatos={dados.contatos} tom="erro" />
           <ListaFollowUp titulo="Para hoje" vazio="Nada agendado para hoje." leads={fu.hoje} contatos={dados.contatos} />
           <ListaFollowUp titulo="Sem próximo contato" vazio="Todo lead aberto tem data de retorno." leads={fu.semData} contatos={dados.contatos} />
         </section>
       ) : null}
-      {!dados.carregando && aba === 'painel' ? <Painel leads={dados.leads} agora={agora} /> : null}
-      <RodapeModulo11 />
+      {!dados.carregando && !dados.erro && aba === 'painel' ? <Painel leads={dados.leads} agora={agora} /> : null}
     </div>
   )
 }
@@ -91,6 +90,7 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
   const [responsavel, setResponsavel] = useState('')
   const [busca, setBusca] = useState('')
   const [erro, setErro] = useState('')
+  const [movendo, setMovendo] = useState('')
   const responsaveis = useResponsaveis(dados.pessoa, dados.leads)
   const filtrados = dados.leads.filter((l) => (!responsavel || l.responsavelUid === responsavel)
     && (!soAtrasados || atrasado(l, agora))
@@ -101,13 +101,16 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
   const lista = colunas.flatMap((etapa) => grupos[etapa])
 
   async function avancar(l: Lead, etapa: Etapa) {
-    if (!dados.pessoa) return
+    if (!dados.pessoa || movendo) return
     setErro('')
+    setMovendo(l.id)
     try {
       await atualizarLead(dados.pessoa, l, { etapa })
       onFeito(`${nomeDo(dados.contatos, l)} → ${ROTULO_ETAPA[etapa]}.`)
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      setMovendo('')
     }
   }
 
@@ -131,7 +134,7 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
             l.proximoContatoMs && !l.arquivado && ETAPAS_ABERTAS.includes(l.etapa) ? formatarDia(l.proximoContatoMs) : null,
             atrasado(l, agora) ? 'Em atraso' : null])} /> : null}
       </div>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
       {!dados.leads.length ? <Vazio titulo="Nenhum lead ainda" texto="Cadastre quem pediu orçamento pelo site, Instagram, WhatsApp ou passou na loja." /> : null}
       {dados.leads.length > 0 && !lista.length ? <Vazio titulo="Nenhum resultado para este filtro" texto="Ajuste a busca ou os filtros do funil." /> : null}
       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -155,7 +158,7 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
                   ) : null}
                   {l.arquivado ? <p className="text-xs text-ink/45">Arquivado</p> : null}
                   {proxima && !l.arquivado && !dados.simulando ? (
-                    <button type="button" onClick={() => void avancar(l, proxima)} className="inline-flex items-center gap-0.5 text-xs font-semibold text-brand-dark hover:underline">
+                    <button type="button" disabled={Boolean(movendo)} onClick={() => void avancar(l, proxima)} className="inline-flex items-center gap-0.5 text-xs font-semibold text-brand-dark hover:underline disabled:opacity-50">
                       Mover para {ROTULO_ETAPA[proxima]} <ChevronRight className="h-3 w-3" aria-hidden="true" />
                     </button>
                   ) : null}
@@ -239,7 +242,7 @@ function NovoLead({ dados, onFechar, onFeito }: { dados: UsoCrm; onFechar: () =>
   const [salvando, setSalvando] = useState(false)
 
   async function gravar(abrir: boolean) {
-    if (!dados.pessoa) return
+    if (!dados.pessoa || salvando) return
     const erros = validarLead(f, dados.config.origens)
     if (erros.length) { setErro(erros.join(' ')); return }
     setSalvando(true)
@@ -259,7 +262,7 @@ function NovoLead({ dados, onFechar, onFeito }: { dados: UsoCrm; onFechar: () =>
   return (
     <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold">Novo lead</h2>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
       <div className="grid gap-3 md:grid-cols-3">
         <Campo label="Nome do cliente"><input className={inputClass} maxLength={120} value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} /></Campo>
         <Campo label="Telefone"><input className={inputClass} maxLength={30} inputMode="tel" value={f.telefone} onChange={(e) => setF({ ...f, telefone: e.target.value })} /></Campo>

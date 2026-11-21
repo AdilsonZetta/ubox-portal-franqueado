@@ -118,6 +118,3 @@ export function Numero({ rotulo, valor, dica }: { rotulo: string; valor: string;
   )
 }
 
-export function RodapeModulo11() {
-  return <p className="text-center text-[11px] text-ink/35">Módulo 11 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
-}
