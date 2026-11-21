@@ -1,4 +1,4 @@
-import { Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, LayoutTemplate, LogOut, Menu, MessageCircle, Route as RotaIcon, Search, Shield, SlidersHorizontal, X } from 'lucide-react'
+import { Activity, Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, LayoutTemplate, LogOut, Menu, MessageCircle, Route as RotaIcon, Search, Shield, SlidersHorizontal, Upload, UserRound, Users, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { GRUPOS, MODULOS } from '../data/modulos'
@@ -28,7 +28,8 @@ const itensManuais = [
   { to: '/atribuicoes', label: 'Atribuições', icon: ClipboardCheck, admin: true },
   { to: '/modelos', label: 'Modelos', icon: LayoutTemplate, admin: true },
   { to: '/pergunte', label: 'Pergunte', icon: MessageCircle },
-  { to: '/admin', label: 'Relatórios', icon: Shield, admin: true },
+  { to: '/admin', label: 'Relatórios', icon: Shield, admin: true, fim: true },
+  { to: '/admin/importar', label: 'Importar conteúdo', icon: Upload, admin: true },
 ]
 
 function moduloDaRota(pathname: string): string | null {
@@ -55,6 +56,7 @@ function moduloDaRota(pathname: string): string | null {
   return 'manuais'
 }
 
+// Menu lateral adaptado de shadcn-admin (MIT, https://github.com/satnaing/shadcn-admin)
 export function Layout() {
   const { user, sair } = useAuth()
   const { comoFranqueado, ehAdmin, alternar, simulado, franqueados, escolher } = useVisao()
@@ -150,8 +152,8 @@ export function Layout() {
           aria-label="Pergunte ou busque um POP"
           value={consulta}
           onChange={(evento) => setConsulta(evento.target.value)}
-          placeholder="Pergunte ou busque um POP"
-          className="w-full rounded-xl border border-surface/20 bg-surface/10 py-2.5 pl-9 pr-3 text-sm outline-none ring-brand/30 focus:border-brand focus:bg-surface/10 focus:ring-2"
+          placeholder="Buscar ou perguntar"
+          className="w-full rounded-xl border border-line-control bg-sidebar-field py-2.5 pl-9 pr-3 text-sm transition-portal motion-reduce:transition-none"
         />
       </form>
       <nav className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
@@ -170,17 +172,17 @@ export function Layout() {
                     <button
                       type="button"
                       onClick={() => alternarModulo(modulo.slug)}
-                      className={cx('flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm', aberto ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
+                      className={cx('flex min-h-9 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm', aberto ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                     >
                       <Icone className="h-4 w-4 shrink-0" />
-                      <span className="min-w-0 flex-1 truncate">{modulo.nome}</span>
+                      <span className="min-w-0 flex-1 wrap-anywhere">{modulo.nome}</span>
                       {modulo.slug === 'chamados' && pendentes > 0 ? (
                         <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{pendentes}</span>
                       ) : null}
                       {modulo.slug === 'senhas' && solicitacoesAbertas > 0 ? (
                         <span className="rounded-full bg-brand px-1.5 text-[10px] font-bold text-white">{solicitacoesAbertas}</span>
                       ) : null}
-                      <ChevronDown className={cx('h-3.5 w-3.5 shrink-0 transition', aberto && 'rotate-180')} />
+                      <ChevronDown className={cx('h-3.5 w-3.5 shrink-0', aberto && 'rotate-180')} />
                     </button>
                     {aberto ? (
                       <div className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-surface/20 pl-2">
@@ -193,9 +195,10 @@ export function Layout() {
                                   to={item.to}
                                   end={item.fim}
                                   onClick={() => setMenuAberto(false)}
-                                  className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
+                                  className={({ isActive }) => cx('flex items-center gap-2 rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                                 >
-                                  {item.label}
+                                  <item.icon className="size-3.5 shrink-0" aria-hidden="true" />
+                                  <span className="min-w-0 wrap-anywhere">{item.label}</span>
                                 </NavLink>
                               ))
                           : null}
@@ -207,10 +210,10 @@ export function Layout() {
                                   key={area.id}
                                   to={`/biblioteca/${area.id}`}
                                   onClick={() => setMenuAberto(false)}
-                                  className={({ isActive }) => cx('flex items-center gap-1.5 rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
+                                  className={({ isActive }) => cx('flex items-center gap-1.5 rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                                 >
                                   <Folder className="h-3 w-3 shrink-0" />
-                                  <span className="min-w-0 flex-1 truncate">{area.nome.replace(/^\d+\s*/, '')}</span>
+                                  <span className="min-w-0 flex-1 wrap-anywhere">{area.nome.replace(/^\d+\s*/, '')}</span>
                                   <span className="text-[10px]">{quantidade}</span>
                                 </NavLink>
                               )
@@ -218,15 +221,15 @@ export function Layout() {
                           : null}
                         {modulo.slug === 'universidade' ? (
                           <>
-                            <NavLink to="/universidade" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/universidade" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Cursos
                             </NavLink>
                             {podeGerirUniversidade(user, ehAdmin) && !comoFranqueado ? (
-                              <NavLink to="/universidade/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                              <NavLink to="/universidade/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                 Gestão da Universidade
                               </NavLink>
                             ) : null}
-                            <NavLink to="/meus-certificados" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/meus-certificados" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Meus certificados
                             </NavLink>
                           </>
@@ -235,18 +238,18 @@ export function Layout() {
                           <>
                             {!(podeGerirChecklist(user, ehAdmin) && !comoFranqueado) ? (
                               <>
-                                <NavLink to="/checklist" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                                <NavLink to="/checklist" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                   Rotinas da unidade
                                 </NavLink>
-                                <NavLink to="/checklist/historico" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                                <NavLink to="/checklist/historico" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                   Histórico
                                 </NavLink>
-                                <NavLink to="/checklist/nao-conformidades" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                                <NavLink to="/checklist/nao-conformidades" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                   Não conformidades
                                 </NavLink>
                               </>
                             ) : (
-                              <NavLink to="/checklist/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                              <NavLink to="/checklist/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                 Gestão do checklist
                               </NavLink>
                             )}
@@ -254,65 +257,65 @@ export function Layout() {
                         ) : null}
                         {modulo.slug === 'estoque' ? (
                           podeGerirEstoque(user, ehAdmin) && !comoFranqueado ? (
-                            <NavLink to="/estoque/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/estoque/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Gestão do estoque
                             </NavLink>
                           ) : (
-                            <NavLink to="/estoque" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/estoque" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Estoque da unidade
                             </NavLink>
                           )
                         ) : null}
                         {modulo.slug === 'crm' ? (
                           podeGerirCrm(user, ehAdmin) && !comoFranqueado ? (
-                            <NavLink to="/crm/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/crm/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Desempenho da rede
                             </NavLink>
                           ) : (
-                            <NavLink to="/crm" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/crm" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Funil de locação
                             </NavLink>
                           )
                         ) : null}
                         {modulo.slug === 'cliente' ? (
-                          <NavLink to="/clientes" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                          <NavLink to="/clientes" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                             Clientes e contratos
                           </NavLink>
                         ) : null}
                         {modulo.slug === 'auditoria' ? (
                           <>
-                            <NavLink to="/auditoria" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/auditoria" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Auditorias da rede
                             </NavLink>
-                            <NavLink to="/auditoria/nova" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/auditoria/nova" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Nova auditoria
                             </NavLink>
-                            <Link to="/auditoria?aba=modelos" onClick={() => setMenuAberto(false)} className="block rounded-[10px] px-2 py-2 text-[13px] text-line-strong hover:bg-surface/10 hover:text-surface">
+                            <Link to="/auditoria?aba=modelos" onClick={() => setMenuAberto(false)} className="block rounded-[10px] px-2 py-2 text-sm text-line-strong hover:bg-surface/10 hover:text-surface">
                               Modelos
                             </Link>
-                            <Link to="/auditoria?aba=acoes" onClick={() => setMenuAberto(false)} className="block rounded-[10px] px-2 py-2 text-[13px] text-line-strong hover:bg-surface/10 hover:text-surface">
+                            <Link to="/auditoria?aba=acoes" onClick={() => setMenuAberto(false)} className="block rounded-[10px] px-2 py-2 text-sm text-line-strong hover:bg-surface/10 hover:text-surface">
                               Planos de ação
                             </Link>
                           </>
                         ) : null}
                         {modulo.slug === 'acompanhamento' ? (
-                          <NavLink to="/acompanhamento" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                          <NavLink to="/acompanhamento" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                             Visão da rede
                           </NavLink>
                         ) : null}
                         {modulo.slug === 'marketing' ? (
                           <>
-                            <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/marketing" end onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Materiais
                             </NavLink>
-                            <NavLink to="/marketing/calendario" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/marketing/calendario" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Calendário
                             </NavLink>
-                            <NavLink to="/marketing/pedidos" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                            <NavLink to="/marketing/pedidos" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                               Pedidos de peça
                             </NavLink>
                             {podeGerirMarketing(user, ehAdmin) && !comoFranqueado ? (
-                              <NavLink to="/marketing/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                              <NavLink to="/marketing/gestao" onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                                 Gestão do marketing
                               </NavLink>
                             ) : null}
@@ -324,14 +327,14 @@ export function Layout() {
                               to="/senhas"
                               end
                               onClick={() => setMenuAberto(false)}
-                              className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
+                              className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                             >
                               Cofre da unidade
                             </NavLink>
                             <NavLink
                               to="/senhas/solicitacoes"
                               onClick={() => setMenuAberto(false)}
-                              className={({ isActive }) => cx('flex items-center justify-between rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
+                              className={({ isActive }) => cx('flex items-center justify-between rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                             >
                               <span>Solicitações</span>
                               {solicitacoesAbertas > 0 ? (
@@ -341,14 +344,14 @@ export function Layout() {
                             <NavLink
                               to="/senhas/permissoes"
                               onClick={() => setMenuAberto(false)}
-                              className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
+                              className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
                             >
                               Permissões
                             </NavLink>
                           </>
                         ) : null}
                         {modulo.ativo && modulo.para && modulo.slug !== 'manuais' && modulo.slug !== 'universidade' && modulo.slug !== 'senhas' && modulo.slug !== 'marketing' && modulo.slug !== 'checklist' && modulo.slug !== 'estoque' && modulo.slug !== 'crm' && modulo.slug !== 'cliente' && modulo.slug !== 'auditoria' && modulo.slug !== 'acompanhamento' ? (
-                          <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-[13px]', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+                          <NavLink to={modulo.para} onClick={() => setMenuAberto(false)} className={({ isActive }) => cx('block rounded-[10px] px-2 py-2 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
                             Abrir
                           </NavLink>
                         ) : null}
@@ -358,9 +361,9 @@ export function Layout() {
                                 key={nome}
                                 to={`/modulos/${modulo.slug}`}
                                 onClick={() => setMenuAberto(false)}
-                                className="flex items-center gap-1.5 rounded-[10px] px-2 py-2 text-[13px] text-sidebar-muted hover:bg-surface/10"
+                                className="flex items-center gap-1.5 rounded-[10px] px-2 py-2 text-sm text-sidebar-muted hover:bg-surface/10"
                               >
-                                <span className="min-w-0 flex-1 truncate">{nome}</span>
+                                <span className="min-w-0 flex-1 wrap-anywhere">{nome}</span>
                                 <span className="shrink-0 rounded bg-ink/5 px-1 text-[9px] font-bold uppercase tracking-wide">Em breve</span>
                               </Link>
                             ))
@@ -376,30 +379,35 @@ export function Layout() {
         })}
       </nav>
       {user?.papel === 'franqueado' && !comoFranqueado ? (
-        <NavLink to="/minha-equipe" onClick={() => setMenuAberto(false)} className="mt-3 block shrink-0 rounded-xl border border-surface/20 px-3 py-2 text-sm font-semibold hover:bg-surface/10">
+        <NavLink to="/minha-equipe" onClick={() => setMenuAberto(false)} className="atalho-lateral mt-3">
+          <Users className="size-4 shrink-0" aria-hidden="true" />
           Minha equipe
         </NavLink>
       ) : null}
       {(user?.papel === 'franqueado' || user?.papel === 'equipe_franqueado') && !comoFranqueado ? (
-        <NavLink to="/auditorias" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-surface/20 px-3 py-2 text-sm font-semibold hover:bg-surface/10">
+        <NavLink to="/auditorias" onClick={() => setMenuAberto(false)} className="atalho-lateral">
+          <ClipboardCheck className="size-4 shrink-0" aria-hidden="true" />
           Auditorias da unidade
         </NavLink>
       ) : null}
       {(user?.papel === 'franqueado' || user?.papel === 'equipe_franqueado') && !comoFranqueado ? (
-        <NavLink to="/meu-acompanhamento" onClick={() => setMenuAberto(false)} className="mt-2 block shrink-0 rounded-xl border border-surface/20 px-3 py-2 text-sm font-semibold hover:bg-surface/10">
+        <NavLink to="/meu-acompanhamento" onClick={() => setMenuAberto(false)} className="atalho-lateral">
+          <Activity className="size-4 shrink-0" aria-hidden="true" />
           Acompanhamento
         </NavLink>
       ) : null}
       {user?.papel === 'admin' ? (
         <div className="mt-3 shrink-0 space-y-2">
-          <button type="button" onClick={alternar} className="w-full rounded-xl border border-brand/40 px-3 py-2 text-left text-sm font-semibold text-brand-soft hover:bg-surface/10">
+          <button type="button" onClick={alternar} className="atalho-lateral w-full text-left">
+            <UserRound className="size-4 shrink-0" aria-hidden="true" />
             {comoFranqueado ? 'Voltar para franqueadora' : 'Ver como franqueado'}
           </button>
           {comoFranqueado ? (
             <select
+              aria-label="Franqueado para simulação"
               value={simulado?.uid ?? ''}
               onChange={(evento) => escolher(evento.target.value)}
-              className="w-full rounded-xl border border-surface/20 bg-graphite px-2 py-2 text-sm"
+              className="w-full rounded-xl border border-line-control bg-graphite px-2 py-2 text-sm transition-portal motion-reduce:transition-none"
             >
               <option value="">Escolha o franqueado</option>
               {franqueados.map((pessoa) => (
@@ -425,6 +433,16 @@ export function Layout() {
 
   return (
     <div className="min-h-screen bg-paper text-ink">
+      <a
+        href="#conteudo"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-surface focus:px-4 focus:py-3 focus:text-ink"
+        onClick={(evento) => {
+          evento.preventDefault()
+          document.getElementById('conteudo')?.focus()
+        }}
+      >
+        Pular para o conteúdo
+      </a>
       <aside className="fixed inset-y-0 left-0 z-30 portal-lateral hidden w-[272px] flex-col bg-graphite px-4 py-5 text-surface lg:flex">{miolo}</aside>
       {menuAberto ? (
         <div className="fixed inset-0 z-40 lg:hidden">
@@ -466,7 +484,7 @@ export function Layout() {
             </button>
           </div>
         ) : null}
-        <main className="portal-conteudo min-w-0 px-4 py-5 md:px-8 md:py-6">
+        <main id="conteudo" tabIndex={-1} className="portal-conteudo mx-auto min-w-0 max-w-7xl scroll-mt-16 px-4 py-5 md:px-8 md:py-6 lg:scroll-mt-0">
           <Outlet />
         </main>
       </div>
