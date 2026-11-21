@@ -119,6 +119,11 @@ describe('Acompanhamento: registros e acesso', () => {
     expect(validarRegistro({ ...base, geradoPorIA: true, iaModelo: ' ' })).toHaveLength(1)
     expect(validarRegistro({ ...base, passos: [{ descricao: '', responsavel: 'A', prazo: '' }] })).toHaveLength(3)
   })
+  it('rejeita datas que seriam normalizadas e aceita dia bissexto válido', () => {
+    expect(validarRegistro({ ...base, data: '2026-02-29' })).toHaveLength(1)
+    expect(validarRegistro({ ...base, data: '2024-02-29' })).toEqual([])
+    expect(validarRegistro({ ...base, passos: [{ descricao: 'Visitar', responsavel: 'Maria', prazo: '2026-11-31' }] })).toHaveLength(1)
+  })
   it('consultor é admin ou equipe da franqueadora com o módulo', () => {
     expect(podeGerirAcompanhamento({ papel: 'admin' }, true)).toBe(true)
     expect(podeGerirAcompanhamento({ papel: 'equipe_franqueadora', modulosLiberados: ['acompanhamento'] }, false)).toBe(true)

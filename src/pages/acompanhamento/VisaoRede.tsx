@@ -2,7 +2,7 @@ import { BotaoCsv } from '../../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
-import { Aviso, Carregando, Vazio, cx, inputClass } from '../../components/ui'
+import { Aviso, Button, Carregando, Vazio, cx, inputClass } from '../../components/ui'
 import { mensagemErro } from '../../lib/errors'
 import { formatarDia } from '../../lib/format'
 import { listarUnidades } from '../../lib/gestao'
@@ -10,7 +10,7 @@ import { ROTULO_NIVEL, resumirUnidade, saudeDe, sinaisSaude, type Nivel } from '
 import { carregarAcompanhamento, type DadosAcompanhamento } from '../../lib/acompanhamentoApi'
 import type { Unidade } from '../../types'
 import { ScoreSelo } from '../checklist/partes'
-import { COR_NIVEL, CriteriosSaude, RodapeModulo9, SaudeSelo, useAcessoAcompanhamento } from './partes'
+import { COR_NIVEL, CriteriosSaude, SaudeSelo, useAcessoAcompanhamento } from './partes'
 
 export function VisaoRedePage() {
   const { gestor } = useAcessoAcompanhamento()
@@ -18,6 +18,7 @@ export function VisaoRedePage() {
   const [dados, setDados] = useState<DadosAcompanhamento | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [tique, setTique] = useState(0)
   const [busca, setBusca] = useState('')
   const [cidade, setCidade] = useState('')
   const [nivel, setNivel] = useState<Nivel | ''>('')
@@ -25,6 +26,8 @@ export function VisaoRedePage() {
   useEffect(() => {
     if (!gestor) return
     let ativo = true
+    setCarregando(true)
+    setErro('')
     void Promise.all([listarUnidades(), carregarAcompanhamento()])
       .then(([u, d]) => {
         if (!ativo) return
@@ -36,7 +39,7 @@ export function VisaoRedePage() {
     return () => {
       ativo = false
     }
-  }, [gestor])
+  }, [gestor, tique])
 
   const linhas = useMemo(() => {
     if (!dados) return []
@@ -65,10 +68,10 @@ export function VisaoRedePage() {
         <h1 className="text-2xl font-black text-ink">Visão da rede</h1>
         <p className="mt-0.5 max-w-3xl text-sm text-ink/65">Saúde de cada unidade a partir do checklist, das auditorias, dos chamados e dos combinados com a franqueadora. Clique em uma unidade para ver o painel completo e registrar visitas e reuniões.</p>
       </header>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
-      {indisponiveis.length ? <Aviso tom="info">Algumas fontes não puderam ser lidas e aparecem como indisponíveis: {indisponiveis.join(', ')}.</Aviso> : null}
+      {erro ? <Aviso tom="erro"><span role="alert">{erro}</span> <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
+      {!carregando && !erro && indisponiveis.length ? <Aviso tom="info">Algumas fontes não puderam ser lidas e aparecem como indisponíveis: {indisponiveis.join(', ')}. <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
       {carregando ? <Carregando texto="Reunindo os dados da rede…" /> : null}
-      {!carregando ? (
+      {!carregando && !erro ? (
         <>
           <div className="grid gap-3 sm:grid-cols-3">
             {(['vermelho', 'amarelo', 'verde'] as Nivel[]).map((n) => (
@@ -133,7 +136,6 @@ export function VisaoRedePage() {
           </div>
         </>
       ) : null}
-      <RodapeModulo9 />
     </div>
   )
 }
