@@ -29,10 +29,6 @@ import type { Usuario } from '../../types'
 
 type Modo = 'rede' | 'unidade'
 
-export function RodapeModulo13() {
-  return <p className="text-center text-[11px] text-ink/35">Módulo 13 construído pelo Grok Bot no Cursor (Antigravity sem cota).</p>
-}
-
 export function NuvemUnidadePage() {
   return <Nuvem modo="unidade" />
 }
@@ -50,6 +46,8 @@ function Nuvem({ modo }: { modo: Modo }) {
   const [links, setLinks] = useState<LinkNuvem[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [erroCarga, setErroCarga] = useState(false)
+  const [removendo, setRemovendo] = useState(false)
   const [ok, setOk] = useState('')
   const [busca, setBusca] = useState('')
   const [pasta, setPasta] = useState('')
@@ -62,9 +60,9 @@ function Nuvem({ modo }: { modo: Modo }) {
     if (!pessoa || !pode) { setCarregando(false); return }
     let vivo = true
     setCarregando(true)
-    setErro('')
+    setErroCarga(false)
     const p = modo === 'rede' ? carregarLinksRede() : carregarLinksUnidade(pessoa.unidadeId ?? '')
-    void p.then((r) => vivo && setLinks(r)).catch((f) => vivo && setErro(mensagemErro(f))).finally(() => vivo && setCarregando(false))
+    void p.then((r) => vivo && setLinks(r)).catch(() => vivo && setErroCarga(true)).finally(() => vivo && setCarregando(false))
     return () => { vivo = false }
   }, [pessoa, pode, modo, tique])
 
@@ -74,7 +72,7 @@ function Nuvem({ modo }: { modo: Modo }) {
   const daUnidade = (l: LinkNuvem) => modo === 'unidade' && l.dono === (pessoa?.unidadeId ?? '')
   const podeEditar = (l: LinkNuvem) => (modo === 'rede' ? l.dono === '' : daUnidade(l))
 
-  if (!carregando && (!pessoa || !pode)) {
+  if (!pessoa || !pode) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <Vazio
@@ -83,14 +81,24 @@ function Nuvem({ modo }: { modo: Modo }) {
             ? 'Disponível para o admin e para a equipe da franqueadora com o módulo "Armazenamento em Nuvem" da franqueadora.'
             : 'Disponível para o franqueado e a equipe da unidade com o módulo liberado. A área privada da unidade não é lida pela franqueadora, nem na simulação.'}
         />
-        <RodapeModulo13 />
       </div>
     )
   }
 
   async function remover(l: LinkNuvem) {
-    if (!window.confirm(`Remover "${l.titulo}" do portal? O arquivo no Google Drive não é apagado.`)) return
-    try { await removerLink(l.id); setOk('Link removido do portal. O arquivo no Drive continua lá.'); recarregar() } catch (f) { setErro(mensagemErro(f)) }
+    if (removendo || !window.confirm(`Remover "${l.titulo}" do portal? O arquivo no Google Drive não é apagado.`)) return
+    setRemovendo(true)
+    setErro('')
+    setOk('')
+    try {
+      await removerLink(l.id)
+      setOk('Link removido do portal. O arquivo no Drive continua lá.')
+      recarregar()
+    } catch (f) {
+      setErro(mensagemErro(f))
+    } finally {
+      setRemovendo(false)
+    }
   }
 
   const daRede = modo === 'unidade' ? filtrados.filter((l) => l.dono === '') : []
@@ -113,6 +121,7 @@ function Nuvem({ modo }: { modo: Modo }) {
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
       {editando && pessoa ? (
         <FormLink
+          key={editando === 'novo' ? 'novo' : editando.id}
           pessoa={pessoa}
           modo={modo}
           link={editando === 'novo' ? null : editando}
@@ -136,12 +145,14 @@ function Nuvem({ modo }: { modo: Modo }) {
             {[...new Set(links.map((l) => l.pasta))].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
         </Campo>
-        {pode && !carregando && !comoFranqueado ? <BotaoCsv arquivo={`nuvem-${modo}`} cabecalhos={['Título', 'Pasta', 'Etiquetas', 'Visibilidade', 'URL']}
+        {pode && !carregando && !erroCarga && !comoFranqueado ? <BotaoCsv arquivo={`nuvem-${modo}`} cabecalhos={['Título', 'Pasta', 'Etiquetas', 'Visibilidade', 'URL']}
           linhas={[...agruparPorPasta(daRede), ...agruparPorPasta(privados)].flatMap((grupo) => grupo.links).map((l) => [l.titulo, l.pasta, l.tags.join(', '), ROTULO_VISIBILIDADE[l.visibilidade], l.url])} /> : null}
-        <p className="pb-2 text-sm text-ink/50">{filtrados.length} de {links.length} link(s)</p>
+        {!carregando && !erroCarga ? <p className="pb-2 text-sm text-ink/50">{filtrados.length} de {links.length} link(s)</p> : null}
       </section>
 
-      {carregando ? <Carregando texto="Carregando os links…" /> : links.length === 0 ? (
+      {carregando ? <Carregando texto="Carregando os links…" /> : erroCarga ? (
+        <div className="space-y-2"><Aviso tom="erro">Não foi possível carregar os links.</Aviso><Button type="button" variant="secondary" onClick={recarregar}>Tentar novamente</Button></div>
+      ) : links.length === 0 ? (
         <Vazio titulo="Nenhum link ainda" texto={modo === 'rede' ? 'Publique o primeiro link do Drive para a rede, para algumas unidades ou só para a franqueadora.' : 'Guarde aqui os links do Drive da unidade. Os links que a franqueadora compartilhar também aparecem nesta tela.'} />
       ) : !filtrados.length ? (
         <Vazio titulo="Nenhum resultado para este filtro" texto="Ajuste a busca, a etiqueta ou a pasta." />
@@ -150,11 +161,11 @@ function Nuvem({ modo }: { modo: Modo }) {
           <div className="space-y-6">
             {modo === 'unidade' ? (
               <>
-                <Area titulo="Da franqueadora" dica="Compartilhados com a rede toda ou com a sua unidade." links={daRede} podeEditar={podeEditar} onEditar={setEditando} onRemover={remover} />
-                <Area titulo="Área privada da unidade" dica="Só a sua unidade vê. A franqueadora não tem acesso." links={privados} podeEditar={podeEditar} onEditar={setEditando} onRemover={remover} />
+                <Area titulo="Da franqueadora" dica="Compartilhados com a rede toda ou com a sua unidade." links={daRede} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
+                <Area titulo="Área privada da unidade" dica="Só a sua unidade vê. A franqueadora não tem acesso." links={privados} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
               </>
             ) : (
-              <Area titulo="Publicados pela franqueadora" dica="A área privada das unidades não aparece aqui." links={privados} podeEditar={podeEditar} onEditar={setEditando} onRemover={remover} />
+              <Area titulo="Publicados pela franqueadora" dica="A área privada das unidades não aparece aqui." links={privados} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
             )}
           </div>
           <aside className="space-y-2 rounded-3xl border border-line bg-white p-4 shadow-sm">
@@ -170,7 +181,6 @@ function Nuvem({ modo }: { modo: Modo }) {
           </aside>
         </div>
       )}
-      <RodapeModulo13 />
     </div>
   )
 }
@@ -231,19 +241,23 @@ function FormLink({ pessoa, modo, link, pastas, onFechar, onSalvo }: {
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [unidades, setUnidades] = useState<Array<{ id: string; nome: string }> | null>(null)
-  const [idsManuais, setIdsManuais] = useState('')
+  const [erroUnidades, setErroUnidades] = useState(false)
+  const [tentativaUnidades, setTentativaUnidades] = useState(0)
 
   useEffect(() => {
     if (modo !== 'rede') return
     let vivo = true
     // Quem não pode ler o cadastro de unidades (só tem o módulo de nuvem) informa os códigos à mão.
-    void listarUnidades().then((us) => vivo && setUnidades(us.filter((u) => u.ativo).map((u) => ({ id: u.id, nome: u.nome })))).catch(() => vivo && setUnidades([]))
+    void listarUnidades().then((us) => vivo && setUnidades(us.filter((u) => u.ativo).map((u) => ({ id: u.id, nome: u.nome })))).catch(() => { if (vivo) { setErroUnidades(true); setUnidades([]) } })
     return () => { vivo = false }
-  }, [modo])
+  }, [modo, tentativaUnidades])
 
-  const unidadesEscolhidas = unidades && unidades.length ? f.unidades : idsManuais.split(/[\s,;]+/).filter(Boolean)
+  const [codigos, setCodigos] = useState(() => f.unidades.join(', '))
+  const unidadesEscolhidas = unidades?.length ? f.unidades : codigos.split(/[\s,;]+/).filter(Boolean)
+  const buscandoAudiencia = modo === 'rede' && f.visibilidade === 'unidades' && unidades === null
 
   async function salvar() {
+    if (salvando || buscandoAudiencia) return
     const form = { ...f, unidades: unidadesEscolhidas }
     const erros = validarLink(form, modo)
     if (erros.length) { setErro(erros.join(' ')); return }
@@ -300,17 +314,32 @@ function FormLink({ pessoa, modo, link, pastas, onFechar, onSalvo }: {
                 ))}
               </fieldset>
             ) : (
-              <Campo label="Códigos das unidades" hint="Seu perfil não lê o cadastro de unidades; informe os códigos separados por vírgula.">
-                <input className={inputClass} value={idsManuais || f.unidades.join(', ')} onChange={(e) => setIdsManuais(e.target.value)} />
-              </Campo>
+              <>
+                {erroUnidades ? (
+                  <div className="space-y-2">
+                    <Aviso tom="erro">Não foi possível carregar as unidades.</Aviso>
+                    <Button type="button" variant="secondary" onClick={() => {
+                      setUnidades(null)
+                      setErroUnidades(false)
+                      setTentativaUnidades((n) => n + 1)
+                    }}>Tentar novamente</Button>
+                  </div>
+                ) : <Aviso>Nenhuma unidade ativa disponível na lista.</Aviso>}
+                <Campo label="Códigos das unidades" hint="Informe os códigos separados por vírgula.">
+                  <input className={inputClass} value={codigos} onChange={(e) => {
+                    setCodigos(e.target.value)
+                    setF({ ...f, unidades: e.target.value.split(/[\s,;]+/).filter(Boolean) })
+                  }} />
+                </Campo>
+              </>
             )
           ) : null}
         </div>
       ) : <p className="text-sm text-ink/60">Fica na <b>área privada da unidade</b>: só a sua unidade vê.</p>}
       <p className="text-[11px] text-ink/45">O portal não muda o compartilhamento no Drive. Para alguém abrir o arquivo, ele precisa estar compartilhado no Google Drive.</p>
       <div className="flex gap-2">
-        <Button type="button" disabled={salvando} onClick={() => void salvar()}>{salvando ? 'Salvando…' : link ? 'Salvar' : 'Guardar link'}</Button>
-        <Button type="button" variant="secondary" onClick={onFechar}>Cancelar</Button>
+        <Button type="button" disabled={salvando || buscandoAudiencia} onClick={() => void salvar()}>{salvando ? 'Salvando…' : link ? 'Salvar' : 'Guardar link'}</Button>
+        <Button type="button" variant="secondary" disabled={salvando} onClick={onFechar}>Cancelar</Button>
       </div>
     </section>
   )
