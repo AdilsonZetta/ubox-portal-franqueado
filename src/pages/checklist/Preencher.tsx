@@ -20,7 +20,7 @@ import {
 } from '../../lib/checklist'
 import { enviarExecucao, lerModelo } from '../../lib/checklistApi'
 import { useVisao } from '../../lib/visao'
-import { RodapeModulo7, ScoreSelo } from './partes'
+import { ScoreSelo } from './partes'
 
 const COR_RESULTADO: Record<Resultado, string> = {
   ok: 'border-lime-dark bg-lime/25 text-lime-dark',
@@ -39,25 +39,27 @@ export function PreencherChecklistPage() {
   const [carregando, setCarregando] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
+  const [erroCarga, setErroCarga] = useState('')
   const [errosItem, setErrosItem] = useState<Record<string, string>>({})
+  const [tique, setTique] = useState(0)
   const [tentou, setTentou] = useState(false)
 
   useEffect(() => {
     let ativo = true
     setCarregando(true)
+    setErroCarga('')
     lerModelo(modeloId)
       .then((m) => {
         if (!ativo) return
-        if (!m || !m.ativo) setErro('Este checklist não está disponível para a sua unidade.')
         setModelo(m && m.ativo ? m : null)
         setRespostas(m ? respostasIniciais(m) : [])
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
     }
-  }, [modeloId])
+  }, [modeloId, tique])
 
   const totais = useMemo(() => calcularTotais(respostas), [respostas])
   const respondidos = respostas.filter((r) => r.resultado).length
@@ -67,7 +69,6 @@ export function PreencherChecklistPage() {
     if (!tentou || !modelo) return
     const v = validarExecucao(modelo, respostas)
     setErrosItem(v.porItem)
-    setErro(v.gerais.join(' '))
   }, [tentou, modelo, respostas])
 
   if (!user) return null
@@ -75,18 +76,23 @@ export function PreencherChecklistPage() {
   if (!fazChecklist(user)) return <Aviso>O checklist é preenchido pelas unidades.</Aviso>
 
   function mudar(indice: number, parte: Partial<Resposta>) {
+    setErro('')
     setRespostas((atual) => atual.map((r, i) => (i === indice ? { ...r, ...parte } : r)))
   }
 
   async function enviar() {
-    if (!user || !modelo) return
+    if (!user || !modelo || enviando) return
     setTentou(true)
     const v = validarExecucao(modelo, respostas)
     setErrosItem(v.porItem)
     if (v.gerais.length) {
       setErro(v.gerais.join(' '))
-      const primeiro = Object.keys(v.porItem)[0]
-      if (primeiro) document.getElementById(`item-${primeiro}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const primeiro = grupos.flatMap((grupo) => grupo.itens).find(({ item }) => v.porItem[item.id])
+      if (primeiro) {
+        const alvo = document.getElementById(`item-${primeiro.item.id}`)
+        alvo?.focus({ preventScroll: true })
+        alvo?.scrollIntoView({ block: 'center' })
+      }
       return
     }
     setEnviando(true)
@@ -107,8 +113,9 @@ export function PreencherChecklistPage() {
         <Link to="/checklist">Checklist Operacional</Link> / Preencher
       </p>
       {carregando ? <Carregando texto="Abrindo o checklist…" /> : null}
-      {erro && !modelo ? <Aviso tom="erro">{erro}</Aviso> : null}
-      {modelo ? (
+      {erroCarga ? <Aviso tom="erro"><p role="alert">{erroCarga}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
+      {!carregando && !erroCarga && !modelo ? <Aviso>Este checklist está indisponível. Volte para escolher outro modelo.</Aviso> : null}
+      {!carregando && !erroCarga && modelo ? (
         <>
           <header>
             <div className="flex flex-wrap gap-1.5">
@@ -130,7 +137,7 @@ export function PreencherChecklistPage() {
                   if (!r) return null
                   const erroItem = errosItem[item.id]
                   return (
-                    <li key={item.id} id={`item-${item.id}`} className={cx('rounded-2xl border bg-white p-4 shadow-sm', erroItem ? 'border-red-300' : 'border-line')}>
+                    <li key={item.id} id={`item-${item.id}`} tabIndex={-1} aria-describedby={erroItem ? `erro-item-${item.id}` : undefined} className={cx('rounded-2xl border bg-white p-4 shadow-sm', erroItem ? 'border-red-300' : 'border-line')}>
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <p className="font-semibold">{indice + 1}. {item.texto}</p>
@@ -174,7 +181,7 @@ export function PreencherChecklistPage() {
                           />
                         </div>
                       ) : null}
-                      {erroItem ? <p className="mt-2 text-xs font-semibold text-red-700">{erroItem}</p> : null}
+                      {erroItem ? <p id={`erro-item-${item.id}`} className="mt-2 text-xs font-semibold text-red-700">{erroItem}</p> : null}
                     </li>
                   )
                 })}
@@ -188,14 +195,14 @@ export function PreencherChecklistPage() {
               <textarea className={inputClass} rows={3} maxLength={2000} value={obsGeral} onChange={(e) => setObsGeral(e.target.value)} />
             </label>
           </section>
-          {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+          {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
 
           <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-white/95 backdrop-blur lg:left-[272px]">
             <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div className="flex items-center gap-3 text-sm">
                 <ScoreSelo score={totais.score} />
                 <span className="text-ink/60">
-                  {respondidos}/{respostas.length} respondidos · {totais.qtdNaoOk} não OK · {totais.qtdNa} N/A
+                  {respondidos < respostas.length ? `Faltam ${respostas.length - respondidos} de ${respostas.length} itens · ` : 'Todos os itens respondidos · '} {totais.qtdNaoOk} não OK · {totais.qtdNa} N/A
                 </span>
               </div>
               <Button type="button" onClick={() => void enviar()} disabled={enviando}>{enviando ? 'Enviando…' : 'Enviar checklist'}</Button>
@@ -203,7 +210,6 @@ export function PreencherChecklistPage() {
           </div>
         </>
       ) : null}
-      <RodapeModulo7 />
     </div>
   )
 }

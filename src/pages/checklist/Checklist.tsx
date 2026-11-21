@@ -1,6 +1,6 @@
 import { Link, Navigate } from 'react-router-dom'
 import { ClipboardCheck, History, ShieldAlert } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio, cx } from '../../components/ui'
+import { Aviso, Button, Carregando, Selo, Vazio, cx } from '../../components/ui'
 import { formatarData } from '../../lib/format'
 import {
   ROTULO_FREQ,
@@ -13,7 +13,7 @@ import {
   type Situacao,
 } from '../../lib/checklist'
 import { useVisao } from '../../lib/visao'
-import { ListaExecucoes, RodapeModulo7, ScoreSelo, SituacaoSelo } from './partes'
+import { ListaExecucoes, ScoreSelo, SituacaoSelo } from './partes'
 import { useChecklist } from './useChecklist'
 
 const DIA = 86_400_000
@@ -57,11 +57,11 @@ export function ChecklistPage() {
         </div>
       </header>
 
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.simulando ? <Aviso>Simulação: você vê o checklist como {simulado?.nome}. O preenchimento fica com a unidade.</Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando checklists…" /> : null}
 
-      {!dados.carregando ? (
+      {!dados.carregando && !dados.erro ? (
         <>
           <section aria-label="Resumo" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Resumo titulo="Atrasados" valor={atrasados} destaque={atrasados > 0} texto="Período anterior sem checklist" />
@@ -114,7 +114,6 @@ export function ChecklistPage() {
           </section>
         </>
       ) : null}
-      <RodapeModulo7 />
     </div>
   )
 }

@@ -28,7 +28,7 @@ import {
 import { salvarModelo } from '../../lib/checklistApi'
 import { useVisao } from '../../lib/visao'
 import { Filtros, useFiltros } from './Historico'
-import { ListaNaoConformidades, RodapeModulo7, ScoreSelo, SituacaoSelo } from './partes'
+import { ListaNaoConformidades, ScoreSelo, SituacaoSelo } from './partes'
 import { ListaHistorico } from './ListaHistorico'
 import { useChecklist } from './useChecklist'
 
@@ -102,7 +102,8 @@ export function GestaoChecklistPage() {
   }
 
   async function gravar() {
-    if (!user || !form) return
+    if (!user || !form || salvando) return
+    setOk('')
     const erros = validarModelo(form)
     if (erros.length) {
       setErro(erros.join(' '))
@@ -147,12 +148,11 @@ export function GestaoChecklistPage() {
         </div>
       </header>
 
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando…" /> : null}
 
-      {aba === 'modelos' && !dados.carregando ? (
+      {aba === 'modelos' && !dados.carregando && !dados.erro ? (
         <div className="grid gap-5 lg:grid-cols-[1fr_32rem]">
           <section className="space-y-2">
             <Button type="button" variant="secondary" onClick={() => { setEditando(null); setForm({ ...formVazio, itens: formVazio.itens.map((i) => ({ ...i })) }); setOk('') }}>
@@ -251,6 +251,7 @@ export function GestaoChecklistPage() {
                 <input type="checkbox" checked={form.ativo} onChange={(e) => setForm({ ...form, ativo: e.target.checked })} /> Ativo (as unidades preenchem). Modelos não são apagados: desative.
               </label>
               <div className="flex gap-2">
+                {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
                 <Button type="button" onClick={() => void gravar()} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar modelo'}</Button>
                 <Button type="button" variant="secondary" onClick={() => { setForm(null); setEditando(null) }}>Fechar</Button>
               </div>
@@ -274,7 +275,7 @@ export function GestaoChecklistPage() {
               </label>
             }
           />
-          {!dados.carregando ? (
+          {!dados.carregando && !dados.erro ? (
             <>
               <div className="flex flex-wrap items-center gap-4 text-sm text-muted">
                 <span>{execucoes.length} checklist(s)</span>
@@ -289,7 +290,6 @@ export function GestaoChecklistPage() {
 
       {aba === 'pendencias' ? <PendenciasRede ehAdmin={ehAdmin} /> : null}
 
-      <RodapeModulo7 />
     </div>
   )
 }
@@ -300,6 +300,7 @@ function PendenciasRede({ ehAdmin }: { ehAdmin: boolean }) {
   const unidades = useUnidades(ehAdmin, dados.execucoes).filter((u) => u.checklist)
   const recorrentes = dados.modelos.filter((m) => m.ativo && m.frequencia !== 'avulsa')
   if (dados.carregando) return <Carregando texto="Calculando pendências…" />
+  if (dados.erro) return null
   if (!recorrentes.length) return <Vazio titulo="Nenhum checklist recorrente ativo" texto="Pendências e atrasos valem para checklists diários, semanais e mensais." />
   if (!unidades.length) return <Vazio titulo="Nenhuma unidade para acompanhar" texto="Libere o módulo Checklist para as unidades." />
   return (
