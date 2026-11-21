@@ -41,8 +41,15 @@ Tons derivados só para acessibilidade (WCAG AA 4,5:1 em texto normal):
 
 ## Texturas (Guia, p. 16 — 2.3 Texturas)
 
-Mosaico de blocos geométricos (quadrados, meias-luas, listras, pontos, triângulos, fechadura). No portal: faixa colorida nas laterais/rodapé dos painéis de marca (login e destaque do início) e versão em linha, em baixa opacidade, como fundo. Gerado em SVG próprio no código, a partir das formas do guia.
+Mosaico de blocos geométricos (quadrados, meias-luas, listras, pontos, triângulos, fechadura). No portal: faixa colorida nas laterais/rodapé dos painéis de marca (login e destaque do início) e versão em linha, em baixa opacidade, como fundo. O SVG repete seis blocos quadrados, dimensionados pela altura da faixa. A versão em linha usa os mesmos motivos em contornos.
 
 ## Tom
 
 Direto, acolhedor e prático ("Armazenamento de objetos para otimizar o seu espaço", p. 22). Textos da interface em pt-BR, frases curtas.
+
+## Referências de código aberto
+
+- **shadcn/ui (MIT)** — estrutura do estado vazio, dimensões dos selos e hierarquia dos cartões de métricas. [Repositório shadcn/ui](https://github.com/shadcn-ui/ui)
+- **Tremor (Apache-2.0)** — composição da barra de progresso com faixa, preenchimento e legenda opcional. [Repositório Tremor](https://github.com/tremorlabs/tremor)
+- **TailAdmin Free React Dashboard (MIT)** — disposição do ícone, rótulo e valor nos cartões de métricas. [Repositório TailAdmin](https://github.com/TailAdmin/free-react-tailwind-admin-dashboard)
+- **shadcn-admin (MIT)** — altura dos botões da navegação lateral, com os grupos, estados ativos e guias de submenu já usados no portal. [Repositório shadcn-admin](https://github.com/satnaing/shadcn-admin)

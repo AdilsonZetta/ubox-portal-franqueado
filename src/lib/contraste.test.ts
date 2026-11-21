@@ -16,8 +16,17 @@ const pares = [
     ['ink', 'ink-soft', 'muted', 'brand', 'lime-dark'].map((texto) => [texto, fundo]),
   ),
   ['white', 'brand'],
+  ['white', 'brand-dark'],
+  ['brand-dark', 'paper'],
+  ['lime-soft', 'graphite'],
+  ['brand-soft', 'graphite'],
+  ['surface', 'sidebar-field'],
+  ['line-strong', 'sidebar-field'],
+  ['sidebar-muted', 'sidebar-field'],
   ['surface', 'brand'],
   ['ink', 'lime'],
+  ['ink', 'brand-soft'],
+  ['brand-dark', 'surface'],
   ...['surface', 'line-strong', 'sidebar-muted'].map((texto) => [texto, 'graphite']),
 ]
 
@@ -29,5 +38,24 @@ describe('Contraste da identidade UBOX', () => {
 
   it.each(pares)('%s sobre %s atende ao WCAG AA para texto normal', (texto, fundo) => {
     expect(razaoContraste(cor(texto), cor(fundo))).toBeGreaterThanOrEqual(4.5)
+  })
+
+  it.each(['paper', 'surface', 'white', 'graphite', 'sidebar-field'])(
+    'a borda de controle contrasta pelo menos 3:1 com %s',
+    (fundo) => {
+      expect(razaoContraste(cor('line-control'), cor(fundo))).toBeGreaterThanOrEqual(3)
+    },
+  )
+  it.each(['paper', 'surface', 'white'])('o foco claro contrasta com %s', (fundo) => {
+    expect(razaoContraste(cor('brand-dark'), cor(fundo))).toBeGreaterThanOrEqual(3)
+  })
+  it('o contorno do filtro ativo contrasta com o fundo da página', () => {
+    expect(razaoContraste(cor('lime-dark'), cor('paper'))).toBeGreaterThanOrEqual(3)
+  })
+  it('o preenchimento da barra de progresso contrasta com a faixa', () => {
+    expect(razaoContraste(cor('lime-dark'), cor('line'))).toBeGreaterThanOrEqual(3)
+  })
+  it('o foco lateral contrasta com grafite', () => {
+    expect(razaoContraste(cor('brand-soft'), cor('graphite'))).toBeGreaterThanOrEqual(3)
   })
 })

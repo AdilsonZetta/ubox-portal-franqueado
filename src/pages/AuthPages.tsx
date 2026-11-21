@@ -11,7 +11,7 @@ import { mensagemErro } from '../lib/errors'
 function Moldura({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-dvh grid-rows-[auto_1fr_auto] bg-surface md:grid-cols-2 md:grid-rows-1">
-      <header className="relative flex min-w-0 flex-col bg-graphite px-6 py-5 text-surface md:justify-between md:px-10 md:pb-28 md:pt-10 xl:px-16">
+      <header className="relative flex min-w-0 flex-col bg-graphite px-6 py-5 text-surface md:justify-between md:px-10 md:pb-12 md:pt-10 xl:px-16">
         <div className="flex flex-wrap items-center justify-between gap-3 md:block">
           <Logo claro />
           <span className="text-xs font-medium text-line-strong md:mt-8 md:block">Base da rede Ubox</span>
@@ -22,12 +22,12 @@ function Moldura({ children }: { children: ReactNode }) {
             Consulte manuais, acompanhe as rotinas da unidade e acesse os treinamentos da rede.
           </p>
         </div>
-        <Textura className="absolute inset-x-0 bottom-0 hidden h-20 w-full md:block" />
+        <Textura className="absolute inset-x-0 bottom-0 max-md:hidden" />
       </header>
-      <main className="flex min-w-0 items-center justify-center px-6 py-10 md:px-10">
-        <div className="rise w-full max-w-md space-y-1 wrap-anywhere">{children}</div>
+      <main className="flex min-w-0 items-start justify-center px-6 pt-8 pb-10 md:items-center md:px-10">
+        <div className="w-full max-w-md space-y-1 wrap-anywhere">{children}</div>
       </main>
-      <Textura className="h-7 w-full md:hidden" />
+      <Textura className="md:hidden" />
     </div>
   )
 }
