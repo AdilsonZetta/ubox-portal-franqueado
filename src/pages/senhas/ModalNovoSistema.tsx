@@ -7,9 +7,8 @@ import {
   type CategoriaAcesso,
   type EscopoAcesso,
 } from '../../data/senhas'
-import { criarAcesso, type NovoAcessoDados } from '../../lib/senhas'
+import { criarAcesso, urlSistemaValida, type NovoAcessoDados } from '../../lib/senhas'
 import type { Usuario } from '../../types'
-import { mensagemErro } from '../../lib/errors'
 
 interface ModalNovoSistemaProps {
   aberto: boolean
@@ -93,11 +92,17 @@ export function ModalNovoSistema({
 
   async function submeter(evento: FormEvent) {
     evento.preventDefault()
+    if (salvando) return
     setErro('')
 
+    if (!nome.trim()) {
+      setErro('Informe o nome do sistema.')
+      return
+    }
+
     const urlTrim = url.trim()
-    if (urlTrim && !urlTrim.startsWith('https://')) {
-      setErro('A URL precisa começar com https://')
+    if (!urlSistemaValida(urlTrim)) {
+      setErro('Informe uma URL HTTPS completa.')
       return
     }
 
@@ -127,8 +132,8 @@ export function ModalNovoSistema({
       await criarAcesso(usuario, payload)
       aoSalvar()
       aoFechar()
-    } catch (falha: unknown) {
-      setErro(mensagemErro(falha))
+    } catch {
+      setErro('Não foi possível salvar o sistema no cofre. Tente novamente.')
     } finally {
       setSalvando(false)
     }

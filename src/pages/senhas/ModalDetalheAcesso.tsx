@@ -1,6 +1,6 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { useFocusTrap } from '../../lib/focusTrap'
-import { Aviso, Button, Campo, Selo, inputClass } from '../../components/ui'
+import { Aviso, Button, Campo, Carregando, Selo, inputClass } from '../../components/ui'
 import {
   CATEGORIAS_ACESSO,
   nomeCategoriaAcesso,
@@ -16,6 +16,7 @@ import {
   gravarEventoAcesso,
   observarEventosAcesso,
   trocarSenhaAcesso,
+  urlSistemaValida,
   type Acesso,
   type EventoAcesso,
   type SegredoAcesso,
@@ -53,6 +54,7 @@ export function ModalDetalheAcesso({
   const [trocandoSenha, setTrocandoSenha] = useState(false)
   const [novoLogin, setNovoLogin] = useState('')
   const [novaSenha, setNovaSenha] = useState('')
+  const [confirmacaoSenha, setConfirmacaoSenha] = useState('')
   const [novasNotas, setNovasNotas] = useState('')
   const [salvandoTroca, setSalvandoTroca] = useState(false)
 
@@ -69,6 +71,10 @@ export function ModalDetalheAcesso({
   useEffect(() => {
     setSegredo(null)
     setRevelado(false)
+    setNovoLogin('')
+    setNovaSenha('')
+    setConfirmacaoSenha('')
+    setNovasNotas('')
     setCopiadoSenha(false)
     setCopiadoLogin(false)
     setErro('')
@@ -82,15 +88,26 @@ export function ModalDetalheAcesso({
       setEditResponsavel(acesso.responsavelNome)
       setTimeout(() => dialogRef.current?.focus(), 50)
     }
-  }, [acesso])
+  }, [acesso, usuario.uid, comoFranqueado])
 
-  // Ouve eventos do acesso
+  const [estadoEventos, setEstadoEventos] = useState<'carregando' | 'erro' | 'ok'>('carregando')
+  const [tentativaEventos, setTentativaEventos] = useState(0)
+  const acessoId = acesso?.id
+  const sessaoSegredo = useRef<AbortController | null>(null)
   useEffect(() => {
-    if (!acesso) return
-    return observarEventosAcesso(acesso.id, setEventos, (falha) => {
-      console.warn('Erro ao carregar eventos:', falha)
-    })
-  }, [acesso])
+    const sessao = new AbortController()
+    sessaoSegredo.current = sessao
+    setCarregandoSegredo(false)
+    return () => sessao.abort()
+  }, [acessoId, usuario.uid, comoFranqueado])
+  useEffect(() => {
+    if (!acessoId) return
+    setEstadoEventos('carregando')
+    return observarEventosAcesso(acessoId, (itens) => {
+      setEventos(itens)
+      setEstadoEventos('ok')
+    }, () => setEstadoEventos('erro'))
+  }, [acessoId, tentativaEventos])
 
   // Temporizador para auto-ocultar a senha após 30 segundos
   useEffect(() => {
@@ -137,65 +154,90 @@ export function ModalDetalheAcesso({
 
   const podeGerenciar = podeGerenciarAcesso(usuario, acesso, comoFranqueado)
 
-  async function obterSegredo(): Promise<SegredoAcesso> {
-    if (segredo) return segredo
+  async function prepararTroca() {
+    if (!podeGerenciar || carregandoSegredo || editando) return
+    setErro('')
     setCarregandoSegredo(true)
+    const sessao = sessaoSegredo.current
     try {
-      return await buscarSegredo(acesso!.id)
+      const dados = await buscarSegredo(acesso!.id)
+      if (sessao?.signal.aborted) return
+      setNovoLogin(dados.login)
+      setNovasNotas(dados.notas)
+      setNovaSenha('')
+      setConfirmacaoSenha('')
+      setTrocandoSenha(true)
+    } catch {
+      if (!sessao?.signal.aborted) setErro('Não foi possível carregar as credenciais atuais. Use Trocar senha para tentar novamente.')
     } finally {
-      setCarregandoSegredo(false)
+      if (!sessao?.signal.aborted) setCarregandoSegredo(false)
     }
   }
 
-  function aplicarSegredo(dados: SegredoAcesso) {
-    setSegredo(dados)
-    setNovoLogin(dados.login)
-    setNovasNotas(dados.notas)
-  }
-
   async function handleRevelar() {
-    if (!podeLerSegredo) return
+    if (!podeLerSegredo || carregandoSegredo) return
     setErro('')
+    setCarregandoSegredo(true)
+    const sessao = sessaoSegredo.current
     try {
-      const dados = await obterSegredo()
+      const dados = await buscarSegredo(acesso!.id)
+      if (sessao?.signal.aborted) return
       await gravarEventoAcesso(acesso!.id, usuario, 'revelou')
-      aplicarSegredo(dados)
+      if (sessao?.signal.aborted) return
+      setSegredo(dados)
       setRevelado(true)
-    } catch (falha: unknown) {
-      setErro(mensagemErro(falha))
+    } catch {
+      if (!sessao?.signal.aborted) setErro('Não foi possível revelar a senha. Use Revelar para tentar novamente.')
+    } finally {
+      if (!sessao?.signal.aborted) setCarregandoSegredo(false)
     }
   }
 
   async function handleCopiarSenha() {
-    if (!podeLerSegredo) return
+    if (!podeLerSegredo || carregandoSegredo) return
     setErro('')
+    setCarregandoSegredo(true)
+    const sessao = sessaoSegredo.current
     try {
-      const dados = await obterSegredo()
+      const dados = await buscarSegredo(acesso!.id)
+      if (sessao?.signal.aborted) return
       await gravarEventoAcesso(acesso!.id, usuario, 'copiou')
-      aplicarSegredo(dados)
+      if (sessao?.signal.aborted) return
       await navigator.clipboard.writeText(dados.senha)
       setCopiadoSenha(true)
       setTimeout(() => setCopiadoSenha(false), 2500)
-    } catch (falha: unknown) {
-      setErro(mensagemErro(falha))
+    } catch {
+      if (!sessao?.signal.aborted) setErro('Não foi possível copiar a senha. Tente novamente ou revele a senha para copiar manualmente.')
+    } finally {
+      if (!sessao?.signal.aborted) setCarregandoSegredo(false)
     }
   }
 
   async function handleCopiarLogin(textoLogin: string) {
+    setErro('')
     try {
       await navigator.clipboard.writeText(textoLogin)
       setCopiadoLogin(true)
       setTimeout(() => setCopiadoLogin(false), 2000)
     } catch {
-      // Fallback simples
+      setErro('Não foi possível copiar o login. Selecione o texto para copiar manualmente.')
     }
   }
 
   async function submeterTrocaSenha(evento: FormEvent) {
     evento.preventDefault()
-    if (!podeGerenciar) return
+    if (!podeGerenciar || salvandoTroca || salvandoEdicao) return
+    if (!novoLogin.trim()) {
+      setErro('Informe o login do sistema.')
+      return
+    }
     if (!novaSenha.trim()) {
       setErro('A nova senha não pode ser vazia.')
+      return
+    }
+
+    if (novaSenha !== confirmacaoSenha) {
+      setErro('As duas senhas precisam ser iguais.')
       return
     }
 
@@ -214,10 +256,12 @@ export function ModalDetalheAcesso({
         atualizadoPor: usuario.uid,
       })
       setNovaSenha('')
+      setConfirmacaoSenha('')
+      setRevelado(false)
       setTrocandoSenha(false)
       aoAtualizado()
-    } catch (falha: unknown) {
-      setErro(mensagemErro(falha))
+    } catch {
+      setErro('Não foi possível salvar a nova senha. Tente novamente.')
     } finally {
       setSalvandoTroca(false)
     }
@@ -225,11 +269,15 @@ export function ModalDetalheAcesso({
 
   async function submeterEdicao(evento: FormEvent) {
     evento.preventDefault()
-    if (!podeGerenciar) return
+    if (!podeGerenciar || salvandoEdicao || salvandoTroca) return
+    if (!editNome.trim()) {
+      setErro('Informe o nome do sistema.')
+      return
+    }
 
     const urlTrim = editUrl.trim()
-    if (urlTrim && !urlTrim.startsWith('https://')) {
-      setErro('A URL precisa começar com https://')
+    if (!urlSistemaValida(urlTrim)) {
+      setErro('Informe uma URL HTTPS completa.')
       return
     }
 
@@ -288,6 +336,7 @@ export function ModalDetalheAcesso({
           <button
             type="button"
             onClick={aoFechar}
+            disabled={salvandoTroca || salvandoEdicao}
             className="rounded-lg p-1.5 text-ink/40 hover:bg-paper hover:text-ink"
             aria-label="Fechar"
           >
@@ -437,7 +486,7 @@ export function ModalDetalheAcesso({
                 </button>
               </div>
               <p className="text-xs text-ink/60">
-                Ao salvar a nova senha, a data de rotação é atualizada para hoje e qualquer pendência de troca é resolvida.
+                Altere a senha no sistema externo antes de confirmar. Salvar no cofre registra a troca e resolve a pendência.
               </p>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Campo label="Login">
@@ -461,6 +510,10 @@ export function ModalDetalheAcesso({
                   />
                 </Campo>
               </div>
+              <Campo label="Confirme a nova senha">
+                <input required type="password" autoComplete="new-password" maxLength={500} className={inputClass}
+                  value={confirmacaoSenha} onChange={(e) => setConfirmacaoSenha(e.target.value)} disabled={salvandoTroca} />
+              </Campo>
               <Campo label="Notas e instruções atualizadas (opcional)">
                 <textarea
                   rows={2}
@@ -471,10 +524,10 @@ export function ModalDetalheAcesso({
                 />
               </Campo>
               <div className="flex justify-end gap-2 pt-1">
-                <Button type="button" variant="secondary" onClick={() => setTrocandoSenha(false)}>
+                <Button type="button" variant="secondary" onClick={() => setTrocandoSenha(false)} disabled={salvandoTroca}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={salvandoTroca}>
+                <Button type="submit" disabled={salvandoTroca || salvandoEdicao}>
                   {salvandoTroca ? 'Salvando…' : 'Confirmar troca de senha'}
                 </Button>
               </div>
@@ -539,7 +592,7 @@ export function ModalDetalheAcesso({
                 <Button type="button" variant="secondary" onClick={() => setEditando(false)}>
                   Cancelar
                 </Button>
-                <Button type="submit" disabled={salvandoEdicao}>
+                <Button type="submit" disabled={salvandoEdicao || salvandoTroca}>
                   {salvandoEdicao ? 'Salvando…' : 'Salvar alterações'}
                 </Button>
               </div>
@@ -549,7 +602,12 @@ export function ModalDetalheAcesso({
           {/* Histórico e Auditoria */}
           <div className="rounded-2xl border border-line bg-white p-4">
             <h4 className="text-xs font-bold uppercase tracking-wider text-ink/50">Histórico de auditoria</h4>
-            {eventos.length === 0 ? (
+            {estadoEventos === 'carregando' ? <Carregando texto="Carregando histórico…" /> : estadoEventos === 'erro' ? (
+              <div className="mt-2 space-y-2">
+                <Aviso tom="erro">Não foi possível carregar o histórico.</Aviso>
+                <Button type="button" variant="secondary" onClick={() => setTentativaEventos((n) => n + 1)}>Tentar novamente</Button>
+              </div>
+            ) : eventos.length === 0 ? (
               <p className="mt-2 text-xs text-ink/50">Nenhum evento registrado ainda.</p>
             ) : (
               <div className="mt-3 max-h-40 overflow-y-auto space-y-2 pr-1">
@@ -572,27 +630,23 @@ export function ModalDetalheAcesso({
         {/* Rodapé com Ações */}
         <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-4">
           <div className="flex items-center gap-2">
-            {podeGerenciar && !trocandoSenha ? (
+            {podeGerenciar && !trocandoSenha && !editando ? (
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => {
-                  void obterSegredo()
-                    .then((dados) => aplicarSegredo(dados))
-                    .catch((falha: unknown) => setErro(mensagemErro(falha)))
-                    .finally(() => setTrocandoSenha(true))
-                }}
+                disabled={carregandoSegredo || salvandoEdicao}
+                onClick={() => void prepararTroca()}
               >
-                Trocar senha
+                {carregandoSegredo ? 'Carregando…' : 'Trocar senha'}
               </Button>
             ) : null}
-            {podeGerenciar && !editando ? (
+            {podeGerenciar && !editando && !trocandoSenha ? (
               <Button type="button" variant="secondary" onClick={() => setEditando(true)}>
                 Editar sistema
               </Button>
             ) : null}
           </div>
-          <Button type="button" variant="secondary" onClick={aoFechar}>
+          <Button type="button" variant="secondary" onClick={aoFechar} disabled={salvandoTroca || salvandoEdicao}>
             Fechar
           </Button>
         </div>

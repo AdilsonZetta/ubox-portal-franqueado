@@ -277,6 +277,16 @@ export function observarAcessos(
   }
 }
 
+export function urlSistemaValida(url: string): boolean {
+  if (!url) return true
+  if (!/^https:\/\/[^/\s\\]/.test(url) || /[\s\\]/.test(url)) return false
+  try {
+    return Boolean(new URL(url).hostname)
+  } catch {
+    return false
+  }
+}
+
 export async function buscarSegredo(acessoId: string): Promise<SegredoAcesso> {
   if (BACKEND === 'supabase') return buscarSegredoSb(acessoId)
   const banco = requireDb()

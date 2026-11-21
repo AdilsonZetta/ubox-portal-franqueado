@@ -10,12 +10,11 @@ import {
   observarAcessos,
   type Acesso,
 } from '../../lib/senhas'
-import { listarEquipeDaUnidade } from '../../lib/gestao'
+import { useEquipeCofre } from './useEquipeCofre'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData, paraMillis } from '../../lib/format'
 import { useVisao } from '../../lib/visao'
-import type { Usuario } from '../../types'
 import { ModalDetalheAcesso } from './ModalDetalheAcesso'
 
 export function PermissoesPage() {
@@ -27,9 +26,12 @@ export function PermissoesPage() {
   const unidadeId = rede ? null : pessoa?.unidadeId ?? null
 
   const [acessos, setAcessos] = useState<Acesso[]>([])
-  const [equipe, setEquipe] = useState<Usuario[]>([])
+  const equipeCofre = useEquipeCofre(unidadeId)
+  const equipe = equipeCofre.membros
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [erroLista, setErroLista] = useState(false)
+  const [tentativa, setTentativa] = useState(0)
   const [sucesso, setSucesso] = useState('')
 
   // Estado editável de permissões por acesso: id -> { visivelParaEquipe, visivelPara }
@@ -40,24 +42,16 @@ export function PermissoesPage() {
   const [acessoParaTroca, setAcessoParaTroca] = useState<Acesso | null>(null)
 
   useEffect(() => {
-    if (!unidadeId) {
-      setEquipe([])
-      return
-    }
-    void listarEquipeDaUnidade(unidadeId)
-      .then((membros) => setEquipe(membros))
-      .catch(() => setEquipe([]))
-  }, [unidadeId])
-
-  useEffect(() => {
     if (!user || (!rede && !unidadeId)) {
       setCarregando(false)
       return
     }
     setCarregando(true)
+    setErroLista(false)
     const unsub = observarAcessos(
       { rede, unidadeId },
       (itens) => {
+        setErroLista(false)
         setAcessos(itens)
         setPermissoesEditadas((prev) => {
           const proximo: Record<string, { visivelParaEquipe: boolean; visivelPara: string[] }> = {}
@@ -80,13 +74,13 @@ export function PermissoesPage() {
         })
         setCarregando(false)
       },
-      (falha) => {
-        setErro(mensagemErro(falha))
+      () => {
+        setErroLista(true)
         setCarregando(false)
       },
     )
     return unsub
-  }, [user, rede, unidadeId])
+  }, [user, rede, unidadeId, tentativa])
 
   function alternarEquipeToda(acessoId: string, valor: boolean) {
     setPermissoesEditadas((prev) => ({
@@ -114,10 +108,13 @@ export function PermissoesPage() {
   }
 
   async function salvarPermissoes(acesso: Acesso) {
-    if (!user || comoFranqueado) return
+    if (!user || comoFranqueado || salvandoId) return
     const edicao = permissoesEditadas[acesso.id]
     if (!edicao) return
 
+    const reduzAcesso = (acesso.visivelParaEquipe && !edicao.visivelParaEquipe) ||
+      (!edicao.visivelParaEquipe && acesso.visivelPara.some((uid) => !edicao.visivelPara.includes(uid)))
+    if (reduzAcesso && !window.confirm(`Salvar as permissões de "${acesso.nome}" e retirar a visualização da senha para as pessoas excluídas?`)) return
     setSalvandoId(acesso.id)
     setErro('')
     setSucesso('')
@@ -174,17 +171,28 @@ export function PermissoesPage() {
 
       {comoFranqueado ? (
         <Aviso>
-          Modo de visualização do franqueado. A alteração de permissões fica desabilitada nesta simulação.
+          Nesta simulação, você pode consultar permissões. Alterar permissões e trocar senhas fica desabilitado.
         </Aviso>
       ) : null}
 
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {equipeCofre.carregando ? <Carregando texto="Carregando a equipe da unidade…" /> : equipeCofre.erro ? (
+        <div className="space-y-2">
+          <Aviso tom="erro">Não foi possível carregar a equipe da unidade.</Aviso>
+          <Button type="button" variant="secondary" onClick={equipeCofre.recarregar}>Tentar novamente</Button>
+        </div>
+      ) : null}
       {sucesso ? <Aviso tom="ok">{sucesso}</Aviso> : null}
 
       {/* Lista de Sistemas e Permissões */}
       {carregando ? (
         <div className="p-8">
           <Carregando texto="Carregando permissões dos sistemas…" />
+        </div>
+      ) : erroLista ? (
+        <div className="space-y-2 p-4">
+          <Aviso tom="erro">Não foi possível carregar as permissões dos sistemas.</Aviso>
+          <Button type="button" variant="secondary" onClick={() => setTentativa((n) => n + 1)}>Tentar novamente</Button>
         </div>
       ) : acessos.length === 0 ? (
         <Vazio
@@ -253,7 +261,7 @@ export function PermissoesPage() {
                         type="button"
                         variant="primary"
                         onClick={() => salvarPermissoes(acesso)}
-                        disabled={emSalvamento}
+                        disabled={Boolean(salvandoId)}
                         className="text-xs py-1.5 px-3"
                       >
                         {emSalvamento ? 'Salvando…' : 'Salvar permissões'}
