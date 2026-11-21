@@ -1,43 +1,58 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Logo } from '../../components/Logo'
-import { Carregando } from '../../components/ui'
+import { Aviso, Button, Carregando } from '../../components/ui'
 import { formatarData } from '../../lib/format'
 import { ITENS_VAZIOS, RECADOS_NO_LINK, ROTULO_VISITA, formatarCompetencia, formatarDiaISO, formatarReais, hojeISO, resumoCobrancas, situacao, type ItensPainel, type Painel } from '../../lib/cliente'
 import { BACKEND } from '../../lib/backend'
 import { carregarPainelPublicoSb } from '../../lib/clienteSupabase'
 import { carregarItens, lerPainelPublico } from '../../lib/clienteApi'
-import { RodapeModulo12, SituacaoSelo, diaDe } from './partes'
+import { SituacaoSelo, diaDe } from './partes'
 
 async function carregarPainelFirebase(token: string) {
-  // Mesmo comportamento de antes: o painel lido volta como veio; itens só se estiver ativo.
+  // Só consulta os itens de um painel ativo.
   const painel = await lerPainelPublico(token)
-  const itens = painel?.ativo ? await carregarItens(token).catch(() => ITENS_VAZIOS) : ITENS_VAZIOS
+  const itens = painel?.ativo ? await carregarItens(token, { somenteServidor: true }) : ITENS_VAZIOS
   return { painel, itens }
 }
 
 /** Página pública do locatário: abre por link secreto, sem login. Só lê o painel do token. */
 export function PainelClientePage() {
   const { token = '' } = useParams()
-  const [painel, setPainel] = useState<Painel | null>(null)
-  const [itens, setItens] = useState<ItensPainel>(ITENS_VAZIOS)
-  const [carregando, setCarregando] = useState(true)
+  return <PainelPorToken key={token} token={token} />
+}
+
+function PainelPorToken({ token }: { token: string }) {
+  const [leitura, setLeitura] = useState<
+    { status: 'carregando' } | { status: 'erro' } | { status: 'lido'; dados: { painel: Painel | null; itens: ItensPainel } | null }
+  >({ status: 'carregando' })
+  const [tentativa, setTentativa] = useState(0)
   const hoje = useMemo(() => hojeISO(), [])
 
   useEffect(() => {
     let ativo = true
-    const leitura = BACKEND === 'supabase' ? carregarPainelPublicoSb(token) : carregarPainelFirebase(token)
-    void leitura.then((dados) => {
-      if (ativo) {
-        setPainel(dados?.painel ?? null)
-        setItens(dados?.itens ?? ITENS_VAZIOS)
-        setCarregando(false)
-      }
-    })
+    const pedido = BACKEND === 'supabase' ? carregarPainelPublicoSb(token) : carregarPainelFirebase(token)
+    void pedido
+      .then((dados) => { if (ativo) setLeitura({ status: 'lido', dados }) })
+      .catch(() => { if (ativo) setLeitura({ status: 'erro' }) })
     return () => { ativo = false }
-  }, [token])
+  }, [token, tentativa])
 
-  if (carregando) return <div className="grid min-h-screen place-items-center"><Carregando texto="Abrindo seu painel…" /></div>
+  if (leitura.status === 'carregando') return <div className="grid min-h-screen place-items-center"><Carregando texto="Abrindo seu painel…" /></div>
+  if (leitura.status === 'erro') return (
+    <main className="grid min-h-screen place-items-center bg-paper p-6">
+      <div className="max-w-md space-y-4 rounded-3xl border border-line bg-white p-6 shadow-sm">
+        <Logo compacto />
+        <Aviso tom="erro">Não foi possível abrir seu painel.</Aviso>
+        <Button type="button" onClick={() => {
+          setLeitura({ status: 'carregando' })
+          setTentativa((n) => n + 1)
+        }}>Tentar novamente</Button>
+      </div>
+    </main>
+  )
+  const painel = leitura.dados?.painel
+  const itens = leitura.dados?.itens ?? ITENS_VAZIOS
   if (!painel || !painel.ativo) {
     return (
       <div className="grid min-h-screen place-items-center bg-paper p-6">
@@ -113,8 +128,7 @@ export function PainelClientePage() {
         </section>
 
         {painel.contatoUnidade ? <p className="text-center text-sm text-ink/65">Dúvidas? Fale com a {painel.unidadeNome}: <b>{painel.contatoUnidade}</b></p> : null}
-        <p className="text-center text-[11px] text-ink/40">Atualizado em {formatarData(painel.atualizadoEmMs)}. Não compartilhe este link.</p>
-        <RodapeModulo12 />
+        <p className="text-center text-[11px] text-ink/40">{painel.atualizadoEmMs ? `Atualizado em ${formatarData(painel.atualizadoEmMs)}. ` : ''}Não compartilhe este link.</p>
       </main>
     </div>
   )

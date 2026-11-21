@@ -1,10 +1,11 @@
+import { FirebaseError } from 'firebase/app'
 import { BACKEND } from './backend'
 import {
   agendarVisitaSb, atualizarPainelSb, carregarClientesSb, carregarCobrancasDaUnidadeSb, carregarItensSb,
   criarClienteSb, lancarCobrancaSb, lerPainelPublicoSb, marcarCobrancaSb, mudarVisitaSb, publicarRecadoSb,
   salvarClienteSb, trocarLinkSb,
 } from './clienteSupabase'
-import { collection, doc, getDoc, getDocs, query, serverTimestamp, setDoc, updateDoc, where, writeBatch, type DocumentData } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocFromServer, getDocs, getDocsFromServer, query, serverTimestamp, setDoc, updateDoc, where, writeBatch, type DocumentData } from 'firebase/firestore'
 import { requireDb } from './firebase'
 import { paraMillis } from './format'
 import {
@@ -79,10 +80,11 @@ const mapRecado = (id: string, r: DocumentData): Recado => ({
 })
 
 /** Itens do painel (subcoleções). As rules liberam para o público só enquanto o painel está ativo. */
-export async function carregarItens(token: string): Promise<ItensPainel> {
+export async function carregarItens(token: string, { somenteServidor = false } = {}): Promise<ItensPainel> {
   if (BACKEND === 'supabase') return carregarItensSb(token)
   const banco = requireDb()
-  const [c, v, r] = await Promise.all(['cobrancas', 'visitas', 'recados'].map((sub) => getDocs(collection(banco, 'clientePaineis', token, sub))))
+  const ler = somenteServidor ? getDocsFromServer : getDocs
+  const [c, v, r] = await Promise.all(['cobrancas', 'visitas', 'recados'].map((sub) => ler(collection(banco, 'clientePaineis', token, sub))))
   return {
     cobrancas: ordenarCobrancas(c.docs.map((d) => mapCobranca(d.id, d.data()))),
     visitas: ordenarVisitas(v.docs.map((d) => mapVisita(d.id, d.data()))),
@@ -150,10 +152,12 @@ export async function lerPainelPublico(token: string): Promise<Painel | null> {
   if (BACKEND === 'supabase') return lerPainelPublicoSb(token)
   if (!tokenValido(token)) return null
   try {
-    const snap = await getDoc(doc(requireDb(), 'clientePaineis', token))
+    const snap = await getDocFromServer(doc(requireDb(), 'clientePaineis', token))
     return snap.exists() ? mapPainel(token, snap.data()) : null
-  } catch {
-    return null
+  } catch (falha) {
+    // As regras negam a leitura pública de painéis inativos ou inexistentes.
+    if (falha instanceof FirebaseError && falha.code === 'permission-denied') return null
+    throw falha
   }
 }
 

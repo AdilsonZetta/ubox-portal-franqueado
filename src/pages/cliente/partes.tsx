@@ -18,7 +18,7 @@ export interface UsoClientes {
 }
 
 /** Só a unidade (franqueado/equipe com o módulo) carrega: a franqueadora e a simulação do admin não leem nada deste módulo. */
-export function useClientes(): UsoClientes {
+export function useClientes({ incluirCobrancas = true } = {}): UsoClientes {
   const { user } = useAuth()
   const { comoFranqueado } = useVisao()
   const pessoa = comoFranqueado ? null : user
@@ -42,13 +42,13 @@ export function useClientes(): UsoClientes {
     void carregarClientes(pessoa.unidadeId ?? '')
       .then(async (r) => {
         const ativos = new Map([...r.paineis].filter(([id]) => r.clientes.some((c) => c.id === id && c.status === 'ativo')))
-        const cob = await carregarCobrancasDaUnidade(ativos)
+        const cob = incluirCobrancas ? await carregarCobrancasDaUnidade(ativos) : new Map<string, Cobranca[]>()
         if (ativo) { setClientes(r.clientes); setPaineis(r.paineis); setCobrancas(cob) }
       })
       .catch((falha) => ativo && setErro(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => { ativo = false }
-  }, [pessoa, participa, tique])
+  }, [pessoa, participa, tique, incluirCobrancas])
 
   return { pessoa, participa, clientes, paineis, cobrancas, carregando, erro, recarregar }
 }
@@ -71,10 +71,6 @@ export function Numero({ rotulo, valor, dica, alerta }: { rotulo: string; valor:
       {dica ? <p className="text-xs text-ink/50">{dica}</p> : null}
     </div>
   )
-}
-
-export function RodapeModulo12() {
-  return <p className="text-center text-[11px] text-ink/35">Módulo 12 construído pelo Grok Bot no Cursor (Antigravity sem cota).</p>
 }
 
 export const diaDe = (ms: number) => {

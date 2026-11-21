@@ -29,7 +29,7 @@ import {
 } from '../../lib/cliente'
 import { agendarVisita, atualizarPainel, carregarItens, lancarCobranca, marcarCobranca, mudarVisita, publicarRecado, salvarCliente, trocarLink, type MudancaPainel } from '../../lib/clienteApi'
 import { CamposCliente } from './Clientes'
-import { RodapeModulo12, SituacaoSelo, diaDe, useClientes } from './partes'
+import { SituacaoSelo, diaDe, useClientes } from './partes'
 
 const paraForm = (c: Cliente): ClienteForm => ({
   nome: c.nome, telefone: c.telefone, email: c.email, box: c.box, contratoInicio: diaDe(c.contratoInicioMs), contratoFim: diaDe(c.contratoFimMs),
@@ -38,7 +38,7 @@ const paraForm = (c: Cliente): ClienteForm => ({
 
 export function ClientePage() {
   const { id = '' } = useParams()
-  const dados = useClientes()
+  const dados = useClientes({ incluirCobrancas: false })
   const cliente = dados.clientes.find((c) => c.id === id) ?? null
   const painel = cliente ? dados.paineis.get(cliente.id) ?? null : null
   const [ok, setOk] = useState('')
@@ -46,17 +46,25 @@ export function ClientePage() {
   const [salvando, setSalvando] = useState(false)
   const [edit, setEdit] = useState<ClienteForm | null>(null)
   const [itens, setItens] = useState<ItensPainel>(ITENS_VAZIOS)
+  const [estadoItens, setEstadoItens] = useState<{ token: string; tique: number; erro: boolean } | null>(null)
   const [tique, setTique] = useState(0)
   const recarregarItens = useCallback(() => setTique((t) => t + 1), [])
-  const token = painel?.token ?? ''
+  const token = dados.participa ? painel?.token ?? '' : ''
   useEffect(() => {
     if (!token) return
     let vivo = true
-    void carregarItens(token).then((r) => vivo && setItens(r)).catch((f) => vivo && setErro(mensagemErro(f)))
+    void carregarItens(token).then((r) => {
+      if (!vivo) return
+      setItens(r)
+      setEstadoItens({ token, tique, erro: false })
+    }).catch(() => {
+      if (vivo) setEstadoItens({ token, tique, erro: true })
+    })
     return () => { vivo = false }
   }, [token, tique])
 
   async function acao(fn: () => Promise<unknown>, msg: string) {
+    if (salvando) return false
     setSalvando(true)
     setErro('')
     setOk('')
@@ -73,13 +81,16 @@ export function ClientePage() {
     }
   }
 
-  if (!dados.carregando && !dados.participa) return <div className="mx-auto max-w-3xl"><Vazio titulo="Painel do Cliente é da unidade" texto="Só o franqueado e a equipe com o módulo acessam os clientes." /></div>
+  if (!dados.participa) return <div className="mx-auto max-w-3xl"><Vazio titulo="Painel do Cliente é da unidade" texto="Só o franqueado e a equipe com o módulo acessam os clientes." /></div>
   if (dados.carregando && !cliente) return <Carregando texto="Carregando o cliente…" />
+  if (dados.erro) return <div className="space-y-2"><Aviso tom="erro">Não foi possível carregar o cliente.</Aviso><Button type="button" variant="secondary" onClick={dados.recarregar}>Tentar novamente</Button></div>
   if (!cliente || !painel) return <div className="mx-auto max-w-3xl space-y-3"><Vazio titulo="Cliente não encontrado" texto="Ele pode ser de outra unidade ou o link está errado." /><Link className="text-sm font-semibold text-brand-dark" to="/clientes">Voltar aos clientes</Link></div>
 
+  const itensAtuais = estadoItens?.token === token ? estadoItens : null
+  const atualizandoItens = itensAtuais?.tique !== tique
   const pessoa = dados.pessoa
   const mudar = (m: MudancaPainel, msg: string) => pessoa ? acao(() => atualizarPainel(painel, m), msg) : Promise.resolve(false)
-  const item = (fn: () => Promise<unknown>, msg: string) => acao(fn, msg).then((r) => { recarregarItens(); return r })
+  const item = (fn: () => Promise<unknown>, msg: string) => acao(fn, msg).then((r) => { if (r) recarregarItens(); return r })
 
   return (
     <div className="mx-auto max-w-7xl space-y-5">
@@ -96,15 +107,21 @@ export function ClientePage() {
 
       <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
         <div className="space-y-5">
-          <Cobrancas painel={painel} cliente={cliente} itens={itens} salvando={salvando} item={item} />
-          <Visitas painel={painel} itens={itens} salvando={salvando} item={item} />
-          <Recados painel={painel} itens={itens} autor={primeiroNomeDe(pessoa?.nome ?? '')} salvando={salvando} item={item} />
+          {!itensAtuais || (itensAtuais.erro && atualizandoItens) ? <Carregando texto="Carregando cobranças, visitas e recados…" /> : itensAtuais.erro ? (
+            <div className="space-y-2"><Aviso tom="erro">Não foi possível carregar cobranças, visitas e recados.</Aviso><Button type="button" variant="secondary" onClick={recarregarItens}>Tentar novamente</Button></div>
+          ) : <>
+            {atualizandoItens ? <Carregando texto="Atualizando cobranças, visitas e recados…" /> : null}
+            <Cobrancas painel={painel} cliente={cliente} itens={itens} salvando={salvando || atualizandoItens} item={item} />
+            <Visitas painel={painel} itens={itens} salvando={salvando || atualizandoItens} item={item} />
+            <Recados painel={painel} itens={itens} autor={primeiroNomeDe(pessoa?.nome ?? '')} salvando={salvando || atualizandoItens} item={item} />
+          </>}
         </div>
         <div className="space-y-5">
-          <LinkCard painel={painel} cliente={cliente} salvando={salvando}
+          <LinkCard key={token} painel={painel} cliente={cliente} salvando={salvando}
             ativar={(ativo) => void mudar({ ativo }, ativo ? 'Link ativado: o cliente já pode abrir.' : 'Link desativado: quem tiver o endereço não vê mais nada.')}
             contato={(contatoUnidade) => void mudar({ contatoUnidade: contatoUnidade.trim().slice(0, 120) }, 'Contato da unidade atualizado no link.')}
-            trocar={() => pessoa && void acao(() => trocarLink(pessoa, cliente, painel, itens), 'Link trocado. O endereço antigo deixou de funcionar.')} />
+            podeTrocar={!!itensAtuais && !itensAtuais.erro && !atualizandoItens}
+            trocar={() => pessoa && window.confirm('Gerar um link novo? O endereço anterior deixará de funcionar.') && void acao(() => trocarLink(pessoa, cliente, painel, itens), 'Link trocado. O endereço antigo deixou de funcionar.')} />
           <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold">Cadastro e contrato</h2>
             <p className="text-xs text-ink/50">Telefone, e-mail, sobrenome e observação ficam só com a unidade.</p>
@@ -117,7 +134,7 @@ export function ClientePage() {
                     if (erros.length) { setErro(erros.join(' ')); return }
                     if (pessoa) void acao(() => salvarCliente(pessoa, cliente, edit, cliente.status), 'Cadastro salvo.').then((r) => r && setEdit(null))
                   }}>Salvar</Button>
-                  <Button type="button" variant="ghost" onClick={() => setEdit(null)}>Cancelar</Button>
+                  <Button type="button" variant="ghost" disabled={salvando} onClick={() => setEdit(null)}>Cancelar</Button>
                 </div>
               </>
             ) : (
@@ -131,7 +148,7 @@ export function ClientePage() {
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="secondary" onClick={() => setEdit(paraForm(cliente))}>Editar</Button>
                   {cliente.status === 'ativo' ? (
-                    <Button type="button" variant="ghost" disabled={salvando} onClick={() => pessoa && void acao(() => salvarCliente(pessoa, cliente, paraForm(cliente), 'encerrado'), 'Contrato encerrado e link desativado (nada é apagado).')}>Encerrar contrato</Button>
+                    <Button type="button" variant="ghost" disabled={salvando} onClick={() => pessoa && window.confirm('Encerrar o contrato e desativar o link do cliente? O histórico será mantido.') && void acao(() => salvarCliente(pessoa, cliente, paraForm(cliente), 'encerrado'), 'Contrato encerrado e link desativado (nada é apagado).')}>Encerrar contrato</Button>
                   ) : (
                     <Button type="button" variant="ghost" disabled={salvando} onClick={() => pessoa && void acao(() => salvarCliente(pessoa, cliente, paraForm(cliente), 'ativo'), 'Contrato reativado.')}>Reativar contrato</Button>
                   )}
@@ -142,16 +159,19 @@ export function ClientePage() {
           </section>
         </div>
       </div>
-      <RodapeModulo12 />
     </div>
   )
 }
 
 type Item = (fn: () => Promise<unknown>, msg: string) => Promise<boolean>
 
-function LinkCard({ painel, cliente, salvando, ativar, contato, trocar }: { painel: Painel; cliente: Cliente; salvando: boolean; ativar: (a: boolean) => void; contato: (c: string) => void; trocar: () => void }) {
+function LinkCard({ painel, cliente, salvando, ativar, contato, trocar, podeTrocar }: { painel: Painel; cliente: Cliente; salvando: boolean; ativar: (a: boolean) => void; contato: (c: string) => void; trocar: () => void; podeTrocar: boolean }) {
   const url = linkPainel(painel.token)
-  const [copiado, setCopiado] = useState(false)
+  const [copia, setCopia] = useState<'copiado' | 'erro' | null>(null)
+  async function copiar() {
+    try { await navigator.clipboard.writeText(url); setCopia('copiado') }
+    catch { setCopia('erro') }
+  }
   const [c, setC] = useState(painel.contatoUnidade)
   return (
     <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
@@ -159,15 +179,16 @@ function LinkCard({ painel, cliente, salvando, ativar, contato, trocar }: { pain
       <p className="text-xs text-ink/55">Sem senha: quem tiver o endereço vê o primeiro nome, o box, o contrato, as cobranças, as visitas e os recados. Envie só para o cliente.</p>
       <p className="break-all rounded-xl bg-paper px-3 py-2 font-mono text-[11px] text-ink/70" data-link-painel>{url}</p>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" onClick={() => { void navigator.clipboard?.writeText(url).then(() => setCopiado(true)) }}><Copy className="h-4 w-4" aria-hidden="true" /> {copiado ? 'Copiado' : 'Copiar'}</Button>
+        <Button type="button" variant="secondary" onClick={() => void copiar()}><Copy className="h-4 w-4" aria-hidden="true" /> {copia === 'copiado' ? 'Copiado' : 'Copiar'}</Button>
         <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-xl border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-paper"><ExternalLink className="h-4 w-4" aria-hidden="true" /> Ver como o cliente</a>
       </div>
       <div className="flex flex-wrap gap-2">
         {painel.ativo
           ? <Button type="button" variant="ghost" disabled={salvando} onClick={() => ativar(false)}>Desativar link</Button>
           : <Button type="button" disabled={salvando || cliente.status === 'encerrado'} onClick={() => ativar(true)}>Ativar link</Button>}
-        <Button type="button" variant="ghost" disabled={salvando} onClick={trocar}>Gerar link novo</Button>
+        <Button type="button" variant="ghost" disabled={salvando || !podeTrocar} onClick={trocar}>Gerar link novo</Button>
       </div>
+      {copia === 'erro' ? <Aviso tom="erro">Não foi possível copiar. Selecione o endereço acima para copiar manualmente.</Aviso> : null}
       <Campo label="Contato da unidade (aparece no link)">
         <div className="flex gap-2"><input className={inputClass} maxLength={120} value={c} onChange={(e) => setC(e.target.value)} /><Button type="button" variant="secondary" disabled={salvando || c === painel.contatoUnidade} onClick={() => contato(c)}>Salvar</Button></div>
       </Campo>
@@ -255,7 +276,11 @@ function Visitas({ painel, itens, salvando, item }: { painel: Painel; itens: Ite
                 <div className="flex gap-1">
                   {(['realizada', 'cancelada'] as const).map((s) => (
                     <button key={s} type="button" disabled={salvando} className="rounded-lg border border-line px-2 py-1 text-xs font-semibold hover:bg-paper"
-                      onClick={() => void item(() => mudarVisita(painel, x.id, s), `Visita marcada como ${ROTULO_VISITA[s].toLowerCase()}.`)}>{ROTULO_VISITA[s]}</button>
+                      onClick={() => {
+                        const acao = s === 'cancelada' ? 'Cancelar' : 'Marcar como realizada'
+                        if (!window.confirm(`${acao} a visita de ${formatarDiaISO(x.data)} às ${x.hora}?`)) return
+                        void item(() => mudarVisita(painel, x.id, s), `Visita marcada como ${ROTULO_VISITA[s].toLowerCase()}.`)
+                      }}>{s === 'cancelada' ? 'Cancelar visita' : 'Marcar realizada'}</button>
                   ))}
                 </div>
               ) : null}
@@ -274,6 +299,7 @@ function Recados({ painel, itens, autor, salvando, item }: { painel: Painel; ite
     const erros = validarRecado(t.texto, t.ia, t.iaModelo)
     if (erros.length) { setErro(erros.join(' ')); return }
     setErro('')
+    if (painel.ativo && !window.confirm('Publicar este recado no painel do cliente? Ele ficará visível para quem tem o link.')) return
     void item(() => publicarRecado(painel, { texto: t.texto, autor, geradoPorIA: t.ia, iaModelo: t.iaModelo }), painel.ativo ? 'Recado publicado no link do cliente.' : 'Recado salvo (o link está desativado).').then((ok) => ok && setT({ texto: '', ia: false, iaModelo: '' }))
   }
   return (

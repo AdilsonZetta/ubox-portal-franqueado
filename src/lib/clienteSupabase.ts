@@ -115,14 +115,15 @@ export async function carregarPainelPublicoSb(token: string): Promise<{ painel: 
   if (!tokenValido(token)) return null
   try {
     const { data, error } = await requireSupabase().rpc('painel_publico', { p_token: token })
-    if (error || !data) return null
+    if (error) throw error
+    if (data === null) return null
     const publico = data as PainelPublico
     return {
       painel: mapPainelSb(token, { ...publico, ativo: true }),
       itens: mapItens(publico.cobrancas, publico.visitas, publico.recados),
     }
   } catch {
-    return null
+    throw new Error('Não foi possível abrir o painel.')
   }
 }
 

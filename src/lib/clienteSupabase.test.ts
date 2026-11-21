@@ -36,11 +36,17 @@ describe('painel público no Supabase', () => {
     expect(rpc).not.toHaveBeenCalled()
   })
 
-  it('trata link indisponível ou falha de leitura como null', async () => {
-    rpc.mockResolvedValueOnce({ data: null, error: null }).mockRejectedValueOnce(new Error('rede'))
-    expect(await lerPainelPublicoSb(token)).toBeNull()
+  it('retorna null quando o painel não está disponível', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: null })
     expect(await lerPainelPublicoSb(token)).toBeNull()
   })
+  it('distingue erros da RPC e falhas de transporte de um link indisponível', async () => {
+    rpc.mockResolvedValueOnce({ data: null, error: { message: 'erro na leitura' } })
+      .mockRejectedValueOnce(new Error('rede'))
+    await expect(carregarPainelPublicoSb(token)).rejects.toThrow('Não foi possível abrir o painel.')
+    await expect(carregarPainelPublicoSb(token)).rejects.toThrow('Não foi possível abrir o painel.')
+  })
+
 })
 
 describe('gravação do cliente no Supabase', () => {
