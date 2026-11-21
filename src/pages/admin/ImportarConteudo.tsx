@@ -96,9 +96,16 @@ export default function ImportarConteudo() {
           setErros(['O arquivo aceita até 5 MB.'])
           return
         }
+        let conteudo: string
+        try {
+          conteudo = await arquivo.text()
+        } catch {
+          setErros(['Não foi possível abrir o arquivo. Selecione-o novamente para tentar outra vez.'])
+          return
+        }
         let json: unknown
         try {
-          json = JSON.parse(await arquivo.text())
+          json = JSON.parse(conteudo)
         } catch {
           setErros(['Não foi possível ler o arquivo como JSON. Confira o conteúdo e selecione o arquivo novamente.'])
           return
@@ -126,6 +133,7 @@ export default function ImportarConteudo() {
     setRelatorio(null)
     setErros([])
     setProgresso({ feito: 0, total, chave: '' })
+    let etapa: 'consulta' | 'gravacao' | 'atualizacao' = 'consulta'
     try {
       // Reconsulta a base antes de gravar para reconhecer itens salvos desde a prévia.
       const base = await carregarExistentes(user)
@@ -141,6 +149,7 @@ export default function ImportarConteudo() {
         setErros(['O conteúdo existente mudou. Confira a nova prévia antes de importar.'])
         return
       }
+      etapa = 'gravacao'
       const resultado = await importarPacote(planoAtual, {
         salvarCategoria: (form, id, usuarios) => salvarCategoria(form, usuarios, id),
         salvarDocumento: (form, id, usuarios) => salvarDocumento(form, user, usuarios, id),
@@ -150,13 +159,19 @@ export default function ImportarConteudo() {
         salvarProva: (form, versao) => salvarProva(user, form, versao),
         salvarModelo: (existente, form) => salvarModelo(user, existente, form),
       }, (feito, chave) => setProgresso({ feito, total, chave }))
+      etapa = 'atualizacao'
       setRelatorio(resultado)
       setAtualizarRestritos(false)
       await atualizar()
       setExistentes(await carregarExistentes(user))
     } catch {
       setExistentes(null)
-      setErros(['Não foi possível atualizar a prévia. Carregue o conteúdo existente antes de tentar novamente.'])
+      const mensagens = {
+        consulta: 'Não foi possível verificar o conteúdo existente antes da importação. Carregue a prévia e tente novamente.',
+        gravacao: 'A gravação foi interrompida. Alguns itens podem ter sido salvos. Carregue a prévia para conferir o que falta.',
+        atualizacao: 'O resultado da importação está abaixo. Não foi possível atualizar a prévia. Carregue-a novamente antes de importar.',
+      }
+      setErros([mensagens[etapa]])
     } finally {
       ocupado.current = false
       setImportando(false)
