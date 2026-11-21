@@ -132,6 +132,7 @@ export interface FiltroMateriais {
   campanhaId?: string
   busca?: string
   incluirForaDaVigencia?: boolean
+  vigencia?: Vigencia
 }
 
 function normalizar(texto: string): string {
@@ -143,6 +144,7 @@ export function filtrarMateriais(materiais: MaterialMkt[], filtro: FiltroMateria
   const busca = normalizar(filtro.busca?.trim() ?? '')
   return materiais
     .filter((m) => filtro.incluirForaDaVigencia || (m.ativo && vigencia(m, agoraMs) === 'vigente'))
+    .filter((m) => !filtro.vigencia || vigencia(m, agoraMs) === filtro.vigencia)
     .filter((m) => !filtro.tipo || filtro.tipo === 'todos' || m.tipo === filtro.tipo)
     .filter((m) => !filtro.categoria || m.categoria === filtro.categoria)
     .filter((m) => !filtro.campanhaId || m.campanhaId === filtro.campanhaId)

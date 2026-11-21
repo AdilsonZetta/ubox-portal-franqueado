@@ -1,3 +1,4 @@
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { useMemo, useState } from 'react'
 import { Link, Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronRight, Plus } from 'lucide-react'
@@ -84,6 +85,7 @@ function nomeDo(contatos: Map<string, Contato>, lead: Lead) {
 }
 
 function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFeito: (m: string) => void }) {
+  const [soAtrasados, setSoAtrasados] = useState(false)
   const [mostrarArquivados, setMostrarArquivados] = useState(false)
   const [mostrarFechados, setMostrarFechados] = useState(true)
   const [responsavel, setResponsavel] = useState('')
@@ -91,9 +93,12 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
   const [erro, setErro] = useState('')
   const responsaveis = useResponsaveis(dados.pessoa, dados.leads)
   const filtrados = dados.leads.filter((l) => (!responsavel || l.responsavelUid === responsavel)
+    && (!soAtrasados || atrasado(l, agora))
     && (!busca.trim() || `${nomeDo(dados.contatos, l)} ${dados.contatos.get(l.id)?.interesseTamanho ?? ''} ${l.origem}`.toLowerCase().includes(busca.trim().toLowerCase())))
   const grupos = porEtapa(filtrados, mostrarArquivados)
   const colunas = mostrarFechados ? ETAPAS : ETAPAS_ABERTAS
+
+  const lista = colunas.flatMap((etapa) => grupos[etapa])
 
   async function avancar(l: Lead, etapa: Etapa) {
     if (!dados.pessoa) return
@@ -120,9 +125,15 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
         </div>
         <label className="flex items-center gap-2 pb-2.5 text-sm"><input type="checkbox" checked={mostrarFechados} onChange={(e) => setMostrarFechados(e.target.checked)} /> Mostrar ganhos e perdidos</label>
         <label className="flex items-center gap-2 pb-2.5 text-sm"><input type="checkbox" checked={mostrarArquivados} onChange={(e) => setMostrarArquivados(e.target.checked)} /> Mostrar arquivados</label>
+        <label className="flex items-center gap-2 pb-2.5 text-sm"><input type="checkbox" checked={soAtrasados} onChange={(e) => setSoAtrasados(e.target.checked)} /> Retornos atrasados</label>
+        {!dados.simulando ? <BotaoCsv arquivo="crm-unidade" cabecalhos={['Lead', 'Etapa', 'Origem', 'Responsável', 'Retorno', 'Situação do retorno']}
+          linhas={lista.map((l) => [nomeDo(dados.contatos, l), ROTULO_ETAPA[l.etapa], l.origem, l.responsavelNome,
+            l.proximoContatoMs && !l.arquivado && ETAPAS_ABERTAS.includes(l.etapa) ? formatarDia(l.proximoContatoMs) : null,
+            atrasado(l, agora) ? 'Em atraso' : null])} /> : null}
       </div>
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {!dados.leads.length ? <Vazio titulo="Nenhum lead ainda" texto="Cadastre quem pediu orçamento pelo site, Instagram, WhatsApp ou passou na loja." /> : null}
+      {dados.leads.length > 0 && !lista.length ? <Vazio titulo="Nenhum resultado para este filtro" texto="Ajuste a busca ou os filtros do funil." /> : null}
       <div className="flex gap-3 overflow-x-auto pb-2">
         {colunas.map((etapa) => (
           <div key={etapa} className="w-64 shrink-0 space-y-2 rounded-2xl bg-paper/70 p-2.5" aria-label={`Coluna ${ROTULO_ETAPA[etapa]}`}>
@@ -134,7 +145,7 @@ function Kanban({ dados, agora, onFeito }: { dados: UsoCrm; agora: number; onFei
               const idx = ETAPAS_ABERTAS.indexOf(l.etapa)
               const proxima = idx >= 0 && idx < ETAPAS_ABERTAS.length - 1 ? ETAPAS_ABERTAS[idx + 1] : null
               return (
-                <article key={l.id} className={cx('space-y-1 rounded-xl border bg-white p-3 text-sm shadow-sm', atrasado(l, agora) ? 'border-red-300' : 'border-line', l.arquivado && 'opacity-60')}>
+                <article key={l.id} className={cx('space-y-1 rounded-xl border bg-white p-3 text-sm shadow-sm', atrasado(l, agora) ? 'border-red-400 border-l-4' : 'border-line', l.arquivado && 'opacity-60')}>
                   <Link to={`/crm/lead/${l.id}`} className="block font-semibold text-ink hover:text-brand-dark hover:underline">{nomeDo(dados.contatos, l)}</Link>
                   <p className="text-xs text-ink/55">{l.origem}{dados.contatos.get(l.id)?.interesseTamanho ? ` · ${dados.contatos.get(l.id)?.interesseTamanho}` : ''}{l.valorEstimadoCentavos ? ` · ${formatarReais(l.valorEstimadoCentavos)}` : ''}</p>
                   <p className="text-xs text-ink/55">Resp.: {l.responsavelNome}</p>

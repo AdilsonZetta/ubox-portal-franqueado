@@ -1,3 +1,5 @@
+import { normalizar } from '../../lib/text'
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
@@ -13,10 +15,17 @@ export function ClientesPage() {
   const [novo, setNovo] = useState(false)
   const [busca, setBusca] = useState('')
   const [encerrados, setEncerrados] = useState(false)
+  const [soAtrasados, setSoAtrasados] = useState(false)
+  const [ordem, setOrdem] = useState('nome')
   const hoje = useMemo(() => hojeISO(), [])
   const k = kpisClientes(dados.clientes, dados.paineis, dados.cobrancas, hoje)
-  const lista = dados.clientes.filter((c) => (encerrados || c.status === 'ativo')
-    && (!busca.trim() || `${c.nome} ${c.box} ${c.telefone}`.toLowerCase().includes(busca.trim().toLowerCase())))
+  const consulta = normalizar(busca.trim())
+  const lista = dados.clientes
+    .filter((c) => (encerrados || c.status === 'ativo') && normalizar(`${c.nome} ${c.box} ${c.telefone}`).includes(consulta))
+    .map((c) => ({ c, cobranca: c.status === 'ativo' ? resumoCobrancas(dados.cobrancas.get(c.id) ?? [], hoje) : null }))
+    .filter(({ cobranca }) => !soAtrasados || Boolean(cobranca?.atrasadas))
+    .sort((a, b) => (ordem === 'atraso' ? (b.cobranca?.atrasadas ?? 0) - (a.cobranca?.atrasadas ?? 0) : 0)
+      || a.c.nome.localeCompare(b.c.nome, 'pt-BR'))
 
   if (!dados.carregando && !dados.participa) {
     return (
@@ -55,17 +64,26 @@ export function ClientesPage() {
                 <input className={inputClass} placeholder="Nome, box ou telefone" value={busca} onChange={(e) => setBusca(e.target.value)} />
               </label>
               <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={encerrados} onChange={(e) => setEncerrados(e.target.checked)} /> Mostrar encerrados</label>
+              <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={soAtrasados} onChange={(e) => setSoAtrasados(e.target.checked)} /> Somente em atraso</label>
+              <Campo label="Ordenar por">
+                <select className={inputClass} value={ordem} onChange={(e) => setOrdem(e.target.value)}>
+                  <option value="nome">Nome</option>
+                  <option value="atraso">Mais cobranças em atraso</option>
+                </select>
+              </Campo>
+              {dados.participa ? <BotaoCsv arquivo="clientes" cabecalhos={['Cliente', 'Telefone', 'Box', 'Contrato', 'Cobrança']}
+                linhas={lista.map(({ c, cobranca }) => [c.nome, c.telefone, c.box, c.status === 'ativo' ? 'Ativo' : 'Encerrado',
+                  cobranca ? (cobranca.atrasadas ? 'Em atraso' : cobranca.proxima ? 'Pendente' : 'Em dia') : null])} /> : null}
             </div>
-            {lista.length === 0 ? <Vazio titulo="Nenhum cliente aqui" texto="Cadastre o primeiro locatário em “Novo cliente”." /> : (
+            {lista.length === 0 ? <Vazio titulo={dados.clientes.length ? 'Nenhum resultado para este filtro' : 'Nenhum cliente aqui'} texto={dados.clientes.length ? 'Ajuste a busca ou os filtros.' : 'Cadastre o primeiro locatário em “Novo cliente”.'} /> : (
               <div className="overflow-x-auto rounded-2xl border border-line bg-white shadow-sm">
                 <table className="w-full text-sm">
                   <thead className="bg-paper text-left text-xs uppercase tracking-wide text-ink/50">
                     <tr><th className="px-4 py-2">Cliente</th><th className="px-4 py-2">Box</th><th className="px-4 py-2">Contrato</th><th className="px-4 py-2 text-right">Mensalidade</th><th className="px-4 py-2">Cobrança</th><th className="px-4 py-2">Link</th></tr>
                   </thead>
                   <tbody>
-                    {lista.map((c) => {
+                    {lista.map(({ c, cobranca: r }) => {
                       const p = dados.paineis.get(c.id)
-                      const r = c.status === 'ativo' ? resumoCobrancas(dados.cobrancas.get(c.id) ?? [], hoje) : null
                       return (
                         <tr key={c.id} className={cx('border-t border-line', c.status === 'encerrado' && 'opacity-60')}>
                           <td className="px-4 py-2"><Link to={`/clientes/${c.id}`} className="font-semibold text-ink hover:text-brand-dark hover:underline">{c.nome}</Link><p className="text-xs text-ink/50">{c.telefone || 'sem telefone'}</p></td>

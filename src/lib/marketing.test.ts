@@ -60,6 +60,12 @@ describe('vigência dos materiais', () => {
     expect(filtrarMateriais(lista, { incluirForaDaVigencia: true }, agora)).toHaveLength(4)
   })
 
+  it('filtra vigência na gestão sem ampliar a visibilidade da unidade', () => {
+    const lista = [material({ id: 'a' }), material({ id: 'b', validoAteMs: agora - 3 * DIA })]
+    expect(filtrarMateriais(lista, { incluirForaDaVigencia: true, vigencia: 'vencido' }, agora).map((m) => m.id)).toEqual(['b'])
+    expect(filtrarMateriais(lista, { vigencia: 'vencido' }, agora)).toEqual([])
+  })
+
   it('filtra por tipo, categoria, campanha e busca sem acento', () => {
     const lista = [material({ id: 'a', titulo: 'Promoção de Verão', campanhaId: 'c1' }), material({ id: 'b', tipo: 'logo', categoria: 'Marca' })]
     expect(filtrarMateriais(lista, { busca: 'promocao' }, agora).map((m) => m.id)).toEqual(['a'])
