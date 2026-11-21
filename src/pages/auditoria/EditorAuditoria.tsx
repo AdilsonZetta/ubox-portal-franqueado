@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { AlertTriangle, PenLine } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
@@ -19,9 +19,10 @@ import {
   type ModeloAuditoria,
 } from '../../lib/auditoria'
 import { assinarAuditoria, criarAuditoria, lerAuditoria, listarAuditorias, listarModelosAud, salvarRascunho, type DadosAuditoria } from '../../lib/auditoriaApi'
+import { listarUnidades } from '../../lib/gestao'
 import { ScoreSelo } from '../checklist/partes'
 import { useGestaoAuditoriaAcesso } from './useAcesso'
-import { ResultadoSelo, RodapeModulo8, useUnidadesAuditaveis } from './partes'
+import { ResultadoSelo, unidadesAuditaveis } from './partes'
 
 const COR_RESULTADO: Record<Resultado, string> = {
   ok: 'border-lime-dark bg-lime/25 text-lime-dark',
@@ -42,6 +43,10 @@ function deInputData(v: string): Date {
 
 export function EditorAuditoriaPage() {
   const { id = '' } = useParams()
+  return <EditorAuditoria key={id} id={id} />
+}
+
+function EditorAuditoria({ id }: { id: string }) {
   const { user } = useAuth()
   const { gestor, ehAdmin } = useGestaoAuditoriaAcesso()
   const navegar = useNavigate()
@@ -64,26 +69,34 @@ export function EditorAuditoriaPage() {
   const [confirmo, setConfirmo] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [gravando, setGravando] = useState(false)
-  const [erro, setErro] = useState('')
+  const { state } = useLocation()
+  const [erro, setErro] = useState(state?.assinaturaPendente ? 'O rascunho foi criado, mas a assinatura falhou. Confira os dados e tente assinar novamente.' : '')
   const [ok, setOk] = useState('')
   const [errosItem, setErrosItem] = useState<Record<string, string>>({})
-  const unidades = useUnidadesAuditaveis(ehAdmin, vistas)
+  const [cadastro, setCadastro] = useState<{ id: string; nome: string }[]>([])
+  const [erroCarga, setErroCarga] = useState('')
+  const [tique, setTique] = useState(0)
+  const [erroChecklist, setErroChecklist] = useState('')
+  const [carregandoChecklist, setCarregandoChecklist] = useState(false)
+  const [erroUnidades, setErroUnidades] = useState(false)
+  const [tiqueUnidades, setTiqueUnidades] = useState(0)
+  const [tiqueChecklist, setTiqueChecklist] = useState(0)
+  const gravacaoEmCurso = useRef(false)
+  const unidades = useMemo(() => unidadesAuditaveis(cadastro, vistas), [cadastro, vistas])
 
   useEffect(() => {
     if (!gestor) return
     let ativo = true
     setCarregando(true)
+    setErroCarga('')
     void Promise.all([
       listarModelosAud(),
-      listarAuditorias(true, null).catch(() => []),
-      listarExecucoes({ unidadeId: null }, true, { deMs: Date.now() - 120 * DIA, maximo: 300 }).catch(() => []),
       id ? lerAuditoria(id) : Promise.resolve(null),
     ])
-      .then(([m, a, e, atual]) => {
+      .then(([m, atual]) => {
         if (!ativo) return
         setModelos(m)
-        setVistas([...a, ...e].map((x) => ({ unidadeId: x.unidadeId, unidadeNome: x.unidadeNome })))
-        if (id && !atual) setErro('Auditoria não encontrada.')
+        if (id && !atual) setErroCarga('Auditoria não encontrada.')
         if (atual) {
           setExistente(atual)
           setModeloId(atual.modeloId)
@@ -98,12 +111,33 @@ export function EditorAuditoriaPage() {
           setChecklistId(atual.checklistExecucaoId)
         }
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
     }
-  }, [gestor, id])
+  }, [gestor, id, tique])
+
+  useEffect(() => {
+    if (!gestor || id) return
+    let ativo = true
+    setErroUnidades(false)
+    void Promise.allSettled([
+      ehAdmin ? listarUnidades() : Promise.resolve([]),
+      listarAuditorias(true, null),
+      listarExecucoes({ unidadeId: null }, true, { deMs: Date.now() - 120 * DIA, maximo: 300 }),
+    ]).then(([unidades, auditorias, checklists]) => {
+      if (!ativo) return
+      if (unidades.status === 'fulfilled') setCadastro(unidades.value.filter((u) => u.ativo))
+      const registros = [
+        ...(auditorias.status === 'fulfilled' ? auditorias.value : []),
+        ...(checklists.status === 'fulfilled' ? checklists.value : []),
+      ]
+      setVistas(registros.map((x) => ({ unidadeId: x.unidadeId, unidadeNome: x.unidadeNome })))
+      setErroUnidades([unidades, auditorias, checklists].some((fonte) => fonte.status === 'rejected'))
+    })
+    return () => { ativo = false }
+  }, [gestor, ehAdmin, id, tiqueUnidades])
 
   const unidadeId = existente ? existente.unidadeId : unidadeSel === OUTRA ? outraId.trim() : unidadeSel
   const unidadeNome = existente
@@ -114,24 +148,31 @@ export function EditorAuditoriaPage() {
 
   // Checklists da unidade auditada (últimos 120 dias) para referência.
   useEffect(() => {
+    setErroChecklist('')
+    setExecucoes([])
     if (!gestor || !unidadeId) {
-      setExecucoes([])
+      setCarregandoChecklist(false)
       return
     }
+    setCarregandoChecklist(true)
     let ativo = true
     void listarExecucoes({ unidadeId: null }, true, { unidadeId, deMs: Date.now() - 120 * DIA, maximo: 60 })
       .then(async (lista) => {
         if (existente?.checklistExecucaoId && !lista.some((x) => x.id === existente.checklistExecucaoId)) {
-          const antiga = await lerExecucao(existente.checklistExecucaoId).catch(() => null)
+          const antiga = await lerExecucao(existente.checklistExecucaoId).catch(() => {
+            if (ativo) setErroChecklist('Não foi possível conferir o checklist de referência salvo.')
+            return null
+          })
           if (antiga) lista = [antiga, ...lista]
         }
         if (ativo) setExecucoes(lista)
       })
-      .catch(() => ativo && setExecucoes([]))
+      .catch(() => ativo && setErroChecklist('Não foi possível carregar os checklists da unidade.'))
+      .finally(() => ativo && setCarregandoChecklist(false))
     return () => {
       ativo = false
     }
-  }, [gestor, unidadeId, existente?.checklistExecucaoId])
+  }, [gestor, unidadeId, existente?.checklistExecucaoId, tiqueChecklist])
 
   const modelo = modelos.find((m) => m.id === modeloId) ?? null
   const ativos = modelos.filter((m) => m.ativo)
@@ -192,11 +233,13 @@ export function EditorAuditoriaPage() {
   }
 
   async function salvar(assinar: boolean) {
-    if (!user || !conferir(assinar)) return
+    if (!user || gravacaoEmCurso.current || !conferir(assinar)) return
+    if (assinar && !window.confirm('Assinar e enviar esta auditoria para ciência? Depois do envio, ela não poderá ser editada.')) return
+    gravacaoEmCurso.current = true
     setGravando(true)
     setOk('')
+    let alvo = existente?.id ?? ''
     try {
-      let alvo = existente?.id ?? ''
       if (!alvo) {
         if (!modelo) return
         alvo = await criarAuditoria(user, modelo, { id: unidadeId, nome: unidadeNome }, dados())
@@ -214,8 +257,13 @@ export function EditorAuditoriaPage() {
         setExistente(await lerAuditoria(alvo))
       }
     } catch (falha) {
-      setErro(mensagemErro(falha))
+      if (!id && alvo && assinar) {
+        navegar(`/auditoria/editar/${alvo}`, { replace: true, state: { assinaturaPendente: true } })
+      } else {
+        setErro(mensagemErro(falha))
+      }
     } finally {
+      gravacaoEmCurso.current = false
       setGravando(false)
     }
   }
@@ -226,7 +274,8 @@ export function EditorAuditoriaPage() {
         <Link to="/auditoria">Auditoria e Qualidade</Link> / {existente ? 'Rascunho' : 'Nova auditoria'}
       </p>
       {carregando ? <Carregando texto="Preparando a auditoria…" /> : null}
-      {!carregando ? (
+      {erroCarga ? <Aviso tom="erro"><span role="alert">{erroCarga}</span> <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
+      {!carregando && !erroCarga && (!id || existente?.id === id) ? (
         <>
           <header>
             <h1 className="text-3xl font-extrabold">{existente ? existente.modeloTitulo : 'Nova auditoria'}</h1>
@@ -274,8 +323,9 @@ export function EditorAuditoriaPage() {
               <input type="number" min={0} max={100} className={inputClass} value={notaMinima} onChange={(e) => setNotaMinima(Number(e.target.value))} />
             </Campo>
             <Campo label="Checklist de referência (opcional)" hint="O score é recalculado aqui pelas respostas do checklist, sem confiar no total gravado.">
-              <select className={inputClass} value={checklistId} disabled={!unidadeId} onChange={(e) => setChecklistId(e.target.value)}>
+              <select className={inputClass} value={checklistId} disabled={!unidadeId || carregandoChecklist} onChange={(e) => setChecklistId(e.target.value)}>
                 <option value="">Sem checklist de referência</option>
+                {checklistId && !execSel ? <option value={checklistId}>Checklist de referência selecionado</option> : null}
                 {execucoes.map((x) => <option key={x.id} value={x.id}>{formatarData(x.criadoEmMs)} · {x.modeloTitulo} · {scoreRecalculado(x)}%</option>)}
               </select>
             </Campo>
@@ -350,6 +400,8 @@ export function EditorAuditoriaPage() {
             </section>
           ) : null}
 
+          {erroUnidades ? <Aviso tom="erro"><span role="alert">Parte da lista de unidades está indisponível.</span> <Button variant="ghost" onClick={() => setTiqueUnidades((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
+          {erroChecklist ? <Aviso tom="erro"><span role="alert">{erroChecklist}</span> <Button variant="ghost" onClick={() => setTiqueChecklist((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
           {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
           {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
 
@@ -369,7 +421,6 @@ export function EditorAuditoriaPage() {
           </div>
         </>
       ) : null}
-      <RodapeModulo8 />
     </div>
   )
 }

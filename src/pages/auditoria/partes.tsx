@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Selo, Vazio, cx } from '../../components/ui'
 import { formatarData, formatarDia } from '../../lib/format'
-import { listarUnidades } from '../../lib/gestao'
 import {
   ROTULO_MODALIDADE,
   ROTULO_STATUS_ACAO,
@@ -80,19 +78,10 @@ export function ListaAuditorias({ auditorias, mostrarUnidade = false, vazio }: {
 }
 
 /** Unidades que o auditor pode escolher: o admin lê o cadastro; a equipe usa as unidades vistas nos checklists e auditorias. */
-export function useUnidadesAuditaveis(ehAdmin: boolean, vistas: { unidadeId: string; unidadeNome: string }[]) {
-  const [cadastro, setCadastro] = useState<{ id: string; nome: string }[]>([])
-  useEffect(() => {
-    if (!ehAdmin) return
-    void listarUnidades()
-      .then((lista) => setCadastro(lista.filter((u) => u.ativo).map((u) => ({ id: u.id, nome: u.nome }))))
-      .catch(() => undefined)
-  }, [ehAdmin])
-  return useMemo(() => {
-    const mapa = new Map(cadastro.map((u) => [u.id, u]))
-    for (const v of vistas) if (v.unidadeId && !mapa.has(v.unidadeId)) mapa.set(v.unidadeId, { id: v.unidadeId, nome: v.unidadeNome || v.unidadeId })
-    return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
-  }, [cadastro, vistas])
+export function unidadesAuditaveis(cadastro: { id: string; nome: string }[], vistas: { unidadeId: string; unidadeNome: string }[]) {
+  const mapa = new Map(cadastro.map(({ id, nome }) => [id, { id, nome }]))
+  for (const v of vistas) if (v.unidadeId && !mapa.has(v.unidadeId)) mapa.set(v.unidadeId, { id: v.unidadeId, nome: v.unidadeNome || v.unidadeId })
+  return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
 export function Assinatura({ titulo, nome, emMs, vazio }: { titulo: string; nome: string; emMs: number; vazio: string }) {
@@ -109,8 +98,4 @@ export function Assinatura({ titulo, nome, emMs, vazio }: { titulo: string; nome
       )}
     </div>
   )
-}
-
-export function RodapeModulo8() {
-  return <p className="text-center text-[11px] text-ink/35">Módulo 8 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, ClipboardPlus, Plus, Trash2 } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, LinkBotao, Selo, Vazio, cx, inputClass } from '../../components/ui'
@@ -25,7 +25,7 @@ import {
 import { decidirAcao, listarAcoes, listarAuditorias, listarModelosAud, salvarModeloAud } from '../../lib/auditoriaApi'
 import { useVisao } from '../../lib/visao'
 import { LinkEvidencia } from '../checklist/partes'
-import { ListaAuditorias, RodapeModulo8, StatusAcaoSelo } from './partes'
+import { ListaAuditorias, StatusAcaoSelo } from './partes'
 
 type Aba = 'auditorias' | 'modelos' | 'acoes'
 const ROTULO_ABA: Record<Aba, string> = { auditorias: 'Auditorias', modelos: 'Modelos', acoes: 'Planos de ação' }
@@ -53,6 +53,7 @@ export function useGestaoAuditoria() {
     }
     let ativo = true
     setCarregando(true)
+    setErro('')
     void Promise.all([listarAuditorias(true, null), listarModelosAud(), listarAcoes(true, null)])
       .then(([a, m, ac]) => {
         if (!ativo) return
@@ -80,6 +81,7 @@ export function GestaoAuditoriaPage() {
   const [filtroAcao, setFiltroAcao] = useState<StatusAcao | ''>('concluida_unidade')
   const [editando, setEditando] = useState<ModeloAuditoria | null>(null)
   const [form, setForm] = useState<ModeloAuditoriaForm | null>(null)
+  const gravacaoEmCurso = useRef(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
@@ -110,14 +112,17 @@ export function GestaoAuditoriaPage() {
   }
 
   async function gravar() {
+    if (gravacaoEmCurso.current || dados.carregando) return
     if (!user || !form) return
     const erros = validarModeloAuditoria(form)
     if (erros.length) {
       setErro(erros.join(' '))
       return
     }
-    setSalvando(true)
     setErro('')
+    gravacaoEmCurso.current = true
+    setSalvando(true)
+    setOk('')
     try {
       await salvarModeloAud(user, editando, form)
       setOk(editando ? 'Modelo atualizado. Se itens, pesos ou título mudaram, a versão subiu; auditorias antigas guardam a versão usada.' : 'Modelo de auditoria criado.')
@@ -127,11 +132,13 @@ export function GestaoAuditoriaPage() {
     } catch (falha) {
       setErro(mensagemErro(falha))
     } finally {
+      gravacaoEmCurso.current = false
       setSalvando(false)
     }
   }
 
   async function decidir(acao: AcaoAuditoria, status: 'validada' | 'reaberta') {
+    if (gravacaoEmCurso.current || dados.carregando) return
     if (!user) return
     const comentario = comentarios[acao.id] ?? ''
     if (status === 'reaberta' && comentario.trim().length < 2) {
@@ -139,12 +146,19 @@ export function GestaoAuditoriaPage() {
       return
     }
     setErro('')
+    if (!window.confirm(status === 'validada' ? 'Validar esta ação e encerrar a pendência?' : 'Reabrir esta ação para a unidade?')) return
+    gravacaoEmCurso.current = true
+    setSalvando(true)
+    setOk('')
     try {
       await decidirAcao(user, acao.id, status, comentario)
       setOk(status === 'validada' ? 'Ação validada.' : 'Ação reaberta para a unidade.')
       dados.recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      gravacaoEmCurso.current = false
+      setSalvando(false)
     }
   }
 
@@ -177,10 +191,10 @@ export function GestaoAuditoriaPage() {
 
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><span role="alert">{dados.erro}</span> <Button variant="ghost" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando auditorias…" /> : null}
 
-      {aba === 'auditorias' && !dados.carregando ? (
+      {aba === 'auditorias' && !dados.carregando && !dados.erro ? (
         <section className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-4">
             <Indicador rotulo="Assinadas" valor={assinadas.length} />
@@ -208,7 +222,7 @@ export function GestaoAuditoriaPage() {
         </section>
       ) : null}
 
-      {aba === 'modelos' && !dados.carregando ? (
+      {aba === 'modelos' && !dados.carregando && !dados.erro ? (
         <div className="grid gap-5 lg:grid-cols-[1fr_32rem]">
           <section className="space-y-2">
             <Button type="button" variant="secondary" onClick={() => { setEditando(null); setForm(formVazio()); setOk('') }}>
@@ -291,7 +305,7 @@ export function GestaoAuditoriaPage() {
         </div>
       ) : null}
 
-      {aba === 'acoes' && !dados.carregando ? (
+      {aba === 'acoes' && !dados.carregando && !dados.erro ? (
         <section className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-4">
             <Indicador rotulo="Em aberto" valor={resumo.abertas} />
@@ -328,8 +342,8 @@ export function GestaoAuditoriaPage() {
                 {a.status === 'concluida_unidade' ? (
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     <input className={cx(inputClass, 'max-w-md flex-1 py-1.5')} maxLength={1000} placeholder="Comentário (obrigatório para reabrir)" aria-label="Comentário da franqueadora" value={comentarios[a.id] ?? ''} onChange={(e) => setComentarios({ ...comentarios, [a.id]: e.target.value })} />
-                    <Button type="button" onClick={() => void decidir(a, 'validada')}>Validar</Button>
-                    <Button type="button" variant="danger" onClick={() => void decidir(a, 'reaberta')}>Reabrir</Button>
+                    <Button type="button" onClick={() => void decidir(a, 'validada')} disabled={salvando || dados.carregando}>Validar</Button>
+                    <Button type="button" variant="danger" onClick={() => void decidir(a, 'reaberta')} disabled={salvando || dados.carregando}>Reabrir</Button>
                   </div>
                 ) : null}
               </li>
@@ -337,7 +351,6 @@ export function GestaoAuditoriaPage() {
           </ul>
         </section>
       ) : null}
-      <RodapeModulo8 />
     </div>
   )
 }

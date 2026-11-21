@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Aviso, Carregando, Vazio } from '../../components/ui'
+import { Aviso, Button, Carregando, Vazio } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarDia } from '../../lib/format'
 import { daUnidade, resumoAcoes, type AcaoAuditoria, type Auditoria } from '../../lib/auditoria'
 import { listarAcoes, listarAuditorias } from '../../lib/auditoriaApi'
 import { useVisao } from '../../lib/visao'
-import { ListaAuditorias, RodapeModulo8, StatusAcaoSelo } from './partes'
+import { ListaAuditorias, StatusAcaoSelo } from './partes'
 
 /** Visão da unidade: as auditorias assinadas da própria unidade e o plano de ação. A equipe do franqueado só lê. */
 export function MinhasAuditoriasPage() {
@@ -18,6 +18,7 @@ export function MinhasAuditoriasPage() {
   const [acoes, setAcoes] = useState<AcaoAuditoria[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [tique, setTique] = useState(0)
   const unidadeId = pessoa?.unidadeId ?? ''
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export function MinhasAuditoriasPage() {
       return
     }
     let ativo = true
+    setErro('')
     setCarregando(true)
     // Na simulação, o admin lê como franqueadora e filtra pela unidade simulada.
     const consulta = comoFranqueado
@@ -45,7 +47,7 @@ export function MinhasAuditoriasPage() {
     return () => {
       ativo = false
     }
-  }, [user, pessoa, unidadeId, comoFranqueado])
+  }, [user, pessoa, unidadeId, comoFranqueado, tique])
 
   if (!user) return null
   const resumo = resumoAcoes(acoes, Date.now())
@@ -63,9 +65,11 @@ export function MinhasAuditoriasPage() {
         </p>
       </header>
       {!daUnidade(pessoa) ? <Aviso tom="info">Esta página é para as unidades. A franqueadora usa a gestão de auditorias.</Aviso> : null}
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {daUnidade(pessoa) && !unidadeId ? <Aviso>Peça à franqueadora para vincular esta conta a uma unidade.</Aviso> : null}
+      {comoFranqueado ? <Aviso>Simulação em modo de leitura. Assinaturas e alterações do plano ficam indisponíveis.</Aviso> : null}
+      {erro ? <Aviso tom="erro"><span role="alert">{erro}</span> <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
       {carregando ? <Carregando texto="Carregando auditorias…" /> : null}
-      {!carregando && daUnidade(pessoa) ? (
+      {!carregando && unidadeId && daUnidade(pessoa) && !erro ? (
         <>
           {aguardando.length ? (
             <Aviso tom="info">
@@ -95,7 +99,6 @@ export function MinhasAuditoriasPage() {
           </section>
         </>
       ) : null}
-      <RodapeModulo8 />
     </div>
   )
 }
