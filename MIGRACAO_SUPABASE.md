@@ -80,20 +80,21 @@ O AI Studio, o Storage e o App Check continuam como estão: não há Storage no 
 
 ## 4. Autenticação (escolha e impacto)
 
-O Firebase não exporta hashes que o Supabase aceite: o scrypt do Firebase é diferente do bcrypt do GoTrue. **Por isso as senhas não migram.**
+O GoTrue aceita o scrypt do Firebase no formato `$fbscrypt$v=1,n=<mem_cost>,r=<rounds>,p=1,ss=<salt_separator>,sk=<signer_key>$<salt>$<hash>`. A exportação grava `auth-hashes.json` e, quando a conta de serviço tem `firebaseauth.configs.getHashConfig`, também `hash-params.json` (só no diretório privado da exportação, nunca no repositório). Sem essa permissão o Firebase devolve o hash redigido (`REDACTED`) e a senha não pode ser preservada.
 
-**Escolha: importar as contas sem senha e pedir uma nova senha no primeiro acesso.**
+**Escolha: preservar a senha atual quando houver hash e parâmetros; quem ficar sem hash recebe um link gerado pelo admin, sem e-mail automático.**
 
-1. O script `scripts/migrar-usuarios.mjs` (fase 2) roda na máquina de quem opera, com a chave secreta só no ambiente local e nunca no repositório.
-2. Ele lê o Auth e o Firestore com o `firebase-admin` e cria cada conta com `auth.admin.createUser({ email, email_confirm: true })`, sem senha.
+1. O script `scripts/migrar-usuarios.mjs` roda na máquina de quem opera, com a chave secreta só no ambiente local e nunca no repositório.
+2. Ele lê o Auth e o Firestore com o `firebase-admin` e cria cada conta com `auth.admin.createUser`, incluindo `password_hash` no formato fbscrypt quando os parâmetros existem.
 3. Em seguida grava `usuarios` com `firebase_uid` e mapeia as referências.
-4. No dia do corte, cada pessoa recebe pelo Supabase o e-mail "Defina sua senha do Portal Ubox", que é o link de recuperação.
-5. A tela `#/entrar` ganha o aviso "Primeiro acesso no portal novo? Clique em *Esqueci a senha*".
+4. No dia do corte **não** disparamos o e-mail "Defina sua senha". Quem ficou sem hash entra na lista para o admin gerar e enviar o link `token_hash` manualmente.
+5. A tela `#/entrar` continua com "Esqueci a senha" para quem precisar redefinir depois.
 6. O link do modelo da seção 24.3 abre a tela **Criar nova senha** (`NovaSenhaPage`) após a verificação pelo Supabase. O retorno PKCE com `?code=` continua compatível no navegador que iniciou o pedido.
 
 **Impacto para quem usa:**
 
-- Cada pessoa define a senha **uma vez**, pelo e-mail, depois do corte.
+- Quem teve a senha migrada entra com a mesma senha de antes.
+- Quem ficou sem hash define a senha **uma vez**, pelo link que o admin enviar.
 - O e-mail, o papel, a unidade, os módulos e todo o histórico continuam iguais.
 - Quem não tem acesso ao próprio e-mail precisa do admin para trocar o endereço antes do corte.
 - **Limite do plano Free:** o SMTP padrão do Supabase envia poucos e-mails por hora (cerca de 2). Para disparar para a rede toda há duas opções:

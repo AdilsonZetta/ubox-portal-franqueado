@@ -64,6 +64,12 @@ export default {
     documento_id! titulo! etapa ordem tempo_minimo_seg! video_minutos anterior_id ativo atualizado_por:u?
     atualizado_por_nome! atualizado_em:d
   `),
+  pacoteChaves: tabela('pacote_chaves', `
+    tipo! chave! alvo_id! atualizado_em:d! atualizado_por:u!
+  `, {
+    id: 'chave_id',
+    enums: { tipo: 'categoria documento trilha curso prova checklist' },
+  }),
   progressoManuais: tabela('progresso_manuais', `
     uid:u! documento_id! nome! unidade_id! unidade_nome! status reinicios tempo_minimo_seg! concluido_em:d?
     iniciado_em:d atualizado_em:d

@@ -8,6 +8,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { exportarFirestore } from './exportar-firestore.mjs'
 import { diretorioExterno, ErroMigracao, gravarJson, lerJson, lerOpcoes, mascararEmails } from './migracao/arquivosLocais.mjs'
 import { planejarImportacao } from './migracao/mapearUsuarios.mjs'
+import { montarPasswordHash } from './migracao/senhaFirebase.mjs'
 
 const raiz = fileURLToPath(new URL('../', import.meta.url))
 const supabase = join(raiz, 'supabase')
@@ -25,6 +26,25 @@ export async function lerExportacao(dir) {
     JSON.parse(await readFile(join(dir, `${nome}.json`), 'utf8')),
   ]))
   return Object.fromEntries(entradas)
+}
+
+export async function lerHashesExportacao(dir) {
+  const params = await lerJson(dir, 'hash-params.json', null)
+  const arquivo = await lerJson(dir, 'auth-hashes.json', { users: [] })
+  const users = Array.isArray(arquivo) ? arquivo : (arquivo.users ?? [])
+  const porUid = new Map()
+  for (const conta of users) {
+    const packed = montarPasswordHash({
+      memoryCost: params?.memoryCost,
+      rounds: params?.rounds,
+      saltSeparator: params?.saltSeparator,
+      signerKey: params?.signerKey,
+      salt: conta.salt,
+      passwordHash: conta.passwordHash,
+    })
+    if (packed) porUid.set(conta.uid || conta.localId, packed)
+  }
+  return porUid
 }
 
 export async function aplicarEsquema(db) {
@@ -125,7 +145,7 @@ async function ensaiar(dirInformado) {
     imprimirRelatorio(plano, relatorio)
     etapa = 'gravar o mapa de UIDs'
     if (dirInformado) await gravarMapa(dir, plano.mapaUids)
-    console.log('Contagens conferidas. As pessoas definirão uma nova senha no primeiro acesso.')
+    console.log('Contagens conferidas. As senhas atuais são preservadas quando houver hash Firebase e parâmetros scrypt.')
     return 0
   } catch (erro) {
     // Mensagens de exceção podem trazer trechos dos arquivos ou parâmetros SQL.
@@ -216,20 +236,24 @@ function imprimirPlano(plano, dados, log) {
   for (const aviso of plano.avisos) log(mascararEmails(aviso))
 }
 
-async function vincularContas(admin, preliminar) {
+async function vincularContas(admin, preliminar, hashes = new Map()) {
   const existentes = await listarContas(admin)
   const mapa = new Map()
   const uidPorId = new Map(Object.entries(preliminar.mapaUids).map(([uid, id]) => [id, uid]))
   const desativadas = new Set(preliminar.idsDesativados)
   let criadas = 0
+  let comHash = 0
   for (const { id, email } of preliminar.authUsers) {
     const uid = uidPorId.get(id)
     const desativada = desativadas.has(id)
     let destino = existentes.get(email)
     if (!destino) {
       try {
+        const password_hash = hashes.get(uid)
+        if (password_hash) comHash++
         const { data, error } = await admin.createUser({
           email, email_confirm: true, user_metadata: { firebase_uid: uid },
+          ...(password_hash ? { password_hash } : {}),
           ...(desativada ? { ban_duration: '876000h' } : {}),
         })
         if (error || !data?.user?.id) throw error
@@ -248,7 +272,7 @@ async function vincularContas(admin, preliminar) {
     }
     mapa.set(uid, destino)
   }
-  return { mapa, criadas }
+  return { mapa, criadas, comHash, semHash: preliminar.authUsers.length - comHash }
 }
 
 export async function carregarPerfis(db, plano) {
@@ -305,7 +329,8 @@ export async function aplicar({
   const db = await abrirBanco(conexao)
   try {
     const cliente = criarCliente(url, chave, opcoesAuth)
-    const { mapa, criadas } = await vincularContas(cliente.auth.admin, preliminar)
+    const hashes = await lerHashesExportacao(dir)
+    const { mapa, criadas, comHash, semHash } = await vincularContas(cliente.auth.admin, preliminar, hashes)
     const plano = planejarImportacao(dados, { gerarId: uid => mapa.get(uid) })
     await carregarPerfis(db, plano)
     // Publica apenas os vínculos com perfil após a transação. A retomada relê as contas por e-mail.
@@ -313,7 +338,8 @@ export async function aplicar({
       plano.usuarios.map(({ firebase_uid, id }) => [firebase_uid, id]),
     ))
     log(`Carga concluída — ${criadas} contas criadas, ${plano.authUsers.length - criadas} reutilizadas.`)
-    return { ...plano.contagens, criadas }
+    log(`Senhas preservadas — ${comHash}. Contas que precisam de link — ${semHash}.`)
+    return { ...plano.contagens, criadas, comHash, semHash }
   } finally {
     if (abrirBanco === abrirPostgres) await db.end()
   }

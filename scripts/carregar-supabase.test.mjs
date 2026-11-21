@@ -56,7 +56,7 @@ it('ensaia a exportação completa, reverte a simulação e retoma um módulo in
     const retomado = await carregar({ ...carga, zerar: true })
     expect(retomado.modulos.chamados).toBe('ignorado')
     expect(Object.values(retomado.inseridas).every(total => total === 0)).toBe(true)
-    expect(Object.keys(final.verificacao)).toHaveLength(58)
+    expect(Object.keys(final.verificacao)).toHaveLength(59)
     const refeito = await carregar({ ...carga, refazer: 'chamados', zerar: true })
     expect(Object.values(refeito.inseridas).reduce((total, n) => total + n, 0)).toBe(0)
     expect((await db.query(`
