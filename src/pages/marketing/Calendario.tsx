@@ -40,9 +40,9 @@ export function CalendarioMarketingPage() {
           <Button type="button" variant="secondary" aria-label="Próximo mês" onClick={() => mover(1)}><ChevronRight className="h-4 w-4" /></Button>
         </div>
       </header>
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando o calendário…" /> : null}
-      {!dados.carregando && !doMes.length ? <Vazio titulo="Nada neste mês" texto="Nenhuma campanha ou data comemorativa cadastrada para este mês." /> : null}
+      {!dados.carregando && !dados.erro && !doMes.length ? <Vazio titulo="Nada neste mês" texto="Nenhuma campanha ou data comemorativa cadastrada para este mês." /> : null}
       <ol className="space-y-3">
         {doMes.map((c) => {
           const situacao = situacaoCampanha(c, agora)
