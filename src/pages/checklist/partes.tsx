@@ -103,7 +103,3 @@ export function ListaNaoConformidades({ itens, mostrarUnidade = false }: { itens
     </ul>
   )
 }
-
-export function RodapeModulo7() {
-  return <p className="text-center text-[11px] text-muted">Módulo 7 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
-}

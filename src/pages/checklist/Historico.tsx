@@ -1,9 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, Navigate } from 'react-router-dom'
-import { Aviso, Carregando, inputClass } from '../../components/ui'
+import { Aviso, Button, Carregando, inputClass } from '../../components/ui'
 import { filtrarExecucoes, mediaScore, naoConformidades } from '../../lib/checklist'
 import { dataDoInput } from '../../lib/marketing'
-import { ListaNaoConformidades, RodapeModulo7, ScoreSelo } from './partes'
+import { ListaNaoConformidades, ScoreSelo } from './partes'
 import { ListaHistorico } from './ListaHistorico'
 import { useChecklist } from './useChecklist'
 
@@ -71,9 +71,8 @@ export function HistoricoChecklistPage() {
           </label>
         }
       />
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
-      {dados.carregando ? <Carregando /> : <ListaHistorico execucoes={lista} />}
-      <RodapeModulo7 />
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
+      {dados.carregando ? <Carregando /> : !dados.erro && <ListaHistorico execucoes={lista} />}
     </div>
   )
 }
@@ -92,9 +91,8 @@ export function NaoConformidadesPage() {
         <p className="mt-1 text-sm text-muted">Itens marcados como Não OK, com a explicação e a evidência registradas. {itens.length} no período.</p>
       </header>
       <Filtros f={f} modelos={modelos} />
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
-      {dados.carregando ? <Carregando /> : <ListaNaoConformidades itens={itens} />}
-      <RodapeModulo7 />
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
+      {dados.carregando ? <Carregando /> : !dados.erro && <ListaNaoConformidades itens={itens} />}
     </div>
   )
 }

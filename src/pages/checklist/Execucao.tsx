@@ -17,7 +17,7 @@ import {
 } from '../../lib/checklist'
 import { lerExecucao, salvarObsProprietario } from '../../lib/checklistApi'
 import { useVisao } from '../../lib/visao'
-import { LinkEvidencia, RodapeModulo7, ScoreSelo } from './partes'
+import { LinkEvidencia, ScoreSelo } from './partes'
 
 const COR: Record<Resultado | '', string> = {
   ok: 'bg-lime/25 text-lime-dark',
@@ -36,6 +36,7 @@ export function ExecucaoChecklistPage() {
   const [execucao, setExecucao] = useState<ExecucaoChecklist | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [erroCarga, setErroCarga] = useState('')
   const [ok, setOk] = useState('')
   const [obs, setObs] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -44,14 +45,14 @@ export function ExecucaoChecklistPage() {
   useEffect(() => {
     let ativo = true
     setCarregando(true)
+    setErroCarga('')
     lerExecucao(id)
       .then((e) => {
         if (!ativo) return
         setExecucao(e)
         setObs(e?.obsProprietario ?? '')
-        if (!e) setErro('Checklist não encontrado.')
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
@@ -91,7 +92,9 @@ export function ExecucaoChecklistPage() {
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {carregando ? <Carregando texto="Carregando o checklist…" /> : null}
-      {execucao ? (
+      {erroCarga ? <Aviso tom="erro"><p role="alert">{erroCarga}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
+      {!carregando && !erroCarga && !execucao ? <Aviso>Checklist não encontrado. Volte ao histórico para escolher outro registro.</Aviso> : null}
+      {!carregando && !erroCarga && execucao ? (
         <>
           <header className="flex flex-col gap-4 rounded-3xl border border-line bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -162,7 +165,6 @@ export function ExecucaoChecklistPage() {
           ))}
         </>
       ) : null}
-      <RodapeModulo7 />
     </div>
   )
 }
