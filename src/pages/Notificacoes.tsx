@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Aviso, Button, Campo, Carregando, Vazio, inputClass } from '../components/ui'
 import { formatarData } from '../lib/format'
@@ -8,22 +8,27 @@ export function NotificacoesPage() {
   const { avisos, avisosLidos, marcarLido, carregando, erro, atualizar } = usePortal()
   const [filtro, setFiltro] = useState('todas')
   const [salvando, setSalvando] = useState(false)
-  const [falhas, setFalhas] = useState(0)
+  const marcacaoEmCurso = useRef(false)
+  const [falhas, setFalhas] = useState<string[]>([])
   const lidos = new Set(avisosLidos)
+  const falhasPendentes = falhas.filter((id) => !lidos.has(id) && avisos.some((aviso) => aviso.id === id))
   const naoLidos = avisos.filter((aviso) => !lidos.has(aviso.id))
   const lista = filtro === 'todas' ? avisos : filtro === 'nao-lidas' ? naoLidos : avisos.filter((aviso) => lidos.has(aviso.id))
 
   async function marcar(ids: string[]) {
+    if (marcacaoEmCurso.current || !ids.length) return
+    marcacaoEmCurso.current = true
     setSalvando(true)
-    let totalFalhas = 0
+    const idsComFalha: string[] = []
     for (const id of ids) {
       try {
         await marcarLido(id)
       } catch {
-        totalFalhas += 1
+        idsComFalha.push(id)
       }
     }
-    setFalhas(totalFalhas)
+    setFalhas((anteriores) => [...anteriores.filter((id) => !ids.includes(id)), ...idsComFalha])
+    marcacaoEmCurso.current = false
     setSalvando(false)
   }
   return (
@@ -42,10 +47,13 @@ export function NotificacoesPage() {
         </Button>
       </div>
       {carregando ? <Carregando /> : null}
-      {erro ? <Aviso tom="erro">{erro} <Button variant="ghost" onClick={() => void atualizar()}>Tentar novamente</Button></Aviso> : null}
-      {falhas ? <Aviso tom="erro">Avisos com falha ao marcar como lidos: {falhas}. Tente novamente.</Aviso> : null}
+      {erro ? <Aviso tom="erro"><span role="alert">{erro}</span> <Button variant="ghost" onClick={() => void atualizar()}>Tentar novamente</Button></Aviso> : null}
+      {falhasPendentes.length ? <Aviso tom="erro">
+        <span role="alert">Não foi possível marcar {falhasPendentes.length} aviso(s) como lido(s).</span>{' '}
+        <Button variant="ghost" disabled={salvando || carregando} onClick={() => void marcar(falhasPendentes)}>Tentar novamente</Button>
+      </Aviso> : null}
       {!carregando && !erro && !avisos.length ? <Vazio titulo="Nenhuma novidade" texto="Avisos de documentos novos ou atualizados aparecem aqui." /> : null}
-      {!carregando && avisos.length > 0 && !lista.length ? (
+      {!carregando && !erro && avisos.length > 0 && !lista.length ? (
         <Vazio titulo={filtro === 'nao-lidas' ? 'Nenhum aviso não lido' : 'Nenhum aviso lido'} texto="Selecione Todas para ver os avisos." />
       ) : null}
       <ul className="space-y-3">
