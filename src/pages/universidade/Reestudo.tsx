@@ -51,6 +51,7 @@ export function ReestudoPage() {
     if (!user || !prova || !ciclo || reiniciando.current) return
     reiniciando.current = true
     setInicioLocal(null)
+    setErro('')
     try {
       const atual = await iniciarOuReiniciarReestudo(user, prova, ciclo)
       setReestudo(atual)
@@ -143,6 +144,7 @@ export function ReestudoPage() {
       </div>
     )
   }
+  if (dados.erro) return <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso>
   if (!curso || !prova) {
     return (
       <div className="mx-auto max-w-3xl space-y-3">
@@ -178,7 +180,7 @@ export function ReestudoPage() {
             </h1>
             <p className="text-xs text-ink/60">
               {inicioLocal === null ? (
-                'Cronômetro parado. Volte para esta tela para ele contar do zero.'
+                erro ? 'O cronômetro não iniciou. Tente novamente.' : 'Cronômetro parado. Volte para esta tela para ele contar do zero.'
               ) : restante > 0 ? (
                 <>
                   Faltam <strong className="text-ink">{formatarDuracao(restante)}</strong> de {formatarDuracao(tempo)}. Fique nesta tela: se sair, o tempo recomeça.
@@ -198,7 +200,7 @@ export function ReestudoPage() {
         </div>
       </div>
       {aviso ? <Aviso>{aviso}</Aviso> : null}
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro}</p>{inicioLocal === null ? <Button type="button" variant="secondary" className="mt-2" onClick={() => void comecar()}>Tentar iniciar o cronômetro novamente</Button> : null}</Aviso> : null}
       <article className="rounded-3xl border border-line bg-white p-5 shadow-sm md:p-8">
         <DocumentoView documento={documento} />
         <Anexos anexos={documento.anexos} />
