@@ -27,6 +27,8 @@ export function usePendencias() {
   const [tentativa, setTentativa] = useState(0)
   const [carga, setCarga] = useState<{ pessoa: Usuario; tentativa: number; fontes: FontesPendencias; falhou: boolean }>()
 
+  const [portalAntesDaTentativa, setPortalAntesDaTentativa] = useState<{ pessoa: Usuario; dados: typeof portal }>()
+
   useEffect(() => {
     if (!pessoa) return
     let ativo = true
@@ -94,27 +96,31 @@ export function usePendencias() {
     }
   }, [pessoa, tentativa, ehAdmin])
 
-  const atual = carga && carga.pessoa === pessoa && carga.tentativa === tentativa ? carga : undefined
+  const atual = carga && carga.pessoa === pessoa ? carga : undefined
   const fontes: FontesPendencias = { ...atual?.fontes }
-  const portalPronto = pessoa && !portal.carregando
-  const podeVerLeituras = portalPronto && podeModulo(pessoa, 'manuais', false)
-  const avisosLidos = new Set(portal.avisosLidos)
+  const dadosPortal = !pessoa ? undefined : !portal.carregando ? portal
+    : portal.erro && portalAntesDaTentativa?.pessoa === pessoa ? portalAntesDaTentativa.dados : undefined
+  const dadosLeituras = podeModulo(pessoa, 'manuais', false) ? dadosPortal : undefined
+  const avisosLidos = new Set(dadosPortal?.avisosLidos)
   const itens = montarPendencias({
     ...fontes,
-    avisos: portalPronto ? portal.avisos.filter((a) => !avisosLidos.has(a.id)).length : undefined,
-    documentos: podeVerLeituras ? portal.documentos : undefined,
-    aceites: podeVerLeituras ? portal.aceites : undefined,
+    avisos: dadosPortal?.avisos.filter((a) => !avisosLidos.has(a.id)).length,
+    documentos: dadosLeituras?.documentos,
+    aceites: dadosLeituras?.aceites,
     uid: pessoa?.uid,
   }).map((item) => item.id === 'auditoria' && podeGerirAuditoria(pessoa, ehAdmin)
     ? { ...item, para: '/auditoria?aba=acoes' }
     : item)
   return {
     itens,
-    carregando: Boolean(pessoa && (!atual || portal.carregando)),
+    carregando: Boolean(pessoa && (atual?.tentativa !== tentativa || portal.carregando)),
     falhou: Boolean(pessoa && (atual?.falhou || portal.erro)),
     recarregar: () => {
       setTentativa((atual) => atual + 1)
-      if (portal.erro) void portal.atualizar()
+      if (pessoa && portal.erro && !portal.carregando) {
+        setPortalAntesDaTentativa({ pessoa, dados: portal })
+        void portal.atualizar()
+      }
     },
   }
 }

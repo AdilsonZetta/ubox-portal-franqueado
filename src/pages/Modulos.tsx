@@ -1,4 +1,4 @@
-import { Aviso, Button, Carregando, Selo } from '../components/ui'
+import { Aviso, Button, Carregando, Selo, Vazio } from '../components/ui'
 import { usePendencias } from '../lib/usePendencias'
 import { Textura } from '../components/Textura'
 import { Link, useParams } from 'react-router-dom'
@@ -14,6 +14,7 @@ export function ModulosPage() {
   const { ehAdmin, comoFranqueado, simulado } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
   const pendencias = usePendencias()
+  const modulos = MODULOS.filter((modulo) => ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado))
   return (
     <div>
       <div className="mx-auto max-w-6xl">
@@ -21,14 +22,16 @@ export function ModulosPage() {
           <div className="relative px-5 py-8 sm:px-8 sm:py-10">
             <Textura variante="linha" className="pointer-events-none absolute inset-y-0 right-0 -z-10 hidden h-full w-1/3 opacity-50 xl:block" />
             <p className="text-xs font-semibold uppercase tracking-wider text-lime-soft">UBOX · Portal do Franqueado</p>
-            <h1 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Olá, {primeiroNome(user?.nome ?? '')}. Escolha um módulo.</h1>
+            <h1 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Olá, {primeiroNome(user?.nome ?? '')}.</h1>
             <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-line-strong">
-              Os módulos liberados para sua conta estão abaixo. O Controle de Acesso Inteligente está em breve.
+              {modulos.length ? 'Escolha um dos módulos abaixo para continuar.' : 'Ainda não há módulos disponíveis nesta visão.'}
             </p>
           </div>
           <Textura className="h-8 w-full sm:h-12" />
         </header>
-        {!comoFranqueado ? (
+        {comoFranqueado ? (
+          <div className="mt-6"><Aviso>Na simulação, as pendências da unidade ficam ocultas para proteger os dados dela.</Aviso></div>
+        ) : (
           <section className="mt-6 space-y-3" aria-labelledby="pendencias-titulo">
             <h2 id="pendencias-titulo" className="text-lg font-bold">Pendências</h2>
             {pendencias.carregando ? <Carregando texto="Consultando pendências…" /> : null}
@@ -52,15 +55,16 @@ export function ModulosPage() {
               ))}
             </ul>
           </section>
-        ) : null}
+        )}
         {podeModulo(pessoa, 'universidade', comoFranqueado) ? (
           <div className="mt-6 max-w-2xl">
             <CartaoUniversidade />
           </div>
         ) : null}
         <div className="mt-8 space-y-8">
+          {!modulos.length ? <Vazio titulo="Nenhum módulo disponível" texto="Confirme com a franqueadora quais módulos estão liberados." /> : null}
           {GRUPOS.map((grupo) => {
-            const itens = MODULOS.filter((modulo) => modulo.grupo === grupo && (ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado)))
+            const itens = modulos.filter((modulo) => modulo.grupo === grupo)
             if (!itens.length) return null
             return (
             <section key={grupo}>

@@ -2,9 +2,10 @@ import { Textura } from '../components/Textura'
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Route } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio } from '../components/ui'
+import { Aviso, Button, Carregando, Selo, Vazio } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { primeiroNome, rotuloExibicao, seloExibicao, tipoExibicao, paraMillis } from '../lib/format'
+import { leiturasObrigatoriasPendentes } from '../lib/pendencias'
 import { leituraDaVersao } from '../lib/quiz'
 import { usePortal } from '../lib/portal'
 import { useVisao } from '../lib/visao'
@@ -17,15 +18,11 @@ export function HomePage() {
   const portal = usePortal()
   const navigate = useNavigate()
   const [pergunta, setPergunta] = useState('')
+  const [verTodas, setVerTodas] = useState(false)
   if (!user) return null
   const raizes = filhosDe(portal.categorias, null)
   const publicados = portal.documentos.filter((documento) => documento.status === 'publicado' || ehAdmin)
-  const pendentes = publicados.filter(
-    (documento) =>
-      documento.leituraObrigatoria &&
-      documento.status === 'publicado' &&
-      !portal.aceites.some((aceite) => aceite.documentoId === documento.id && aceite.versao === documento.versao && aceite.uid === user.uid),
-  )
+  const pendentes = leiturasObrigatoriasPendentes(publicados, portal.aceites, user.uid)
   const recentes = [...publicados].sort((a, b) => paraMillis(b.atualizadoEm) - paraMillis(a.atualizadoEm)).slice(0, 6)
 
   function enviar(evento: FormEvent) {
@@ -49,13 +46,15 @@ export function HomePage() {
               placeholder="Pergunte sobre um POP, uma política ou um passo da operação"
               className="min-h-11 min-w-0 flex-1 rounded-[10px] bg-surface px-3 py-2 text-sm text-ink"
             />
-            <button className="min-h-11 rounded-[10px] bg-lime px-4 py-2 text-sm font-semibold text-ink hover:bg-lime-soft">Perguntar</button>
+            <Button type="submit" variant="ghost" className="bg-lime hover:bg-lime-soft" disabled={!pergunta.trim()}>Perguntar</Button>
           </form>
         </div>
         <Textura className="h-8 w-full sm:h-12" />
       </section>
-      {portal.erro ? <Aviso tom="erro">{portal.erro}</Aviso> : null}
-      {portal.carregando ? <Carregando /> : null}
+      {portal.erro ? <Aviso tom="erro">{portal.erro}{' '}
+        <Button type="button" variant="ghost" disabled={portal.carregando} onClick={() => void portal.atualizar()}>Tentar novamente</Button>
+      </Aviso> : null}
+      {portal.carregando ? <Carregando texto="Carregando a base de conhecimento…" /> : null}
 
       {pendentes.length ? (
         <section>
@@ -63,8 +62,8 @@ export function HomePage() {
             <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Atribuído para você</h2>
             <span className="rounded-full bg-brand-tint px-2.5 py-1 text-xs font-semibold tabular-nums text-brand">{pendentes.length} pendente{pendentes.length === 1 ? '' : 's'}</span>
           </div>
-          <div className="grid gap-2 md:grid-cols-2">
-            {pendentes.slice(0, 4).map((documento) => (
+          <div id="leituras-pendentes" className="grid gap-2 md:grid-cols-2">
+            {(verTodas ? pendentes : pendentes.slice(0, 4)).map((documento) => (
               <Link key={documento.id} to={`/documento/${documento.id}`} className="flex items-center justify-between rounded-2xl border border-line bg-surface px-4 py-3 hover:border-brand">
                 <span>
                   <span className="block text-sm font-semibold">{documento.titulo}</span>
@@ -74,6 +73,11 @@ export function HomePage() {
               </Link>
             ))}
           </div>
+          {pendentes.length > 4 ? (
+            <Button type="button" variant="secondary" className="mt-2" aria-expanded={verTodas} aria-controls="leituras-pendentes" onClick={() => setVerTodas((valor) => !valor)}>
+              {verTodas ? 'Mostrar menos leituras' : 'Ver todas as leituras pendentes'}
+            </Button>
+          ) : null}
         </section>
       ) : null}
 
@@ -95,13 +99,15 @@ export function HomePage() {
 
       <section>
         <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">Áreas</h2>
-        <div className="flex gap-2 overflow-x-auto pb-1">
+        {raizes.length ? <div className="flex gap-2 overflow-x-auto pb-1">
           {raizes.map((categoria) => (
             <Link key={categoria.id} to={`/biblioteca/${categoria.id}`} className="shrink-0 rounded-full border border-line bg-surface px-3 py-1.5 text-sm hover:border-brand">
               {categoria.nome.replace(/^\d+\s*/, '')}
             </Link>
           ))}
-        </div>
+        </div> : !portal.carregando && !portal.erro ? (
+          <Vazio titulo="Nenhuma área disponível" texto="Consulte a Biblioteca para ver todos os documentos disponíveis." />
+        ) : null}
       </section>
 
       <section className="overflow-hidden rounded-2xl border border-line bg-surface">
@@ -119,7 +125,7 @@ export function HomePage() {
             {leituraDaVersao(portal.leituras, user.uid, documento.id, documento.versao) ? <Selo tom="lima">Lido</Selo> : null}
           </Link>
         ))}
-        {!recentes.length && !portal.carregando ? <Vazio titulo="Nenhum documento publicado ainda." texto="Consulte as áreas ou volte depois para ver novos documentos." /> : null}
+        {!recentes.length && !portal.carregando && !portal.erro ? <Vazio titulo="Nenhum documento publicado ainda." texto="Consulte as áreas ou volte depois para ver novos documentos." /> : null}
       </section>
     </div>
   )
