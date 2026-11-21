@@ -84,7 +84,7 @@ export function PedidosMarketingPage() {
 
   async function enviar(evento: FormEvent) {
     evento.preventDefault()
-    if (!user) return
+    if (!user || salvando) return
     const erros = validarPedido(form)
     if (erros.length) {
       setErro(erros.join(' '))
@@ -106,8 +106,10 @@ export function PedidosMarketingPage() {
   }
 
   async function agir(pedido: PedidoMkt) {
+    if (salvando) return
     setErro('')
     setOk('')
+    setSalvando(true)
     try {
       if (acaoDaUnidade(pedido.status) === 'cancelar') {
         if (!window.confirm('Cancelar este pedido?')) return
@@ -129,6 +131,8 @@ export function PedidosMarketingPage() {
       dados.recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      setSalvando(false)
     }
   }
 
@@ -146,7 +150,8 @@ export function PedidosMarketingPage() {
         </div>
         {!abrindo ? <Button type="button" onClick={() => setAbrindo(true)}>Novo pedido</Button> : null}
       </header>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
 
       {abrindo ? (
@@ -183,14 +188,14 @@ export function PedidosMarketingPage() {
             </Campo>
           </div>
           <div className="flex gap-2">
-            <Button type="submit" disabled={salvando}>{salvando ? 'Enviando…' : 'Enviar pedido'}</Button>
+            <Button type="submit" disabled={salvando}>{salvando ? 'Enviando…' : erro ? 'Tentar enviar novamente' : 'Enviar pedido'}</Button>
             <Button type="button" variant="secondary" onClick={() => setAbrindo(false)}>Cancelar</Button>
           </div>
         </form>
       ) : null}
 
       {dados.carregando ? <Carregando texto="Carregando pedidos…" /> : null}
-      {!dados.carregando && !dados.pedidos.length ? <Vazio titulo="Nenhum pedido ainda" texto="Quando você pedir uma peça, o andamento aparece aqui." /> : null}
+      {!dados.carregando && !dados.erro && !dados.pedidos.length ? <Vazio titulo="Nenhum pedido ainda" texto="Quando você pedir uma peça, o andamento aparece aqui." /> : null}
       <ul className="space-y-3">
         {dados.pedidos.map((p) => {
           const acao = acaoDaUnidade(p.status)
@@ -201,11 +206,11 @@ export function PedidosMarketingPage() {
               {podeAgir && acao === 'responder' ? (
                 <div className="mt-3 space-y-2">
                   <textarea className={inputClass} rows={2} maxLength={2000} placeholder="Responda à franqueadora" value={respostas[p.id] ?? ''} onChange={(e) => setRespostas({ ...respostas, [p.id]: e.target.value })} aria-label="Resposta para a franqueadora" />
-                  <Button type="button" onClick={() => void agir(p)}>Responder</Button>
+                  <Button type="button" disabled={salvando} onClick={() => void agir(p)}>{salvando ? 'Enviando…' : 'Responder'}</Button>
                 </div>
               ) : null}
               {podeAgir && acao === 'cancelar' ? (
-                <Button type="button" variant="danger" className="mt-3" onClick={() => void agir(p)}>Cancelar pedido</Button>
+                <Button type="button" variant="danger" className="mt-3" disabled={salvando} onClick={() => void agir(p)}>Cancelar pedido</Button>
               ) : null}
             </li>
           )

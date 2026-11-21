@@ -99,7 +99,7 @@ export function GestaoMarketingPage() {
   const pedidos = dados.pedidos.filter((p) => (filtroStatus === 'ativos' ? !['entregue', 'cancelada'].includes(p.status) : p.status === filtroStatus))
 
   async function gravarMaterial() {
-    if (!user || !material) return
+    if (!user || !material || salvando) return
     const erros = validarMaterial(material)
     if (erros.length) return setErro(erros.join(' '))
     setSalvando(true)
@@ -118,7 +118,7 @@ export function GestaoMarketingPage() {
   }
 
   async function gravarCampanha() {
-    if (!user || !campanha) return
+    if (!user || !campanha || salvando) return
     if (campanha.titulo.trim().length < 2) return setErro('Dê um título para a campanha.')
     setSalvando(true)
     setErro('')
@@ -136,13 +136,16 @@ export function GestaoMarketingPage() {
   }
 
   async function gravarAndamento(p: PedidoMkt) {
-    if (!user) return
+    if (!user || salvando) return
     const a = andamento[p.id]
     if (!a) return
     if (a.status === 'entregue' && !linkHttpsValido(a.entregaUrl.trim())) return setErro('Para entregar, cole o link https da peça (Drive, por exemplo).')
     if (a.status === 'aguardando_unidade' && !a.resposta.trim()) return setErro('Escreva o que a unidade precisa responder.')
     if (a.geradoPorIA && a.iaModelo.trim().length < 2) return setErro('Informe qual IA ou modelo participou da peça.')
+    if (a.status === 'entregue' && !window.confirm('Marcar este pedido como entregue? A unidade verá o link da peça.')) return
+    if (a.status === 'cancelada' && !window.confirm('Cancelar este pedido?')) return
     setErro('')
+    setSalvando(true)
     try {
       await andamentoPedido(user, p.id, a)
       setOk(`Pedido "${p.titulo}": ${ROTULO_STATUS[a.status].toLowerCase()}.`)
@@ -154,6 +157,8 @@ export function GestaoMarketingPage() {
       dados.recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      setSalvando(false)
     }
   }
 
@@ -186,10 +191,10 @@ export function GestaoMarketingPage() {
 
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando…" /> : null}
 
-      {aba === 'materiais' && !dados.carregando ? (
+      {aba === 'materiais' && !dados.carregando && !dados.erro ? (
         <div className="grid gap-5 lg:grid-cols-[1fr_26rem]">
           <section className="space-y-2">
             <Button type="button" variant="secondary" onClick={() => { setMaterialId(null); setMaterial({ ...materialVazio }); setOk('') }}>
@@ -281,7 +286,7 @@ export function GestaoMarketingPage() {
         </div>
       ) : null}
 
-      {aba === 'campanhas' && !dados.carregando ? (
+      {aba === 'campanhas' && !dados.carregando && !dados.erro ? (
         <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
           <section className="space-y-2">
             <Button type="button" variant="secondary" onClick={() => { setCampanhaId(null); setCampanha({ ...campanhaVazia }); setOk('') }}>
@@ -333,7 +338,7 @@ export function GestaoMarketingPage() {
         </div>
       ) : null}
 
-      {aba === 'pedidos' && !dados.carregando ? (
+      {aba === 'pedidos' && !dados.carregando && !dados.erro ? (
         <section className="space-y-3">
           <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar pedidos">
             {(['ativos', ...STATUS_PEDIDO] as const).map((s) => (
@@ -373,7 +378,7 @@ export function GestaoMarketingPage() {
                               <CamposIA ligado={a.geradoPorIA} modelo={a.iaModelo} mudar={(geradoPorIA, iaModelo) => setAndamento({ ...andamento, [p.id]: { ...a, geradoPorIA, iaModelo } })} />
                             </>
                           ) : null}
-                          <Button type="button" onClick={() => void gravarAndamento(p)}>Salvar: {ROTULO_STATUS[a.status]}</Button>
+                          <Button type="button" disabled={salvando} onClick={() => void gravarAndamento(p)}>{salvando ? 'Salvando…' : `Salvar: ${ROTULO_STATUS[a.status]}`}</Button>
                         </div>
                       ) : null}
                     </div>
@@ -385,7 +390,6 @@ export function GestaoMarketingPage() {
         </section>
       ) : null}
 
-      <p className="text-center text-[11px] text-ink/35">Módulo 6 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
     </div>
   )
 }

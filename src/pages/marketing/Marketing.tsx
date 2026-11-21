@@ -2,7 +2,7 @@ import { BotaoCsv } from '../../components/BotaoCsv'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CalendarDays, Download, ExternalLink, Megaphone, Search, Sparkles } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
+import { Aviso, Button, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { formatarDia } from '../../lib/format'
 import {
   ROTULO_CAMPANHA,
@@ -71,8 +71,8 @@ export function MarketingPage() {
         </div>
       </header>
 
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
-      {comoFranqueado ? <Aviso>Simulação: você vê os materiais como {simulado?.nome}.</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
+      {comoFranqueado ? <Aviso>Simulação: você vê os materiais como {simulado?.nome}, mas não pode pedir peças nem alterar nada nesta visão.</Aviso> : null}
       {dados.gestor ? <Aviso>Aqui você vê o que as unidades veem (ativos e na validade). Materiais inativos, vencidos ou futuros ficam na Gestão.</Aviso> : null}
 
       {proximas.length ? (
@@ -118,7 +118,7 @@ export function MarketingPage() {
           <option value="recentes">Mais recentes</option>
           <option value="nome">Título</option>
         </select>
-        {!dados.carregando && !comoFranqueado && (dados.gestor || dados.participa) ? <BotaoCsv arquivo="materiais-marketing"
+        {!dados.carregando && !dados.erro && !comoFranqueado && (dados.gestor || dados.participa) ? <BotaoCsv arquivo="materiais-marketing"
           cabecalhos={['Título', 'Tipo', 'Categoria', 'Campanha', 'Formato', 'Validade']}
           linhas={lista.map((m) => [m.titulo, ROTULO_TIPO[m.tipo], m.categoria, campanhas.get(m.campanhaId)?.titulo, m.formato,
             m.validoAteMs ? formatarDia(m.validoAteMs) : 'Sem prazo'])} /> : null}
@@ -139,7 +139,7 @@ export function MarketingPage() {
       ) : null}
 
       {dados.carregando ? <Carregando texto="Carregando materiais…" /> : null}
-      {!dados.carregando && !lista.length ? <Vazio titulo={disponiveis.length ? 'Nenhum resultado para este filtro' : 'Nenhum material aqui'} texto={disponiveis.length ? 'Ajuste a busca ou os filtros.' : 'Quando a franqueadora publicar artes e campanhas, elas aparecem nesta página.'} /> : null}
+      {!dados.carregando && !dados.erro && !lista.length ? <Vazio titulo={disponiveis.length ? 'Nenhum resultado para este filtro' : 'Nenhum material aqui'} texto={disponiveis.length ? 'Ajuste a busca ou os filtros.' : 'Quando a franqueadora publicar artes e campanhas, elas aparecem nesta página.'} /> : null}
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {lista.map((m) => {
