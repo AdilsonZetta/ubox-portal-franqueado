@@ -22,23 +22,33 @@ export interface Pendencia {
   tom?: 'alerta' | 'neutro'
 }
 
+type DocumentoDeLeitura = Pick<Documento, 'id' | 'status' | 'leituraObrigatoria' | 'versao'>
+type AceiteDeLeitura = Pick<Aceite, 'uid' | 'documentoId' | 'versao'>
+
 type DadosPendencias = FontesPendencias & {
-  documentos?: Pick<Documento, 'id' | 'status' | 'leituraObrigatoria' | 'versao'>[]
-  aceites?: Pick<Aceite, 'uid' | 'documentoId' | 'versao'>[]
+  documentos?: DocumentoDeLeitura[]
+  aceites?: AceiteDeLeitura[]
   uid?: string
+}
+
+export function leiturasObrigatoriasPendentes<T extends DocumentoDeLeitura>(
+  documentos: T[],
+  aceites: AceiteDeLeitura[],
+  uid: string,
+): T[] {
+  const aceitos = new Map<string, Set<number>>()
+  for (const aceite of aceites) {
+    if (aceite.uid !== uid) continue
+    const versoes = aceitos.get(aceite.documentoId) ?? new Set<number>()
+    versoes.add(aceite.versao)
+    aceitos.set(aceite.documentoId, versoes)
+  }
+  return documentos.filter((d) => d.status === 'publicado' && d.leituraObrigatoria && !aceitos.get(d.id)?.has(d.versao))
 }
 
 export function montarPendencias({ documentos, aceites, uid, ...contagens }: DadosPendencias): Pendencia[] {
   if (documentos && aceites && uid) {
-    const aceitos = new Map<string, Set<number>>()
-    for (const aceite of aceites) {
-      if (aceite.uid !== uid) continue
-      const versoes = aceitos.get(aceite.documentoId) ?? new Set<number>()
-      versoes.add(aceite.versao)
-      aceitos.set(aceite.documentoId, versoes)
-    }
-    contagens.leituras = documentos.filter((d) => d.status === 'publicado' && d.leituraObrigatoria
-      && !aceitos.get(d.id)?.has(d.versao)).length
+    contagens.leituras = leiturasObrigatoriasPendentes(documentos, aceites, uid).length
   }
   return fontes.flatMap(([id, titulo, para, texto, tom]) => {
     const total = contagens[id] ?? 0

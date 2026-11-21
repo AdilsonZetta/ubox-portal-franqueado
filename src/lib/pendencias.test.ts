@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { montarPendencias } from './pendencias'
+import { leiturasObrigatoriasPendentes, montarPendencias } from './pendencias'
 
 it('omite fontes vazias e prioriza atrasos sem incluir dados pessoais', () => {
   expect(montarPendencias({ avisos: 2, cobrancas: 3, chamados: 0 }).map(({ id, detalhe, para }) => ({ id, detalhe, para })))
@@ -34,4 +34,17 @@ it('conta somente aceites da versão atual feitos pelo próprio usuário', () =>
     ],
     uid: 'u1',
   })).toMatchObject([{ id: 'leituras', detalhe: '1 aguardando aceite' }])
+})
+
+it('lista todas as leituras obrigatórias pendentes na ordem recebida', () => {
+  const documentos = Array.from({ length: 7 }, (_, indice) => ({
+    id: String(indice), titulo: `Manual ${indice}`, status: 'publicado' as const, leituraObrigatoria: true, versao: 2,
+  }))
+  const aceites = [
+    { uid: 'u1', documentoId: '0', versao: 2 },
+    { uid: 'u1', documentoId: '1', versao: 1 },
+    { uid: 'u2', documentoId: '2', versao: 2 },
+  ]
+
+  expect(leiturasObrigatoriasPendentes(documentos, aceites, 'u1')).toEqual(documentos.slice(1))
 })
