@@ -235,6 +235,10 @@
     "config.json": {
       "documentos": 1,
       "sha256": "bed302beb081c5a99704713dd145c31fe1231c4d0e6ba4ee481c33759fbf13b7"
+    },
+    "pacoteChaves.jsonl": {
+      "documentos": 1,
+      "sha256": "cbbde017b8baae80021f50d91a09d329059feec6cf130f673c195ce93a366e8d"
     }
   },
   "colecoes": {
@@ -411,6 +415,9 @@
     ],
     "nuvemLinks.jsonl": [
       "nuvemLinks"
+    ],
+    "pacoteChaves.jsonl": [
+      "pacoteChaves"
     ]
   }
 }

@@ -9,19 +9,20 @@ import {
 } from './migracao/arquivosLocais.mjs'
 
 async function abrirFirebase() {
-  const modulo = await import('firebase-admin').catch(erro => {
+  const appMod = await import('firebase-admin/app').catch(erro => {
     if (erro.code === 'ERR_MODULE_NOT_FOUND') {
       throw new ErroMigracao('Instale o Firebase Admin com npm i --no-save firebase-admin.')
     }
     throw erro
   })
-  const admin = modulo.default ?? modulo
-  const { FieldValue, DocumentReference, GeoPoint, Timestamp } = await import('firebase-admin/firestore')
-  const app = admin.initializeApp({ credential: admin.credential.applicationDefault() })
-  const firestore = app.firestore()
+  const { initializeApp, applicationDefault, deleteApp } = appMod
+  const { getFirestore, FieldValue, DocumentReference, GeoPoint, Timestamp } = await import('firebase-admin/firestore')
+  const { getAuth } = await import('firebase-admin/auth')
+  const app = initializeApp({ credential: applicationDefault() })
+  const firestore = getFirestore(app)
   firestore.settings({ useBigInt: true })
   return {
-    tipos: { DocumentReference, GeoPoint, Timestamp, VectorValue: FieldValue.vector?.().constructor },
+    tipos: { DocumentReference, GeoPoint, Timestamp, VectorValue: FieldValue.vector?.()?.constructor },
     async listarColecoes(pai) {
       const raiz = pai ? firestore.doc(pai) : firestore
       return (await raiz.listCollections()).map(ref => ref.id)
@@ -32,9 +33,64 @@ async function abrirFirebase() {
     async lerDocumento(path) {
       return (await firestore.doc(path).get()).data()
     },
-    listarUsuarios: pagina => app.auth().listUsers(1000, pagina),
-    fechar: () => app.delete(),
+    listarUsuarios: pagina => getAuth(app).listUsers(1000, pagina),
+    obterHashSenhas: () => baixarHashSenhas(app),
+    fechar: () => deleteApp(app),
   }
+}
+
+async function baixarHashSenhas(app) {
+  let GoogleAuth
+  try {
+    ({ GoogleAuth } = await import('google-auth-library'))
+  } catch (erro) {
+    if (erro.code === 'ERR_MODULE_NOT_FOUND') return { params: { completo: false }, users: [] }
+    throw erro
+  }
+  const projectId = app.options?.projectId || process.env.GOOGLE_CLOUD_PROJECT || process.env.GCLOUD_PROJECT
+    || 'ubox-portal-franqueado'
+  const client = await new GoogleAuth({
+    scopes: [
+      'https://www.googleapis.com/auth/cloud-platform',
+      'https://www.googleapis.com/auth/identitytoolkit',
+      'https://www.googleapis.com/auth/firebase',
+    ],
+  }).getClient()
+  const { lerHashConfig } = await import('./migracao/senhaFirebase.mjs')
+  let params = { completo: false }
+  try {
+    const res = await client.request({
+      url: `https://identitytoolkit.googleapis.com/admin/v2/projects/${projectId}/config`,
+    })
+    params = lerHashConfig(res.data)
+  } catch {
+    params = { completo: false }
+  }
+  const users = []
+  let pageToken
+  try {
+    do {
+      const body = { maxResults: 1000, targetProjectId: projectId }
+      if (pageToken) body.nextPageToken = pageToken
+      const res = await client.request({
+        url: `https://identitytoolkit.googleapis.com/v1/projects/${projectId}/accounts:batchDownload`,
+        method: 'POST',
+        data: body,
+      })
+      for (const u of res.data?.users ?? []) {
+        users.push({
+          uid: u.localId,
+          email: u.email ?? null,
+          passwordHash: u.passwordHash ?? null,
+          salt: u.salt ?? null,
+        })
+      }
+      pageToken = res.data?.nextPageToken
+    } while (pageToken)
+  } catch {
+    return { params, users: [] }
+  }
+  return { params, users }
 }
 
 function nomeColecao(segmentos) {
@@ -96,6 +152,7 @@ async function lerAuth(fonte) {
     const { users, pageToken } = await fonte.listarUsuarios(pagina)
     for (const { uid, email, emailVerified, disabled, displayName, metadata } of users) {
       const { creationTime, lastSignInTime } = metadata ?? {}
+      // listUsers pode trazer um hash redigido; as senhas reais vêm em obterHashSenhas.
       contas.push({ uid, email, emailVerified, disabled, displayName, metadata: { creationTime, lastSignInTime } })
     }
     pagina = pageToken
@@ -187,6 +244,39 @@ export async function exportarFirestore({
         await gravarAtomico(dir, nome, arquivo => arquivo.writeFile(bytes))
         return resumirArquivo(bytes, total)
       })
+    }
+    if (!simular && typeof fonte.obterHashSenhas === 'function') {
+      const { hashRedigido, resumoHashes } = await import('./migracao/senhaFirebase.mjs')
+      const { params, users } = await fonte.obterHashSenhas()
+      const contas = users.map(u => ({
+        uid: u.uid || u.localId,
+        email: u.email ?? null,
+        passwordHash: hashRedigido(u.passwordHash) ? null : u.passwordHash,
+        salt: hashRedigido(u.salt) || !u.salt ? null : u.salt,
+      }))
+      const resumo = resumoHashes(contas, params)
+      const paramsArquivo = params.completo
+        ? {
+            algorithm: params.algorithm,
+            rounds: params.rounds,
+            memoryCost: params.memoryCost,
+            signerKey: params.signerKey,
+            saltSeparator: params.saltSeparator,
+          }
+        : null
+      if (paramsArquivo) {
+        await gravarJson(dir, 'hash-params.json', paramsArquivo)
+      }
+      await gravarJson(dir, 'auth-hashes.json', { paramsCompletos: Boolean(paramsArquivo), users: contas })
+      await gravarJson(dir, 'auth-hashes-resumo.json', {
+        total: resumo.total,
+        comHash: resumo.comHash,
+        semHash: resumo.semHash,
+        paramsCompletos: resumo.paramsCompletos,
+        uidsSemHash: resumo.uidsSemHash,
+      })
+      arquivos['auth-hashes.json'] = { documentos: contas.length }
+      log(`Hashes de senha — ${resumo.comHash} com hash, ${resumo.semHash} sem hash, parâmetros ${resumo.paramsCompletos ? 'completos' : 'indisponíveis'}.`)
     }
     if (!simular) {
       if (refazer && !somenteUsuarios) {

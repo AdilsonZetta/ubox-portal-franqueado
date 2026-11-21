@@ -11,3 +11,8 @@ coverage
 # Pacotes locais com material administrativo
 content/pacotes/*.real.json
 pacotes-gerados/
+
+# Exportação de corte (hashes e parâmetros scrypt; nunca versionar)
+hash-params.json
+auth-hashes.json
+auth-hashes-resumo.json

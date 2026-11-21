@@ -194,3 +194,32 @@ describe('identidades compostas pelo usuário', () => {
     }
   })
 })
+
+it('mapeia pacoteChaves para pacote_chaves com a chave do documento', () => {
+  const doc = {
+    path: 'pacoteChaves/categoria_interativos',
+    id: 'categoria_interativos',
+    data: {
+      tipo: 'categoria', chave: 'interativos', alvoId: 'alvo',
+      atualizadoEm: { __tipo: 'timestamp', s: 1, ns: 123456000 },
+      atualizadoPor: 'autor',
+    },
+  }
+  const resultado = modulos.manuais.pacoteChaves.transformar(doc, contexto)
+  expect(resultado.pendencias).toEqual([])
+  expect(resultado.desconhecidos).toEqual([])
+  expect(resultado.linhas).toEqual([{
+    tabela: 'pacote_chaves',
+    pk: ['chave_id'],
+    json: [],
+    depende: null,
+    linha: {
+      chave_id: 'categoria_interativos',
+      tipo: 'categoria',
+      chave: 'interativos',
+      alvo_id: 'alvo',
+      atualizado_em: '1970-01-01T00:00:01.123456Z',
+      atualizado_por: autor,
+    },
+  }])
+})
