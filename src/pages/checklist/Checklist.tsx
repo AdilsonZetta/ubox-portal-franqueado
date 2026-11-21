@@ -1,6 +1,6 @@
 import { Link, Navigate } from 'react-router-dom'
 import { ClipboardCheck, History, ShieldAlert } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio } from '../../components/ui'
+import { Aviso, Carregando, Selo, Vazio, cx } from '../../components/ui'
 import { formatarData } from '../../lib/format'
 import {
   ROTULO_FREQ,
@@ -78,7 +78,7 @@ export function ChecklistPage() {
             {!cartoes.length ? <Vazio titulo="Nenhum checklist liberado" texto="A franqueadora ainda não publicou checklists para a sua unidade." /> : null}
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {cartoes.map(({ modelo, situacao, ultimaMs }) => (
-                <li key={modelo.id} className="flex flex-col rounded-2xl border border-line bg-surface p-4 shadow-sm">
+                <li key={modelo.id} className={cx('flex flex-col rounded-2xl border bg-surface p-4 shadow-sm', situacao === 'atrasado' ? 'border-red-300' : 'border-line')}>
                   <div className="flex flex-wrap gap-1.5">
                     <SituacaoSelo situacao={situacao} />
                     <Selo tom="marca">{ROTULO_TIPO_CK[modelo.tipo]}</Selo>

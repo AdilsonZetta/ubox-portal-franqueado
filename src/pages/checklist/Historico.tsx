@@ -3,7 +3,8 @@ import { Link, Navigate } from 'react-router-dom'
 import { Aviso, Carregando, inputClass } from '../../components/ui'
 import { filtrarExecucoes, mediaScore, naoConformidades } from '../../lib/checklist'
 import { dataDoInput } from '../../lib/marketing'
-import { ListaExecucoes, ListaNaoConformidades, RodapeModulo7, ScoreSelo } from './partes'
+import { ListaNaoConformidades, RodapeModulo7, ScoreSelo } from './partes'
+import { ListaHistorico } from './ListaHistorico'
 import { useChecklist } from './useChecklist'
 
 function useFiltros(diasPadrao: number) {
@@ -71,7 +72,7 @@ export function HistoricoChecklistPage() {
         }
       />
       {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
-      {dados.carregando ? <Carregando /> : <ListaExecucoes execucoes={lista} />}
+      {dados.carregando ? <Carregando /> : <ListaHistorico execucoes={lista} />}
       <RodapeModulo7 />
     </div>
   )

@@ -1,3 +1,4 @@
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
@@ -362,6 +363,11 @@ export function GestaoUniversidadePage() {
               <option value="">Todas as unidades</option>
               {resultados.map((u) => <option key={u.unidadeId} value={u.unidadeId}>{u.unidadeNome}</option>)}
             </select>
+            <BotaoCsv arquivo="resultados-universidade" cabecalhos={['Unidade', 'Pessoa', 'Curso', 'Situação', 'Melhor nota (%)', 'Tentativas', 'Ciclos']}
+              linhas={unidades.flatMap((u) => u.pessoas.flatMap((p) => p.cursos.map((c) => [
+                u.unidadeNome, p.nome, titulosCurso.get(c.cursoId) ?? c.cursoId,
+                c.aprovado ? 'Aprovado' : c.aguardandoReestudo ? 'Em reestudo' : 'Reprovado', c.melhorNota, c.tentativas, c.ciclos,
+              ])))} />
             <span className="text-sm text-muted">{tentativas.length} tentativa{tentativas.length === 1 ? '' : 's'} na rede</span>
           </div>
           {pendentes.length ? (
@@ -378,7 +384,7 @@ export function GestaoUniversidadePage() {
               </ul>
             </Aviso>
           ) : null}
-          {!unidades.length ? <Vazio titulo="Sem resultados ainda" texto="Quando as unidades fizerem as provas, os resultados aparecem aqui." /> : null}
+          {!unidades.length ? <Vazio titulo={resultados.length ? 'Nenhum resultado para este filtro' : 'Sem resultados ainda'} texto={resultados.length ? 'Selecione outra unidade.' : 'Quando as unidades fizerem as provas, os resultados aparecem aqui.'} /> : null}
           {unidades.map((u) => (
             <article key={u.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
               <div className="border-b border-line px-5 py-4">
