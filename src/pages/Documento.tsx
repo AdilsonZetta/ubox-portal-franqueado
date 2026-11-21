@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { abrirAncoraDocumento, Anexos, DocumentoView } from '../components/DocumentoView'
-import { Aviso, Button, Selo } from '../components/ui'
+import { Aviso, Button, Carregando, LinkBotao, Selo } from '../components/ui'
 import { listarVersoes, registrarAceite, registrarLeitura } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
@@ -18,6 +18,10 @@ import type { VersaoDocumento } from '../types'
 
 export function DocumentoPage() {
   const { id = '' } = useParams()
+  return <DocumentoPorId key={id} id={id} />
+}
+
+function DocumentoPorId({ id }: { id: string }) {
   const imprimir = window.location.hash.includes('/imprimir')
   const { user } = useAuth()
   const { ehAdmin } = useVisao()
@@ -28,12 +32,19 @@ export function DocumentoPage() {
   const [versoes, setVersoes] = useState<VersaoDocumento[]>([])
   const [ocupado, setOcupado] = useState(false)
   const trilhaAcesso = useAcessoTrilha()
-  const bloqueado = !trilhaAcesso.carregando && !trilhaAcesso.acesso(id).liberado
-  const liberadoPelaTrilha = !trilhaAcesso.carregando && trilhaAcesso.acesso(id).liberado
+  const acesso = trilhaAcesso.acesso(id)
+  const liberadoPelaTrilha = !trilhaAcesso.carregando && acesso.liberado
+
+  const titulo = liberadoPelaTrilha ? documento?.titulo : undefined
+  useEffect(() => {
+    if (!titulo) return
+    const anterior = document.title
+    document.title = `${titulo} · Portal Ubox`
+    return () => { document.title = anterior }
+  }, [titulo])
 
   useEffect(() => {
     if (!documento || !user || !liberadoPelaTrilha) return
-    document.title = `${documento.titulo} · Portal Ubox`
     if (documento.status !== 'publicado') return
     if (leituraDaVersao(portal.leituras, user.uid, documento.id, documento.versao)) return
     void registrarLeitura(user, documento)
@@ -54,10 +65,18 @@ export function DocumentoPage() {
   }, [gestor, documento?.id, documento?.versao])
 
   if (!user) return null
-  if (portal.carregando && !documento) return <p>Carregando documento…</p>
-  if (!documento) return <Aviso tom="erro">Documento indisponível para o seu usuário.</Aviso>
-  if (trilhaAcesso.carregando) return <p>Carregando documento…</p>
-  if (bloqueado) {
+  if (portal.carregando && !documento) return <Carregando texto="Carregando documento…" />
+  if (!documento) return (
+    <div className="space-y-3">
+      <Aviso tom="erro">
+        {portal.erro || 'Documento indisponível para o seu usuário.'}
+        {portal.erro ? <Button type="button" variant="ghost" onClick={() => void portal.atualizar()}>Tentar novamente</Button> : null}
+      </Aviso>
+      <LinkBotao to="/biblioteca">Voltar à biblioteca</LinkBotao>
+    </div>
+  )
+  if (trilhaAcesso.carregando) return <Carregando texto="Carregando documento…" />
+  if (!acesso.liberado) {
     return (
       <div className="mx-auto max-w-3xl space-y-3">
         <div className="flex items-start gap-3 rounded-2xl border border-line bg-surface p-5">
@@ -101,7 +120,7 @@ export function DocumentoPage() {
         {trilha.map((categoria) => (
           <span key={categoria.id}>
             {' / '}
-            <Link to={`/biblioteca/${categoria.id}`}>{categoria.nome}</Link>
+            <Link to={`/biblioteca/${categoria.id}`}>{categoria.nome.replace(/^\d+\s*/, '')}</Link>
           </span>
         ))}
       </p>
@@ -123,13 +142,15 @@ export function DocumentoPage() {
         <Link to={`/documento/${documento.id}/imprimir`} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
           Imprimir / PDF
         </Link>
+        {acesso.naTrilha ? (
+          <Link to="/manuais/trilha" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">Ver na trilha</Link>
+        ) : null}
         {gestor ? (
           <Link to={`/admin/documento/${documento.id}`} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
             Editar
           </Link>
         ) : null}
       </div>
-      {erro ? <div className="mt-4"><Aviso tom="erro">{erro}</Aviso></div> : null}
       <div className={interativo ? 'mt-6' : 'mt-6 grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_220px]'}>
         <div className={interativo ? '' : 'folha rounded-3xl border border-line bg-surface p-5 shadow-sm md:p-8'}>
           <DocumentoView documento={documentoLeitura} />
@@ -153,13 +174,14 @@ export function DocumentoPage() {
       </div>
       {documento.leituraObrigatoria && documento.status === 'publicado' ? (
         <div className="no-print sticky bottom-20 mt-4 rounded-2xl border border-line bg-surface p-4 shadow-lg lg:bottom-4">
+          {erro && !aceito ? <div className="mb-3" role="alert"><Aviso tom="erro">Falha ao registrar o aceite. {erro}</Aviso></div> : null}
           {aceito ? (
             <Aviso tom="ok">Você registrou “Li e concordo” nesta versão.</Aviso>
           ) : (
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm">Ao confirmar, gravamos seu nome, e-mail, a versão e o horário do servidor.</p>
               <Button onClick={() => void aceitar()} disabled={ocupado}>
-                Li e concordo
+                {ocupado ? 'Registrando aceite…' : erro ? 'Tentar registrar aceite novamente' : 'Li e concordo'}
               </Button>
             </div>
           )}
