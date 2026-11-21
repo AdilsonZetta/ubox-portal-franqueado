@@ -9,7 +9,7 @@ import { formatarData } from '../../lib/format'
 import { ETAPAS, MAX_LISTA_CONFIG, ROTULO_ETAPA, calcularKpis, formatarReais, kpisPorUnidade, normalizarLista } from '../../lib/crm'
 import { salvarConfig } from '../../lib/crmApi'
 import { Painel } from './Crm'
-import { Numero, RodapeModulo11, useCrm } from './partes'
+import { Numero, useCrm } from './partes'
 
 type Aba = 'rede' | 'config'
 const ROTULO_ABA: Record<Aba, string> = { rede: 'KPIs da rede', config: 'Origens e motivos' }
@@ -53,10 +53,10 @@ export function GestaoCrmPage() {
           ))}
         </div>
       </header>
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando…" /> : null}
 
-      {!dados.carregando && aba === 'rede' ? (
+      {!dados.carregando && !dados.erro && aba === 'rede' ? (
         <section className="space-y-4">
           <div className="flex flex-wrap items-end gap-3">
             <Campo label="Período (leads criados)">
@@ -129,8 +129,7 @@ export function GestaoCrmPage() {
         </section>
       ) : null}
 
-      {!dados.carregando && aba === 'config' ? <Config dados={dados} ok={okConfig} setOk={setOkConfig} /> : null}
-      <RodapeModulo11 />
+      {!dados.carregando && !dados.erro && aba === 'config' ? <Config dados={dados} ok={okConfig} setOk={setOkConfig} /> : null}
     </div>
   )
 }
@@ -144,7 +143,7 @@ function Config({ dados, ok, setOk }: { dados: ReturnType<typeof useCrm>; ok: st
   const [salvando, setSalvando] = useState(false)
 
   async function gravar() {
-    if (!user) return
+    if (!user || salvando) return
     const o = normalizarLista(origens.split('\n'))
     const m = normalizarLista(motivos.split('\n'))
     if (!o.length || !m.length) { setErro('Deixe pelo menos uma origem e um motivo.'); return }
@@ -166,7 +165,7 @@ function Config({ dados, ok, setOk }: { dados: ReturnType<typeof useCrm>; ok: st
     <section className="max-w-3xl space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold">Origens e motivos de perda da rede</h2>
       <p className="text-sm text-ink/60">Uma opção por linha, até {MAX_LISTA_CONFIG} de até 40 caracteres. As unidades escolhem destas listas.{dados.config.atualizadoEmMs ? ` Última alteração por ${dados.config.atualizadoPorNome} em ${formatarData(dados.config.atualizadoEmMs)}.` : ' Ainda no padrão da rede.'}</p>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo label="Origens"><textarea className={inputClass} rows={9} value={origens} onChange={(e) => setOrigens(e.target.value)} /></Campo>

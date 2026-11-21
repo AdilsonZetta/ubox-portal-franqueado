@@ -21,7 +21,7 @@ import {
   type TipoAtividade,
 } from '../../lib/crm'
 import { type ContatoEditavel, atualizarLead, carregarDetalhe, criarProposta, mudarStatusProposta, registrarAtividade, salvarContato } from '../../lib/crmApi'
-import { EtapaSelo, RodapeModulo11, useCrm, useResponsaveis } from './partes'
+import { EtapaSelo, useCrm, useResponsaveis } from './partes'
 
 const dia = (ms: number) => (ms ? new Date(ms - new Date(ms).getTimezoneOffset() * 60_000).toISOString().slice(0, 10) : '')
 
@@ -34,6 +34,7 @@ export function LeadPage() {
   const [atividades, setAtividades] = useState<Atividade[]>([])
   const [propostas, setPropostas] = useState<Proposta[]>([])
   const [erro, setErro] = useState('')
+  const [erroDetalhe, setErroDetalhe] = useState('')
   const [ok, setOk] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [tique, setTique] = useState(0)
@@ -45,12 +46,14 @@ export function LeadPage() {
   const recarregarDetalhe = useCallback(() => setTique((t) => t + 1), [])
   useEffect(() => {
     if (!lead || dados.gestor || dados.simulando) return
-    void carregarDetalhe(lead.unidadeId, lead.id).then((d) => { setAtividades(d.atividades); setPropostas(d.propostas) }).catch((f) => setErro(mensagemErro(f)))
+    setErroDetalhe('')
+    void carregarDetalhe(lead.unidadeId, lead.id).then((d) => { setAtividades(d.atividades); setPropostas(d.propostas) }).catch((f) => setErroDetalhe(mensagemErro(f)))
   }, [lead?.id, lead?.unidadeId, dados.gestor, dados.simulando, tique]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (contato) setPr((p) => (p.box ? p : { ...p, box: contato.interesseTamanho })) }, [contato])
 
   if (dados.gestor) return <Navigate to="/crm/gestao" replace />
   if (dados.carregando) return <Carregando texto="Carregando o lead…" />
+  if (dados.erro) return <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso>
   if (!lead) return <div className="mx-auto max-w-3xl space-y-3"><Vazio titulo="Lead não encontrado" texto="Ele pode ser de outra unidade ou o link está errado." /><Link className="text-sm font-semibold text-brand-dark" to="/crm">Voltar ao funil</Link></div>
 
   const pessoa = dados.pessoa
@@ -58,6 +61,7 @@ export function LeadPage() {
   const aberto = !fechado(lead.etapa)
 
   async function acao(fn: () => Promise<void>, mensagem: string) {
+    if (salvando || bloqueado) return
     setSalvando(true)
     setErro('')
     try {
@@ -75,6 +79,8 @@ export function LeadPage() {
   function mudarEtapa(etapa: Etapa) {
     if (!pessoa || !lead) return
     if (etapa === 'perdido' && !dados.config.motivosPerda.includes(motivo)) { setErro('Escolha o motivo da perda.'); return }
+    if (etapa === 'ganho' && !window.confirm('Marcar este lead como ganho? Leads fechados não voltam ao funil.')) return
+    if (etapa === 'perdido' && !window.confirm('Marcar este lead como perdido? Leads fechados não voltam ao funil.')) return
     void acao(() => atualizarLead(pessoa, lead, { etapa, motivoPerda: motivo }), `Etapa: ${ROTULO_ETAPA[etapa]}.`)
   }
 
@@ -90,7 +96,8 @@ export function LeadPage() {
         </div>
         <div className="flex items-center gap-2"><EtapaSelo etapa={lead.etapa} />{lead.arquivado ? <Selo>Arquivado</Selo> : null}</div>
       </header>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erroDetalhe ? <Aviso tom="erro"><p role="alert">{erroDetalhe}</p><Button type="button" variant="secondary" className="mt-2" onClick={recarregarDetalhe}>Tentar carregar o histórico novamente</Button></Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
 
       <div className="grid gap-5 lg:grid-cols-[1fr_24rem]">
@@ -246,7 +253,6 @@ export function LeadPage() {
           </section>
         </div>
       </div>
-      <RodapeModulo11 />
     </div>
   )
 }
