@@ -28,7 +28,8 @@ import {
 import { salvarModelo } from '../../lib/checklistApi'
 import { useVisao } from '../../lib/visao'
 import { Filtros, useFiltros } from './Historico'
-import { ListaExecucoes, ListaNaoConformidades, RodapeModulo7, ScoreSelo, SituacaoSelo } from './partes'
+import { ListaNaoConformidades, RodapeModulo7, ScoreSelo, SituacaoSelo } from './partes'
+import { ListaHistorico } from './ListaHistorico'
 import { useChecklist } from './useChecklist'
 
 type Aba = 'modelos' | 'execucoes' | 'nc' | 'pendencias'
@@ -280,7 +281,7 @@ export function GestaoChecklistPage() {
                 {media !== null ? <span className="inline-flex items-center gap-1.5">score médio <ScoreSelo score={media} /></span> : null}
                 <span>{ncs.length} não conformidade(s)</span>
               </div>
-              {aba === 'execucoes' ? <ListaExecucoes execucoes={execucoes} mostrarUnidade /> : <ListaNaoConformidades itens={ncs} mostrarUnidade />}
+              {aba === 'execucoes' ? <ListaHistorico execucoes={execucoes} mostrarUnidade /> : <ListaNaoConformidades itens={ncs} mostrarUnidade />}
             </>
           ) : null}
         </section>

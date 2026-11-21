@@ -1,3 +1,4 @@
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
@@ -104,8 +105,11 @@ export function VisaoRedePage() {
               </select>
             </label>
           </div>
+          <BotaoCsv arquivo="acompanhamento-rede" cabecalhos={['Unidade', 'Cidade', 'Saúde', 'Média checklist', 'Score auditoria', 'Chamados abertos']}
+            linhas={filtradas.map(({ u, saude, resumo }) => [u.nome, u.cidade, ROTULO_NIVEL[saude], resumo.checklist?.aplica ? resumo.checklist.media : null,
+              resumo.auditoria?.ultima?.score, resumo.chamados?.abertos])} />
           <CriteriosSaude />
-          {!filtradas.length ? <Vazio titulo="Nenhuma unidade" texto="Ajuste os filtros ou cadastre unidades na gestão da franqueadora." /> : null}
+          {!filtradas.length ? <Vazio titulo={linhas.length ? 'Nenhum resultado para este filtro' : 'Nenhuma unidade'} texto="Ajuste os filtros ou cadastre unidades na gestão da franqueadora." /> : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {filtradas.map(({ u, resumo, sinais, saude }) => (
               <Link key={u.id} to={`/acompanhamento/unidade/${u.id}`} className="block rounded-2xl border border-line bg-white p-4 shadow-sm transition hover:border-brand/50">

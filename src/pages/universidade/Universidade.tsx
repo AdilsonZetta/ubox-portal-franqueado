@@ -1,7 +1,8 @@
+import { normalizar } from '../../lib/text'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Award, GraduationCap, RotateCcw } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio } from '../../components/ui'
+import { Aviso, Carregando, Selo, Vazio, Campo, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { usePortal } from '../../lib/portal'
@@ -39,6 +40,9 @@ export function UniversidadePage() {
   const { comoFranqueado, simulado } = useVisao()
   const { certificados } = usePortal()
   const { cursos, carregando, erro, gestor, participa, pessoa } = dados
+  const [filtro, setFiltro] = useState('todos')
+  const [busca, setBusca] = useState('')
+  const [ordem, setOrdem] = useState('curriculo')
   const [equipe, setEquipe] = useState<TentativaProva[]>([])
   const [erroEquipe, setErroEquipe] = useState('')
   const veEquipe = !comoFranqueado && user?.papel === 'franqueado'
@@ -57,6 +61,18 @@ export function UniversidadePage() {
   const resumoEquipe = useMemo(() => resumirResultados(equipe, null), [equipe])
   const titulos = new Map(cursos.map((c) => [c.id, c.titulo]))
   const aprovados = cursos.filter((c) => seloDoCurso(c, dados).estado?.tipo === 'aprovado').length
+
+  const consulta = normalizar(busca.trim())
+  const lista = cursos.map((curso) => ({ curso, selo: seloDoCurso(curso, dados) })).filter(({ curso, selo }) => {
+    if (!normalizar(curso.titulo).includes(consulta)) return false
+    if (filtro === 'todos') return true
+    if (!curso.publicado) return false
+    if (selo.estado?.tipo === 'aprovado') return filtro === 'aprovado'
+    const iniciou = selo.feitas > 0 || selo.estado?.tipo === 'corrigindo' || selo.estado?.tipo === 'reestudo'
+      || (selo.estado?.tipo === 'disponivel' && (selo.estado.numero > 1 || selo.estado.ciclo > 1))
+    return filtro === (iniciou ? 'andamento' : 'pendente')
+  })
+  if (ordem === 'nome') lista.sort((a, b) => a.curso.titulo.localeCompare(b.curso.titulo, 'pt-BR'))
 
   if (!user) return null
   if (comoFranqueado && !simulado) return <Aviso>Escolha qual franqueado simular para ver a Universidade dessa pessoa.</Aviso>
@@ -106,9 +122,28 @@ export function UniversidadePage() {
         </section>
       ) : null}
 
+      {cursos.length ? (
+        <div className="flex flex-wrap items-end gap-3">
+          <Campo label="Buscar curso"><input className={inputClass} value={busca} onChange={(e) => setBusca(e.target.value)} /></Campo>
+          <Campo label="Situação">
+            <select className={inputClass} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+              <option value="todos">Todas</option>
+              <option value="pendente">Pendente</option>
+              <option value="andamento">Em andamento</option>
+              <option value="aprovado">Aprovado</option>
+            </select>
+          </Campo>
+          <Campo label="Ordenar por">
+            <select className={inputClass} value={ordem} onChange={(e) => setOrdem(e.target.value)}>
+              <option value="curriculo">Ordem da formação</option>
+              <option value="nome">Nome</option>
+            </select>
+          </Campo>
+        </div>
+      ) : null}
+      {!carregando && cursos.length > 0 && !lista.length ? <Vazio titulo="Nenhum resultado para este filtro" texto="Ajuste a busca ou a situação." /> : null}
       <ul className="grid gap-3 md:grid-cols-2">
-        {cursos.map((curso) => {
-          const selo = seloDoCurso(curso, dados)
+        {lista.map(({ curso, selo }) => {
           const prova = dados.provas.get(curso.id)
           const percentual = curso.aulas.length ? Math.round((selo.feitas / curso.aulas.length) * 100) : 100
           return (
@@ -127,7 +162,7 @@ export function UniversidadePage() {
                 ) : null}
                 <p className="mt-3 text-xs text-muted">
                   {curso.aulas.length} aula{curso.aulas.length === 1 ? '' : 's'}
-                  {participa ? ` · ${selo.feitas} concluída${selo.feitas === 1 ? '' : 's'}` : ''}
+                  {participa ? ` · ${selo.feitas} concluída${selo.feitas === 1 ? '' : 's'} (${percentual}%)` : ''}
                   {prova ? ` · prova com mínimo de ${prova.notaMinima}%` : ' · prova ainda não publicada'}
                 </p>
               </Link>

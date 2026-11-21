@@ -1,7 +1,9 @@
+import { normalizar } from '../lib/text'
+import { BotaoCsv } from '../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Lock } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio } from '../components/ui'
+import { Aviso, Campo, Carregando, Selo, Vazio, inputClass } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { useVisao } from '../lib/visao'
@@ -17,6 +19,8 @@ export function BibliotecaPage() {
   const { ehAdmin } = useVisao()
   const gestor = podeGerirTrilha(user, ehAdmin)
   const { categorias, documentos, carregando, erro, atualizar } = usePortal()
+  const [busca, setBusca] = useState('')
+  const [ordem, setOrdem] = useState('recentes')
   const [filtro, setFiltro] = useState<TipoExibicao | 'todos'>('todos')
   const trilhaAcesso = useAcessoTrilha()
   const atual = categorias.find((categoria) => categoria.id === categoriaId)
@@ -38,8 +42,9 @@ export function BibliotecaPage() {
     () =>
       daPasta
         .filter((documento) => (filtro === 'todos' ? true : tipoExibicao(documento) === filtro))
-        .sort((a, b) => paraMillis(b.atualizadoEm) - paraMillis(a.atualizadoEm)),
-    [daPasta, filtro],
+        .filter((documento) => normalizar(documento.titulo).includes(normalizar(busca.trim())))
+        .sort((a, b) => ordem === 'nome' ? a.titulo.localeCompare(b.titulo, 'pt-BR') : paraMillis(b.atualizadoEm) - paraMillis(a.atualizadoEm)),
+    [daPasta, filtro, busca, ordem],
   )
   const filtros: Array<TipoExibicao | 'todos'> = tipos.length ? ['todos', ...tipos] : []
 
@@ -98,6 +103,21 @@ export function BibliotecaPage() {
         ))}
       </div>
       ) : null}
+      {daPasta.length ? (
+        <div className="flex flex-wrap items-end gap-3">
+          <Campo label="Buscar pelo título"><input className={inputClass} value={busca} onChange={(e) => setBusca(e.target.value)} /></Campo>
+          <Campo label="Ordenar por">
+            <select className={inputClass} value={ordem} onChange={(e) => setOrdem(e.target.value)}>
+              <option value="recentes">Mais recentes</option>
+              <option value="nome">Título</option>
+            </select>
+          </Campo>
+          {trilhaAcesso.carregando ? null : <BotaoCsv arquivo="biblioteca" cabecalhos={['Título', 'Tipo', 'Atualização', 'Versão']}
+            linhas={lista.filter((d) => trilhaAcesso.acesso(d.id).liberado).map((d) => [
+              d.titulo, rotuloExibicao(tipoExibicao(d)), formatarData(d.atualizadoEm), d.versao,
+            ])} />}
+        </div>
+      ) : null}
       {lista.length ? (
         <div className="overflow-hidden rounded-2xl border border-line bg-surface">
           {lista.map((documento) => {
@@ -137,7 +157,7 @@ export function BibliotecaPage() {
           })}
         </div>
       ) : !carregando && !erro ? (
-        <Vazio titulo="Nenhum documento neste filtro" texto={gestor ? "Use Novo documento para cadastrar um material." : "A franqueadora publica os materiais oficiais nesta área."} />
+        <Vazio titulo={daPasta.length ? 'Nenhum resultado para este filtro' : 'Nenhum documento'} texto={daPasta.length ? 'Ajuste a busca ou o tipo de documento.' : gestor ? "Use Novo documento para cadastrar um material." : "A franqueadora publica os materiais oficiais nesta área."} />
       ) : null}
     </div>
   )

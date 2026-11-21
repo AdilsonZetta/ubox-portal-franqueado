@@ -1,5 +1,7 @@
+import { normalizar } from '../lib/text'
+import { BotaoCsv } from '../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
-import { Aviso, Button, Campo, Selo, Vazio, inputClass } from '../components/ui'
+import { Aviso, Button, Campo, Carregando, Selo, Vazio, inputClass } from '../components/ui'
 import {
   CATEGORIAS_CHAMADO,
   PRIORIDADES_CHAMADO,
@@ -45,23 +47,42 @@ export function ChamadosPage() {
   const [erro, setErro] = useState('')
   const [selecionado, setSelecionado] = useState<string | null>(null)
   const [filtros, setFiltros] = useState({ unidade: '', status: '', categoria: '', prioridade: '' })
+  const [busca, setBusca] = useState('')
+  const [soAtrasados, setSoAtrasados] = useState(false)
+  const [ordem, setOrdem] = useState('recentes')
+  const [carregando, setCarregando] = useState(true)
   const [form, setForm] = useState(vazio)
   const [abrindo, setAbrindo] = useState(false)
 
   useEffect(() => {
     if (!user || (!rede && !unidadeId)) return
-    return observarChamados({ rede, unidadeId }, setChamados, (falha) => setErro(mensagemErro(falha)))
+    setCarregando(true)
+    setChamados([])
+    setErro('')
+    return observarChamados({ rede, unidadeId }, (lista) => {
+      setChamados(lista)
+      setCarregando(false)
+    }, (falha) => {
+      setErro(mensagemErro(falha))
+      setCarregando(false)
+    })
   }, [user, rede, unidadeId])
 
   const visiveis = useMemo(() => {
+    const agora = Date.now()
+    const consulta = normalizar(busca.trim())
     return chamados.filter((chamado) => {
       if (filtros.unidade && chamado.unidadeId !== filtros.unidade) return false
       if (filtros.status && chamado.status !== filtros.status) return false
       if (filtros.categoria && chamado.categoria !== filtros.categoria) return false
       if (filtros.prioridade && chamado.prioridade !== filtros.prioridade) return false
-      return true
-    })
-  }, [chamados, filtros])
+      if (soAtrasados && !chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, agora, paraMillis(chamado.reabertoEm))) return false
+      return normalizar(`${chamado.titulo} ${chamado.unidadeNome}`).includes(consulta)
+    }).sort((a, b) => ordem === 'prazo'
+      ? prazoMillis(inicioDoPrazo(paraMillis(a.criadoEm), paraMillis(a.reabertoEm)), a.slaHoras)
+        - prazoMillis(inicioDoPrazo(paraMillis(b.criadoEm), paraMillis(b.reabertoEm)), b.slaHoras)
+      : paraMillis(b.criadoEm) - paraMillis(a.criadoEm))
+  }, [chamados, filtros, busca, soAtrasados, ordem])
 
   const unidades = useMemo(() => {
     const mapa = new Map<string, string>()
@@ -117,21 +138,35 @@ export function ChamadosPage() {
           </article>
         </div>
       ) : null}
-      {rede ? (
-        <div className="grid gap-2 sm:grid-cols-4">
-          <select className={inputClass} value={filtros.unidade} onChange={(evento) => setFiltros({ ...filtros, unidade: evento.target.value })}>
-            <option value="">Todas as unidades</option>
-            {unidades.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+      <div className="flex flex-wrap items-end gap-3">
+        <Campo label="Buscar chamados"><input className={inputClass} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Título ou unidade" /></Campo>
+        <Campo label="Ordenar por">
+          <select className={inputClass} value={ordem} onChange={(e) => setOrdem(e.target.value)}>
+            <option value="recentes">Mais recentes</option>
+            <option value="prazo">Prazo mais próximo</option>
           </select>
+        </Campo>
+        <Campo label="Status">
           <select className={inputClass} value={filtros.status} onChange={(evento) => setFiltros({ ...filtros, status: evento.target.value })}>
             <option value="">Todos os status</option>
             {STATUS_CHAMADO.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
           </select>
-          <select className={inputClass} value={filtros.categoria} onChange={(evento) => setFiltros({ ...filtros, categoria: evento.target.value })}>
+        </Campo>
+        <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={soAtrasados} onChange={(e) => setSoAtrasados(e.target.checked)} /> Somente atrasados</label>
+        {!carregando ? <BotaoCsv arquivo="chamados" cabecalhos={['Título', 'Unidade', 'Status', 'Categoria', 'Prioridade', 'Abertura']}
+          linhas={visiveis.map((c) => [c.titulo, c.unidadeNome, nomeStatus(c.status), nomeCategoria(c.categoria), nomePrioridade(c.prioridade), formatarData(c.criadoEm)])} /> : null}
+      </div>
+      {rede ? (
+        <div className="grid gap-2 sm:grid-cols-4">
+          <select aria-label="Unidade" className={inputClass} value={filtros.unidade} onChange={(evento) => setFiltros({ ...filtros, unidade: evento.target.value })}>
+            <option value="">Todas as unidades</option>
+            {unidades.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
+          </select>
+          <select aria-label="Categoria" className={inputClass} value={filtros.categoria} onChange={(evento) => setFiltros({ ...filtros, categoria: evento.target.value })}>
             <option value="">Todas as categorias</option>
             {CATEGORIAS_CHAMADO.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
           </select>
-          <select className={inputClass} value={filtros.prioridade} onChange={(evento) => setFiltros({ ...filtros, prioridade: evento.target.value })}>
+          <select aria-label="Prioridade" className={inputClass} value={filtros.prioridade} onChange={(evento) => setFiltros({ ...filtros, prioridade: evento.target.value })}>
             <option value="">Todas as prioridades</option>
             {PRIORIDADES_CHAMADO.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
           </select>
@@ -178,7 +213,8 @@ export function ChamadosPage() {
       )}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="space-y-2">
-          {visiveis.length === 0 ? <Vazio titulo="Nenhum chamado" texto="Quando um pedido for aberto, ele aparece aqui." /> : null}
+          {carregando ? <Carregando texto="Carregando chamados…" /> : null}
+          {!carregando && !erro && !visiveis.length ? <Vazio titulo={chamados.length ? 'Nenhum resultado para este filtro' : 'Nenhum chamado'} texto={chamados.length ? 'Ajuste a busca ou os filtros.' : 'Quando um pedido for aberto, ele aparece aqui.'} /> : null}
           {visiveis.map((chamado) => {
             const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, Date.now(), paraMillis(chamado.reabertoEm))
             return (
