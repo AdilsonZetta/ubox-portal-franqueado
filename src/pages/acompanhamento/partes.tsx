@@ -83,7 +83,3 @@ export function useAcessoAcompanhamento() {
   const { ehAdmin, comoFranqueado } = useVisao()
   return { gestor: podeGerirAcompanhamento(user, ehAdmin) && !comoFranqueado, ehAdmin }
 }
-
-export function RodapeModulo9() {
-  return <p className="text-center text-[11px] text-ink/35">Módulo 9 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
-}

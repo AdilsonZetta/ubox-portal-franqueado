@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Aviso, Button, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
@@ -6,7 +6,7 @@ import { formatarDia } from '../../lib/format'
 import { ROTULO_TIPO_REG, type PassoAc, type RegistroAc } from '../../lib/acompanhamento'
 import { concluirPassoUnidade, listarCompartilhados } from '../../lib/acompanhamentoApi'
 import { useVisao } from '../../lib/visao'
-import { RodapeModulo9, StatusPassoSelo } from './partes'
+import { StatusPassoSelo } from './partes'
 
 /** Unidade: registros que a franqueadora compartilhou e os passos combinados. Só o franqueado marca como feito. */
 export function MeuAcompanhamentoPage() {
@@ -15,6 +15,9 @@ export function MeuAcompanhamentoPage() {
   const [registros, setRegistros] = useState<RegistroAc[]>([])
   const [passos, setPassos] = useState<PassoAc[]>([])
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
+  const gravacaoEmCurso = useRef(false)
+  const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
   const [comentarios, setComentarios] = useState<Record<string, string>>({})
@@ -29,13 +32,15 @@ export function MeuAcompanhamentoPage() {
       return
     }
     let ativo = true
+    setCarregando(true)
+    setErroCarga('')
     void listarCompartilhados(user.unidadeId)
       .then((r) => {
         if (!ativo) return
         setRegistros(r.registros)
         setPassos(r.passos)
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
@@ -45,18 +50,25 @@ export function MeuAcompanhamentoPage() {
   if (!user) return null
 
   async function concluir(p: PassoAc) {
+    if (gravacaoEmCurso.current || carregando) return
     const comentario = comentarios[p.id] ?? ''
     if (comentario.trim().length < 2) {
       setErro('Conte em um comentário o que foi feito.')
       return
     }
     setErro('')
+    gravacaoEmCurso.current = true
+    setSalvando(true)
+    setOk('')
     try {
       await concluirPassoUnidade(user!, p.id, comentario)
       setOk('Passo marcado como feito. A franqueadora vai validar.')
       recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      gravacaoEmCurso.current = false
+      setSalvando(false)
     }
   }
 
@@ -73,10 +85,12 @@ export function MeuAcompanhamentoPage() {
         </p>
       </header>
       {!daUnidade ? <Aviso tom="info">Esta página é para as unidades. A franqueadora usa a visão da rede.</Aviso> : null}
+      {daUnidade && !user.unidadeId ? <Aviso>Peça à franqueadora para vincular esta conta a uma unidade.</Aviso> : null}
+      {erroCarga ? <Aviso tom="erro"><span role="alert">{erroCarga}</span> <Button variant="ghost" onClick={recarregar}>Tentar novamente</Button></Aviso> : null}
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
       {carregando ? <Carregando /> : null}
-      {daUnidade && !carregando ? (
+      {daUnidade && user.unidadeId && !carregando && !erroCarga ? (
         <>
           <section className="space-y-2">
             <h2 className="text-lg font-bold">Próximos passos ({pendentes.length} em aberto)</h2>
@@ -96,7 +110,7 @@ export function MeuAcompanhamentoPage() {
                   {franqueado && (p.status === 'aberto' || p.status === 'reaberto') ? (
                     <div className="mt-2 flex flex-wrap items-center gap-2">
                       <input className={cx(inputClass, 'max-w-md flex-1 py-1.5')} maxLength={1000} placeholder="O que foi feito (obrigatório)" aria-label={`Comentário sobre ${p.descricao}`} value={comentarios[p.id] ?? ''} onChange={(e) => setComentarios({ ...comentarios, [p.id]: e.target.value })} />
-                      <Button type="button" onClick={() => void concluir(p)}>Marcar como feito</Button>
+                      <Button type="button" onClick={() => void concluir(p)} disabled={salvando || carregando}>Marcar como feito</Button>
                     </div>
                   ) : null}
                 </li>
@@ -122,7 +136,6 @@ export function MeuAcompanhamentoPage() {
           </section>
         </>
       ) : null}
-      <RodapeModulo9 />
     </div>
   )
 }

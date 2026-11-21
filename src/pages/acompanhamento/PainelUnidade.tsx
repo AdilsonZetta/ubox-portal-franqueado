@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { Plus, Share2, Trash2 } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
@@ -21,7 +21,7 @@ import { carregarAcompanhamento, decidirPasso, salvarRegistro, type DadosAcompan
 import type { Unidade } from '../../types'
 import { ScoreSelo } from '../checklist/partes'
 import { ResultadoSelo } from '../auditoria/partes'
-import { CriteriosSaude, ListaSinais, RodapeModulo9, SaudeSelo, StatusPassoSelo, useAcessoAcompanhamento } from './partes'
+import { CriteriosSaude, ListaSinais, SaudeSelo, StatusPassoSelo, useAcessoAcompanhamento } from './partes'
 
 const hoje = () => {
   const d = new Date()
@@ -50,15 +50,21 @@ const Numero = ({ valor, rotulo, alerta = false }: { valor: ReactNode; rotulo: s
 
 export function PainelUnidadePage() {
   const { id = '' } = useParams()
+  return <PainelUnidade key={id} id={id} />
+}
+
+function PainelUnidade({ id }: { id: string }) {
   const { user } = useAuth()
   const { gestor } = useAcessoAcompanhamento()
   const [unidade, setUnidade] = useState<Unidade | null>(null)
   const [dados, setDados] = useState<DadosAcompanhamento | null>(null)
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
   const [form, setForm] = useState<RegistroForm | null>(null)
   const [editando, setEditando] = useState<RegistroAc | null>(null)
+  const gravacaoEmCurso = useRef(false)
   const [salvando, setSalvando] = useState(false)
   const [comentarios, setComentarios] = useState<Record<string, string>>({})
   const [tique, setTique] = useState(0)
@@ -67,16 +73,17 @@ export function PainelUnidadePage() {
   useEffect(() => {
     if (!gestor) return
     let ativo = true
+    setErroCarga('')
     setCarregando(true)
     void Promise.all([listarUnidades(), carregarAcompanhamento(id)])
       .then(([lista, d]) => {
         if (!ativo) return
         const u = lista.find((x) => x.id === id) ?? null
-        if (!u) setErro('Unidade não encontrada.')
+        if (!u) setErroCarga('Unidade não encontrada.')
         setUnidade(u)
         setDados(d)
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
@@ -92,14 +99,17 @@ export function PainelUnidadePage() {
   const saude = saudeDe(sinais)
 
   async function gravar() {
+    if (gravacaoEmCurso.current || carregando) return
     if (!user || !form || !unidade || !dados) return
     const erros = validarRegistro(form)
     if (erros.length) {
       setErro(erros.join(' '))
       return
     }
-    setSalvando(true)
     setErro('')
+    gravacaoEmCurso.current = true
+    setSalvando(true)
+    setOk('')
     try {
       const passosDoRegistro = editando ? dados.passos.filter((p) => p.registroId === editando.id) : []
       await salvarRegistro(user, { id: unidade.id, nome: unidade.nome }, editando, passosDoRegistro, form)
@@ -110,11 +120,13 @@ export function PainelUnidadePage() {
     } catch (falha) {
       setErro(mensagemErro(falha))
     } finally {
+      gravacaoEmCurso.current = false
       setSalvando(false)
     }
   }
 
   async function decidir(p: PassoAc, status: 'validado' | 'reaberto') {
+    if (gravacaoEmCurso.current || carregando) return
     if (!user) return
     const comentario = comentarios[p.id] ?? ''
     if (status === 'reaberto' && comentario.trim().length < 2) {
@@ -122,12 +134,19 @@ export function PainelUnidadePage() {
       return
     }
     setErro('')
+    if (status === 'reaberto' && !window.confirm('Reabrir este passo para a unidade?')) return
+    gravacaoEmCurso.current = true
+    setSalvando(true)
+    setOk('')
     try {
       await decidirPasso(user, p, status, comentario)
       setOk(status === 'validado' ? 'Passo validado.' : 'Passo reaberto para a unidade.')
       recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      gravacaoEmCurso.current = false
+      setSalvando(false)
     }
   }
 
@@ -137,15 +156,18 @@ export function PainelUnidadePage() {
   }
 
   const f = dados?.fontes
+  const registrosIndisponiveis = f?.registros === null || f?.passos === null
   const ultima = resumo?.auditoria?.ultima ?? null
 
   return (
     <div className="space-y-5">
       <p className="text-sm text-ink/50"><Link to="/acompanhamento">Acompanhamento</Link> / Unidade</p>
+      {erroCarga ? <Aviso tom="erro"><span role="alert">{erroCarga}</span> <Button variant="ghost" onClick={recarregar}>Tentar novamente</Button></Aviso> : null}
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {salvando && !form ? <Carregando texto="Gravando alteração…" /> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {carregando && !dados ? <Carregando texto="Montando o painel da unidade…" /> : null}
-      {unidade && resumo && f ? (
+      {carregando && unidade?.id !== id ? <Carregando texto="Montando o painel da unidade…" /> : null}
+      {unidade?.id === id && resumo && f && !erroCarga ? (
         <>
           <header className="grid gap-4 rounded-3xl border border-line bg-white p-5 shadow-sm lg:grid-cols-[1fr_24rem]">
             <div>
@@ -228,9 +250,10 @@ export function PainelUnidadePage() {
           <section className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-bold">Visitas, reuniões e calls</h2>
-              <Button type="button" variant="secondary" onClick={() => { setEditando(null); setForm(formVazio()); setOk('') }}><Plus className="h-4 w-4" aria-hidden="true" /> Novo registro</Button>
+              <Button type="button" variant="secondary" disabled={salvando || carregando || registrosIndisponiveis} onClick={() => { setEditando(null); setForm(formVazio()); setOk('') }}><Plus className="h-4 w-4" aria-hidden="true" /> Novo registro</Button>
             </div>
-            {form ? (
+            {registrosIndisponiveis ? <Aviso tom="erro"><span role="alert">Não foi possível carregar todos os registros e passos desta unidade.</span> <Button variant="ghost" disabled={carregando} onClick={recarregar}>Tentar novamente</Button></Aviso> : null}
+            {form && !registrosIndisponiveis ? (
               <div className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
                 <h3 className="font-bold">{editando ? 'Editar registro' : 'Novo registro'}</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -265,14 +288,14 @@ export function PainelUnidadePage() {
                   <Campo label="Qual IA ou modelo" hint="Fica registrado no registro."><input className={inputClass} maxLength={80} value={form.iaModelo} onChange={(e) => setForm({ ...form, iaModelo: e.target.value })} placeholder="Ex.: Gemini, Grok" /></Campo>
                 ) : null}
                 <div className="flex gap-2">
-                  <Button type="button" onClick={() => void gravar()} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar registro'}</Button>
+                  <Button type="button" onClick={() => void gravar()} disabled={salvando || carregando}>{salvando ? 'Salvando…' : 'Salvar registro'}</Button>
                   <Button type="button" variant="secondary" onClick={() => { setForm(null); setEditando(null) }}>Fechar</Button>
                 </div>
               </div>
             ) : null}
-            {!dados?.registros.length ? <Vazio titulo="Nenhum registro ainda" texto="Registre a primeira visita, reunião ou call com esta unidade." /> : null}
+            {!registrosIndisponiveis && !dados?.registros.length ? <Vazio titulo="Nenhum registro ainda" texto="Registre a primeira visita, reunião ou call com esta unidade." /> : null}
             <ul className="space-y-3">
-              {dados?.registros.map((r) => {
+              {!registrosIndisponiveis && dados?.registros.map((r) => {
                 const passos = dados.passos.filter((p) => p.registroId === r.id)
                 return (
                   <li key={r.id} className="rounded-2xl border border-line bg-white p-4 shadow-sm">
@@ -287,6 +310,7 @@ export function PainelUnidadePage() {
                       <button
                         type="button"
                         className="text-xs font-semibold text-brand-dark hover:underline"
+                        disabled={salvando || carregando}
                         onClick={() => { setEditando(r); setForm({ tipo: r.tipo, data: paraInput(r.dataMs), notas: r.notas, compartilhado: r.compartilhado, geradoPorIA: r.geradoPorIA, iaModelo: r.iaModelo, passos: [] }); setOk('') }}
                       >
                         Editar
@@ -309,8 +333,8 @@ export function PainelUnidadePage() {
                             {p.status === 'concluido_unidade' ? (
                               <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <input className={cx(inputClass, 'max-w-md flex-1 py-1.5')} maxLength={1000} placeholder="Comentário (obrigatório para reabrir)" aria-label="Comentário da franqueadora" value={comentarios[p.id] ?? ''} onChange={(e) => setComentarios({ ...comentarios, [p.id]: e.target.value })} />
-                                <Button type="button" onClick={() => void decidir(p, 'validado')}>Validar</Button>
-                                <Button type="button" variant="danger" onClick={() => void decidir(p, 'reaberto')}>Reabrir</Button>
+                                <Button type="button" onClick={() => void decidir(p, 'validado')} disabled={salvando || carregando}>Validar</Button>
+                                <Button type="button" variant="danger" onClick={() => void decidir(p, 'reaberto')} disabled={salvando || carregando}>Reabrir</Button>
                               </div>
                             ) : null}
                           </li>
@@ -324,7 +348,6 @@ export function PainelUnidadePage() {
           </section>
         </>
       ) : null}
-      <RodapeModulo9 />
     </div>
   )
 }

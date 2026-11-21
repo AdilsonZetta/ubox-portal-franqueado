@@ -253,15 +253,21 @@ export const ROTULO_NIVEL: Record<Nivel, string> = { verde: 'Saudável', amarelo
 export interface PassoForm { descricao: string; responsavel: string; prazo: string }
 export interface RegistroForm { tipo: TipoRegistro; data: string; notas: string; compartilhado: boolean; geradoPorIA: boolean; iaModelo: string; passos: PassoForm[] }
 
+function dataValida(valor: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor) || Number(valor.slice(0, 4)) < 100) return false
+  const data = new Date(valor + 'T12:00:00Z')
+  return Number.isFinite(data.getTime()) && data.toISOString().slice(0, 10) === valor
+}
+
 export function validarRegistro(f: RegistroForm): string[] {
   const erros: string[] = []
-  if (!f.data) erros.push('Informe a data.')
+  if (!dataValida(f.data)) erros.push('Informe uma data válida.')
   if (f.notas.trim().length < 2 || f.notas.length > 4000) erros.push('Escreva as notas (até 4000 caracteres).')
   if (f.geradoPorIA && f.iaModelo.trim().length < 2) erros.push('Informe qual IA ou modelo ajudou nas notas.')
   f.passos.forEach((p, i) => {
     if (p.descricao.trim().length < 2) erros.push(`Passo ${i + 1}: descreva o combinado.`)
     if (p.responsavel.trim().length < 2) erros.push(`Passo ${i + 1}: informe o responsável.`)
-    if (!p.prazo) erros.push(`Passo ${i + 1}: informe o prazo.`)
+    if (!dataValida(p.prazo)) erros.push(`Passo ${i + 1}: informe um prazo válido.`)
   })
   return erros
 }
