@@ -2,6 +2,7 @@ import { deleteApp, initializeApp } from 'firebase/app'
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
 import { createUserWithEmailAndPassword, deleteUser, inMemoryPersistence, initializeAuth, signOut } from 'firebase/auth'
 import { resolveFirebaseConfig } from '../firebaseConfig'
+import { deveInicializarFirebase } from './backend'
 
 const ALFABETO = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789'
 
@@ -43,7 +44,7 @@ export async function criarLoginEGravar<T>(email: string, senha: string, gravar:
   const { config } = resolveFirebaseConfig()
   const secundario = initializeApp(config, `criacao-${crypto.randomUUID()}`)
   const siteKey = import.meta.env.VITE_APPCHECK_SITE_KEY?.trim() || '6Ldo4B8uAAAAACE-UJ9wwSs9GittnvvbBKi1Jq7R'
-  if (typeof window !== 'undefined' && siteKey) {
+  if (deveInicializarFirebase() && typeof window !== 'undefined' && siteKey) {
     initializeAppCheck(secundario, {
       provider: new ReCaptchaEnterpriseProvider(siteKey),
       isTokenAutoRefreshEnabled: true,

@@ -4,6 +4,7 @@ import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { Logo } from '../components/Logo'
 import { Textura } from '../components/Textura'
 import { Aviso, Button, Campo, inputClass } from '../components/ui'
+import { BACKEND } from '../lib/backend'
 import { firebaseConfigured } from '../lib/firebase'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
@@ -310,5 +311,5 @@ export function CompletarPage() {
 }
 
 export function portaConfigurada(): boolean {
-  return firebaseConfigured
+  return BACKEND === 'supabase' || firebaseConfigured
 }

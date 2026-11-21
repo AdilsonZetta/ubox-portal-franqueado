@@ -1,6 +1,6 @@
 import { aiHabilitado, modeloAi } from '../firebaseConfig'
 import type { Documento } from '../types'
-import { firebaseApp } from './firebase'
+import { obterAppParaAi } from './firebase'
 import { htmlParaTexto, limitar, pontuarBusca, trecho } from './text'
 
 export interface FonteResposta {
@@ -39,10 +39,14 @@ function modelosParaTentar(): string[] {
   return [...new Set(['gemini-3.5-flash-lite', preferido, 'gemini-3.8-flash'].filter(Boolean))]
 }
 
+export const MENSAGEM_IA_INDISPONIVEL =
+  'A IA do Firebase não está disponível neste ambiente. Confira se a configuração do Firebase (AI Logic) está presente.'
+
 async function gerarTexto(prompt: string, maxOutputTokens: number): Promise<string> {
-  if (!firebaseApp) throw new Error('Configuração do Firebase pendente')
+  const app = obterAppParaAi()
+  if (!app) throw new Error(MENSAGEM_IA_INDISPONIVEL)
   const { getAI, getGenerativeModel, GoogleAIBackend } = await import('firebase/ai')
-  const ai = getAI(firebaseApp, { backend: new GoogleAIBackend() })
+  const ai = getAI(app, { backend: new GoogleAIBackend() })
   let ultimo: unknown
   for (const modelName of modelosParaTentar()) {
     try {
@@ -60,10 +64,13 @@ async function gerarTexto(prompt: string, maxOutputTokens: number): Promise<stri
   throw ultimo instanceof Error ? ultimo : new Error('A IA não respondeu.')
 }
 
-function mensagemIa(erro: unknown): string {
+export function mensagemIa(erro: unknown): string {
   const texto = erro instanceof Error ? erro.message : ''
   if (/app check|permission|unauthenticated/i.test(texto)) {
     return 'A IA do Firebase recusou a consulta. Confira se o AI Logic e o App Check estão liberados para este app. Enquanto isso, use os trechos encontrados na base.'
+  }
+  if (/não está disponível|configuração do firebase/i.test(texto)) {
+    return 'A IA do Firebase não está disponível neste ambiente. Os trechos abaixo foram encontrados pela busca do portal.'
   }
   return 'Não consegui consultar a IA agora. Os trechos abaixo foram encontrados pela busca do portal.'
 }
@@ -90,7 +97,6 @@ export async function perguntarAoPortal(pergunta: string, documentos: Documento[
       fontes,
     }
   }
-  if (!firebaseApp) throw new Error('Configuração do Firebase pendente')
   if (!fontes.length) {
     return {
       texto: 'Não encontrei esse assunto nos documentos publicados que você pode ler.',
