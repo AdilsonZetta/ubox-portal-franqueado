@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Aviso, Carregando, Selo } from '../../components/ui'
+import { Aviso, Button, Carregando, Selo, Vazio } from '../../components/ui'
 import { carregarRegistrosAdmin, listarQuizzes, listarUsuarios } from '../../lib/api'
 import { formatarData } from '../../lib/format'
 import { usePortal } from '../../lib/portal'
@@ -14,18 +14,25 @@ export function ConformidadePage() {
   const [erro, setErro] = useState('')
   const [aberto, setAberto] = useState<string | null>(null)
 
+  const [tique, setTique] = useState(0)
+
   useEffect(() => {
+    let ativo = true
+    setErro('')
     void Promise.all([listarUsuarios(), listarQuizzes(), carregarRegistrosAdmin()])
       .then(([lista, qs, regs]) => {
+        if (!ativo) return
         setUsuarios(lista)
         setQuizzes(qs)
         setRegistros(regs)
       })
-      .catch((falha: unknown) => setErro(falha instanceof Error ? falha.message : 'Falha ao carregar o painel.'))
-  }, [])
+      .catch((falha: unknown) => ativo && setErro(falha instanceof Error ? falha.message : 'Falha ao carregar o painel.'))
+    return () => { ativo = false }
+  }, [tique])
 
-  if (erro) return <Aviso tom="erro">{erro}</Aviso>
-  if (!registros) return <Carregando texto="Montando o painel de leituras…" />
+  if (erro) return <Aviso tom="erro"><span role="alert">{erro}</span> <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso>
+  if (portal.erro) return <Aviso tom="erro"><span role="alert">{portal.erro}</span> <Button variant="ghost" onClick={() => void portal.atualizar()}>Tentar novamente</Button></Aviso>
+  if (!registros || portal.carregando) return <Carregando texto="Montando o painel de leituras…" />
 
   const franqueados = usuarios.filter((usuario) => usuario.papel === 'franqueado')
   const obrigatorios = portal.documentos.filter((documento) => documento.leituraObrigatoria && documento.status === 'publicado')
@@ -34,6 +41,7 @@ export function ConformidadePage() {
     <div className="space-y-4">
       <h1 className="text-3xl font-extrabold">Leituras, aceites e quizzes</h1>
       <p className="text-sm text-ink/60">A nota exibida no quiz é recalculada aqui a partir das respostas gravadas. Se divergir do que o franqueado enviou, o selo “rever” aparece.</p>
+      {!franqueados.length ? <Vazio titulo="Nenhum franqueado cadastrado" texto="Os registros de leitura, aceites e quizzes aparecem aqui após o cadastro." /> : null}
       <div className="space-y-3">
         {franqueados.map((usuario) => {
           const aplicaveis = obrigatorios.filter((documento) => documento.publico || documento.uids.includes(usuario.uid))
@@ -42,7 +50,7 @@ export function ConformidadePage() {
           )
           return (
             <article key={usuario.uid} className="rounded-2xl border border-line bg-white">
-              <button className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" onClick={() => setAberto(aberto === usuario.uid ? null : usuario.uid)}>
+              <button className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left" aria-expanded={aberto === usuario.uid} onClick={() => setAberto(aberto === usuario.uid ? null : usuario.uid)}>
                 <span>
                   <span className="block font-semibold">{usuario.nome}</span>
                   <span className="text-xs text-ink/50">{usuario.unidade || 'Sem unidade'} · {usuario.email}</span>

@@ -1,22 +1,30 @@
 import { Textura } from '../../components/Textura'
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
+import { Aviso, Button, Carregando } from '../../components/ui'
 import { listarUsuarios } from '../../lib/api'
 import { usePortal } from '../../lib/portal'
 import type { Usuario } from '../../types'
 
 export function PainelPage() {
   const portal = usePortal()
-  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [usuarios, setUsuarios] = useState<Usuario[] | null>(null)
+  const [erroUsuarios, setErroUsuarios] = useState(false)
+  const [tique, setTique] = useState(0)
   useEffect(() => {
-    void listarUsuarios().then(setUsuarios).catch(() => undefined)
-  }, [])
-  const pendentes = usuarios.filter((usuario) => !usuario.ativo && !usuario.recusado)
+    let ativo = true
+    setErroUsuarios(false)
+    void listarUsuarios()
+      .then((lista) => ativo && setUsuarios(lista))
+      .catch(() => ativo && setErroUsuarios(true))
+    return () => { ativo = false }
+  }, [tique])
+  const pendentes = usuarios?.filter((usuario) => !usuario.ativo && !usuario.recusado)
   const cards = [
-    { rotulo: 'Acessos pendentes', valor: pendentes.length, para: '/admin/usuarios' },
-    { rotulo: 'Documentos', valor: portal.documentos.length, para: '/admin/documento/novo' },
-    { rotulo: 'Trilhas', valor: portal.trilhas.length, para: '/admin/trilhas' },
-    { rotulo: 'Categorias', valor: portal.categorias.length, para: '/admin/categorias' },
+    { rotulo: 'Acessos pendentes', valor: pendentes?.length, para: '/admin/usuarios' },
+    { rotulo: 'Documentos', valor: portal.carregando || portal.erro ? undefined : portal.documentos.length, para: '/admin/documento/novo' },
+    { rotulo: 'Trilhas', valor: portal.carregando || portal.erro ? undefined : portal.trilhas.length, para: '/admin/trilhas' },
+    { rotulo: 'Categorias', valor: portal.carregando || portal.erro ? undefined : portal.categorias.length, para: '/admin/categorias' },
   ]
   return (
     <div className="space-y-6">
@@ -32,10 +40,14 @@ export function PainelPage() {
         </div>
         <Textura className="h-8 w-full sm:h-12" />
       </header>
+      {!usuarios && !erroUsuarios ? <Carregando texto="Consultando os acessos pendentes…" /> : null}
+      {erroUsuarios ? <Aviso tom="erro"><span role="alert">Não foi possível consultar os acessos pendentes.</span> <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
+      {portal.carregando ? <Carregando texto="Consultando o conteúdo do portal…" /> : null}
+      {portal.erro ? <Aviso tom="erro"><span role="alert">{portal.erro}</span> <Button variant="ghost" onClick={() => void portal.atualizar()}>Tentar novamente</Button></Aviso> : null}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {cards.map((card) => (
           <Link key={card.rotulo} to={card.para} className="rounded-2xl border border-line bg-surface p-4 hover:border-brand">
-            <p className="text-3xl font-bold tabular-nums text-brand">{card.valor}</p>
+            <p className="text-3xl font-bold tabular-nums text-brand">{card.valor ?? "—"}</p>
             <p className="text-sm text-muted">{card.rotulo}</p>
           </Link>
         ))}
