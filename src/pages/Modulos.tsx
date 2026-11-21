@@ -77,15 +77,13 @@ export function ModulosPage() {
                     <Link
                       key={modulo.slug}
                       to={destino}
-                      className="cartao-modulo group flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-5 transition hover:border-brand hover:shadow-sm"
+                      className="cartao-modulo flex min-w-0 flex-col rounded-2xl border border-line bg-surface p-5"
                     >
                       <span className="flex items-start justify-between gap-3">
-                        <span className="grid h-11 w-11 place-items-center icone-modulo rounded-[10px] bg-brand-tint text-brand">
-                          <Icone className="h-5 w-5" />
+                        <span className="icone-modulo grid h-11 w-11 place-items-center rounded-[10px]">
+                          <Icone className="h-5 w-5" aria-hidden="true" />
                         </span>
-                        <span className={modulo.ativo ? 'rounded-full bg-lime/25 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-lime-dark' : 'rounded-full bg-ink/5 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-muted'}>
-                          {modulo.ativo ? 'Aberto' : 'Em breve'}
-                        </span>
+                        {modulo.ativo ? null : <Selo>Em breve</Selo>}
                       </span>
                       <h3 className="mt-4 font-bold leading-snug">{modulo.nome}</h3>
                       <p className="mt-1 flex-1 text-sm leading-relaxed text-muted">{modulo.descricao}</p>
@@ -120,7 +118,7 @@ export function ModuloEmBrevePage() {
         </span>
         <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-muted">{modulo.grupo}</p>
         <h1 className="mt-1 text-3xl font-bold">{modulo.nome}</h1>
-        <span className="mt-3 inline-flex rounded-full bg-ink/5 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-muted">Em breve</span>
+        <div className="mt-3"><Selo>Em breve</Selo></div>
         <p className="mt-4 text-ink/70">{modulo.descricao} Este módulo ainda não está ligado. Quando abrir, a unidade vai encontrar aqui:</p>
         <ul className="mt-6 space-y-3">
           {modulo.recursos.map((recurso) => (

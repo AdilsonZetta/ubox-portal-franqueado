@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { BotaoCsv } from '../../components/BotaoCsv'
-import { Campo, Vazio, inputClass } from '../../components/ui'
+import { Button, Campo, LinkBotao, Vazio, inputClass } from '../../components/ui'
 import type { ExecucaoChecklist } from '../../lib/checklist'
 import { formatarData } from '../../lib/format'
 import { normalizar } from '../../lib/text'
@@ -31,7 +31,10 @@ export function ListaHistorico({ execucoes, mostrarUnidade = false }: { execucoe
       {lista.length ? <ListaExecucoes execucoes={lista} mostrarUnidade={mostrarUnidade} /> : (
         <Vazio
           titulo={execucoes.length ? 'Nenhum resultado para este filtro' : 'Nenhum checklist encontrado'}
-          texto={execucoes.length ? 'Ajuste a busca ou a ordenação.' : 'Quando um checklist for enviado no período, ele aparece aqui.'}
+          texto={execucoes.length ? 'Ajuste a busca para encontrar um checklist.' : 'Quando um checklist for enviado no período, ele aparece aqui.'}
+          acao={execucoes.length ? (
+            <Button type="button" variant="secondary" onClick={() => setBusca('')}>Limpar filtros</Button>
+          ) : <LinkBotao to="/checklist">Ver checklist</LinkBotao>}
         />
       )}
     </>

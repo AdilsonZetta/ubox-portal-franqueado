@@ -2,7 +2,7 @@ import { normalizar } from '../../lib/text'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Award, GraduationCap, RotateCcw } from 'lucide-react'
-import { Aviso, Button, Carregando, Selo, Vazio, Campo, inputClass } from '../../components/ui'
+import { Aviso, Button, Carregando, CartaoMetrica, Selo, Vazio, Campo, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { usePortal } from '../../lib/portal'
@@ -92,6 +92,11 @@ export function UniversidadePage() {
             Cada curso reúne aulas da trilha de manuais e termina numa prova. Você tem {MAX_TENTATIVAS} chances por ciclo; se não atingir a nota mínima,
             volta ao manual indicado e, depois de concluí-lo, ganha novas chances. A correção é feita pelo servidor.
           </p>
+          {participa && cursos.length ? (
+            <p className="nota-pagina mt-3 text-muted">
+              <strong className="font-semibold">Nota mínima.</strong> Definida pela franqueadora em cada prova. A resposta certa nunca é mostrada.
+            </p>
+          ) : null}
         </div>
         {gestor ? (
           <Link to="/universidade/gestao" className="inline-flex items-center justify-center rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink hover:border-ink/30">
@@ -107,23 +112,16 @@ export function UniversidadePage() {
       {!carregando && !erro && !cursos.length ? <Vazio titulo="Nenhum curso publicado" texto="A franqueadora monta os cursos da formação aqui." /> : null}
 
       {participa && cursos.length ? (
-        <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo da Universidade">
-          <article className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">Cursos aprovados</p>
-            <p className="mt-1.5 text-3xl font-bold text-ink">
-              {aprovados}
-              <span className="text-lg font-bold text-muted"> / {cursos.length}</span>
-            </p>
-          </article>
-          <article className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">Certificados</p>
-            <p className="mt-1.5 text-3xl font-bold text-ink">{certificados.filter((c) => c.uid === pessoa?.uid && titulos.has(c.trilhaId)).length}</p>
-            <Link to="/meus-certificados" className="mt-1 inline-block text-xs font-semibold text-brand-dark hover:underline">Ver meus certificados</Link>
-          </article>
-          <article className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
-            <p className="text-xs font-bold uppercase tracking-wider text-muted">Nota mínima</p>
-            <p className="mt-1.5 text-sm text-muted">Definida pela franqueadora em cada prova. A resposta certa nunca é mostrada.</p>
-          </article>
+        <section className="grid grid-cols-2 gap-2 sm:gap-3" aria-label="Resumo da Universidade">
+          <CartaoMetrica
+            rotulo="Cursos aprovados"
+            valor={<>{aprovados}<span className="text-lg text-ink-soft"> / {cursos.length}</span></>}
+          />
+          <CartaoMetrica
+            rotulo="Certificados"
+            valor={certificados.filter((c) => c.uid === pessoa?.uid && titulos.has(c.trilhaId)).length}
+            rodape={<Link to="/meus-certificados" className="inline-flex min-h-11 items-center font-semibold text-brand-dark hover:underline">Ver meus certificados</Link>}
+          />
         </section>
       ) : null}
 
@@ -146,7 +144,18 @@ export function UniversidadePage() {
           </Campo>
         </div>
       ) : null}
-      {!carregando && cursos.length > 0 && !lista.length ? <Vazio titulo="Nenhum resultado para este filtro" texto="Ajuste a busca ou a situação." /> : null}
+      {!carregando && cursos.length > 0 && !lista.length ? (
+        <Vazio
+          titulo="Nenhum resultado para este filtro"
+          texto="Ajuste a busca ou a situação."
+          acao={
+            <Button type="button" variant="secondary" onClick={() => {
+              setBusca('')
+              setFiltro('todos')
+            }}>Limpar filtros</Button>
+          }
+        />
+      ) : null}
       <ul className="grid gap-3 md:grid-cols-2">
         {lista.map(({ curso, selo }) => {
           const prova = dados.provas.get(curso.id)
