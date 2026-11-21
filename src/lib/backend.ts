@@ -1,6 +1,6 @@
 /**
- * Qual backend o app usa. Padrão: Firebase (produção) até o corte final para o Supabase.
- * Ver MIGRACAO_SUPABASE.md. Feito por Grok Bot no Cursor (Antigravity sem cota).
+ * Qual backend o app usa. Produção atual: VITE_BACKEND=supabase; firebase permanece para rollback.
+ * Ver MIGRACAO_SUPABASE.md.
  */
 export type Backend = 'firebase' | 'supabase'
 
@@ -9,3 +9,8 @@ export function escolherBackend(valor: string | undefined): Backend {
 }
 
 export const BACKEND: Backend = escolherBackend(import.meta.env.VITE_BACKEND)
+
+/** Firebase e App Check só inicializam neste modo. Em supabase o login não passa pelo Firebase. */
+export function deveInicializarFirebase(backend: Backend = BACKEND): boolean {
+  return backend === 'firebase'
+}

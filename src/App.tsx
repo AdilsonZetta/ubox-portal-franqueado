@@ -4,6 +4,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { Carregando } from './components/ui'
 import { podeGerirTrilha } from './lib/manuaisTrilha'
+import { BACKEND } from './lib/backend'
 import { firebaseConfigured } from './lib/firebase'
 import { AuthProvider, useAuth } from './lib/auth'
 import { useVisao, VisaoProvider } from './lib/visao'
@@ -190,7 +191,7 @@ function Area() {
 }
 
 export function App() {
-  if (!firebaseConfigured) return <ConfigPendentePage />
+  if (BACKEND === 'firebase' && !firebaseConfigured) return <ConfigPendentePage />
   return (
     <AuthProvider>
       <VisaoProvider>
