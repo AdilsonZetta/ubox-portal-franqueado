@@ -1,3 +1,5 @@
+import { Aviso, Button, Carregando, Selo } from '../components/ui'
+import { usePendencias } from '../lib/usePendencias'
 import { Textura } from '../components/Textura'
 import { Link, useParams } from 'react-router-dom'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
@@ -11,6 +13,7 @@ export function ModulosPage() {
   const { user } = useAuth()
   const { ehAdmin, comoFranqueado, simulado } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
+  const pendencias = usePendencias()
   return (
     <div>
       <div className="mx-auto max-w-6xl">
@@ -20,11 +23,36 @@ export function ModulosPage() {
             <p className="text-xs font-semibold uppercase tracking-wider text-lime-soft">UBOX · Portal do Franqueado</p>
             <h1 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Olá, {primeiroNome(user?.nome ?? '')}. Escolha um módulo.</h1>
             <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-line-strong">
-              Cada frente da rede tem o seu lugar. Manuais e a Universidade já estão abertos. Os demais módulos mostram o que vem por aí.
+              Os módulos liberados para sua conta estão abaixo. O Controle de Acesso Inteligente está em breve.
             </p>
           </div>
           <Textura className="h-8 w-full sm:h-12" />
         </header>
+        {!comoFranqueado ? (
+          <section className="mt-6 space-y-3" aria-labelledby="pendencias-titulo">
+            <h2 id="pendencias-titulo" className="text-lg font-bold">Pendências</h2>
+            {pendencias.carregando ? <Carregando texto="Consultando pendências…" /> : null}
+            {pendencias.falhou ? (
+              <Aviso>
+                Algumas pendências ficaram indisponíveis.{' '}
+                <Button variant="ghost" onClick={pendencias.recarregar} disabled={pendencias.carregando}>Tentar novamente</Button>
+              </Aviso>
+            ) : null}
+            {!pendencias.carregando && !pendencias.falhou && !pendencias.itens.length ? (
+              <p className="text-sm text-muted">Você está em dia. Escolha um módulo abaixo para continuar.</p>
+            ) : null}
+            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {pendencias.itens.map((item) => (
+                <li key={item.id}>
+                  <Link to={item.para} className="block rounded-2xl border border-line bg-surface p-4 hover:border-brand">
+                    <p className="mb-2 font-semibold">{item.titulo}</p>
+                    <Selo tom={item.tom === 'alerta' ? 'alerta' : 'neutro'}>{item.detalhe}</Selo>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : null}
         {podeModulo(pessoa, 'universidade', comoFranqueado) ? (
           <div className="mt-6 max-w-2xl">
             <CartaoUniversidade />
