@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
@@ -22,7 +23,7 @@ import {
 } from '../../lib/estoque'
 import { aprovarPedido, cancelarPedidoRede, enviarPedido, salvarItem } from '../../lib/estoqueApi'
 import { Historico, TabelaSaldo } from './Estoque'
-import { RodapeModulo10, StatusPedidoSelo, useEstoque } from './partes'
+import { StatusPedidoSelo, useEstoque } from './partes'
 
 type Aba = 'catalogo' | 'rede' | 'pedidos' | 'movimentos'
 const ROTULO_ABA: Record<Aba, string> = { catalogo: 'Catálogo', rede: 'Estoque da rede', pedidos: 'Pedidos', movimentos: 'Movimentos' }
@@ -57,7 +58,7 @@ export function GestaoEstoquePage() {
   if (!dados.carregando && !dados.gestor) return <Navigate to="/estoque" replace />
 
   async function gravar() {
-    if (!user || !form) return
+    if (!user || !form || salvando) return
     const erros = validarItem(form)
     if (erros.length) { setErro(erros.join(' ')); return }
     setSalvando(true)
@@ -99,10 +100,10 @@ export function GestaoEstoquePage() {
 
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando…" /> : null}
 
-      {!dados.carregando && aba === 'catalogo' ? (
+      {!dados.carregando && !dados.erro && aba === 'catalogo' ? (
         <div className="grid gap-5 lg:grid-cols-[1fr_28rem]">
           <section className="space-y-2">
             <div className="flex flex-wrap items-end gap-2">
@@ -111,6 +112,8 @@ export function GestaoEstoquePage() {
                 <option value="">Todas as categorias</option>
                 {CATEGORIAS.map((c) => <option key={c} value={c}>{ROTULO_CATEGORIA[c]}</option>)}
               </select>
+              {catalogo.length ? <BotaoCsv arquivo="estoque-catalogo" cabecalhos={['Nome', 'Código', 'Categoria', 'Unidade', 'Mínimo', 'Preço sugerido', 'Ativo']}
+                linhas={catalogo.map((i) => [i.nome, i.codigo, ROTULO_CATEGORIA[i.categoria], i.unidadeMedida, i.estoqueMinimo, i.precoSugeridoCentavos ? formatarPreco(i.precoSugeridoCentavos) : null, i.ativo ? 'sim' : 'não'])} /> : null}
             </div>
             {!catalogo.length ? <Vazio titulo="Catálogo vazio" texto="Cadastre os itens padrão da rede: insumos, cadeados, caixas de mudança, embalagens, limpeza e uniformes." /> : (
               <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
@@ -162,9 +165,11 @@ export function GestaoEstoquePage() {
         </div>
       ) : null}
 
-      {!dados.carregando && aba === 'rede' ? (
+      {!dados.carregando && !dados.erro && aba === 'rede' ? (
         <section className="space-y-4">
           <p className="text-sm text-ink/60">Unidades que já movimentaram, contaram ou pediram itens. Abaixo do mínimo = saldo menor que o mínimo do catálogo; zerado = saldo 0 ou menos.</p>
+          {resumo.length ? <BotaoCsv arquivo="estoque-rede" cabecalhos={['Unidade', 'Zerados', 'Abaixo do mínimo', 'Pedidos em andamento', 'Último movimento', 'Última contagem']}
+            linhas={resumo.map((u) => [u.unidadeNome, u.itensZerados, u.itensBaixos, u.pedidosAbertos, u.ultimoMovimentoMs ? formatarData(u.ultimoMovimentoMs) : null, u.ultimaContagemMs ? formatarData(u.ultimaContagemMs) : null])} /> : null}
           {!resumo.length ? <Vazio titulo="Nenhuma unidade com estoque ainda" texto="Quando as unidades lançarem movimentos, o resumo aparece aqui." /> : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {resumo.map((u) => (
@@ -191,7 +196,7 @@ export function GestaoEstoquePage() {
         </section>
       ) : null}
 
-      {!dados.carregando && aba === 'pedidos' ? (
+      {!dados.carregando && !dados.erro && aba === 'pedidos' ? (
         <section className="space-y-3">
           <select aria-label="Status do pedido" className={cx(inputClass, 'w-auto')} value={statusFiltro} onChange={(e) => setStatusFiltro(e.target.value as StatusPedido | 'ativos')}>
             <option value="ativos">Em andamento</option>
@@ -205,8 +210,7 @@ export function GestaoEstoquePage() {
         </section>
       ) : null}
 
-      {!dados.carregando && aba === 'movimentos' ? <Historico movimentos={dados.movimentos} itens={dados.itens} mostrarUnidade /> : null}
-      <RodapeModulo10 />
+      {!dados.carregando && !dados.erro && aba === 'movimentos' ? <Historico movimentos={dados.movimentos} itens={dados.itens} mostrarUnidade /> : null}
     </div>
   )
 }
@@ -219,9 +223,11 @@ function PedidosRede({ pedidos, onFeito, onErro }: { pedidos: Pedido[]; onFeito:
   if (!pedidos.length) return <Vazio titulo="Nenhum pedido aqui" texto="Os pedidos de reposição das unidades aparecem nesta lista." />
 
   async function agir(p: Pedido, acao: 'aprovar' | 'enviar' | 'cancelar') {
-    if (!user) return
+    if (!user || salvando) return
     const texto = obs[p.id] ?? p.obsFranqueadora
     if (acao === 'cancelar' && texto.trim().length < 2) { onErro('Para cancelar, escreva o motivo para a unidade.'); return }
+    if (acao === 'cancelar' && !window.confirm('Cancelar este pedido de reposição?')) return
+    if (acao === 'enviar' && !window.confirm('Marcar este pedido como enviado? A unidade ainda precisa confirmar o recebimento.')) return
     setSalvando(true)
     try {
       if (acao === 'aprovar') { await aprovarPedido(user, p, texto); onFeito(`Pedido de ${p.unidadeNome} aprovado.`) }

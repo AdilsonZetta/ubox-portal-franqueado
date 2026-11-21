@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { Plus, Trash2 } from 'lucide-react'
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData } from '../../lib/format'
@@ -35,7 +36,7 @@ import {
   registrarMovimento,
   salvarContagem,
 } from '../../lib/estoqueApi'
-import { NivelSelo, RodapeModulo10, StatusPedidoSelo, useEstoque, type UsoEstoque } from './partes'
+import { NivelSelo, StatusPedidoSelo, useEstoque, type UsoEstoque } from './partes'
 
 type Aba = 'saldo' | 'movimentar' | 'historico' | 'contagem' | 'pedidos'
 const ROTULO_ABA: Record<Aba, string> = { saldo: 'Saldo', movimentar: 'Movimentar', historico: 'Histórico', contagem: 'Contagem', pedidos: 'Pedidos de reposição' }
@@ -75,10 +76,10 @@ export function EstoquePage() {
 
       {dados.simulando ? <Aviso>Você está vendo como a unidade simulada. Nada é gravado nesta visão.</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando o estoque…" /> : null}
 
-      {!dados.carregando && aba === 'saldo' ? (
+      {!dados.carregando && !dados.erro && aba === 'saldo' ? (
         <section className="space-y-3">
           {criticos.length ? (
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-200 bg-red-50 p-4">
@@ -92,13 +93,12 @@ export function EstoquePage() {
         </section>
       ) : null}
 
-      {!dados.carregando && aba === 'movimentar' ? <Movimentar dados={dados} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
-      {!dados.carregando && aba === 'historico' ? <Historico movimentos={dados.movimentos} itens={dados.itens} /> : null}
-      {!dados.carregando && aba === 'contagem' ? <Contagens dados={dados} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
-      {!dados.carregando && aba === 'pedidos' ? (
+      {!dados.carregando && !dados.erro && aba === 'movimentar' ? <Movimentar dados={dados} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
+      {!dados.carregando && !dados.erro && aba === 'historico' ? <Historico movimentos={dados.movimentos} itens={dados.itens} /> : null}
+      {!dados.carregando && !dados.erro && aba === 'contagem' ? <Contagens dados={dados} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
+      {!dados.carregando && !dados.erro && aba === 'pedidos' ? (
         <Pedidos dados={dados} rascunho={rascunhoPedido} onRascunhoUsado={() => setRascunhoPedido(null)} onFeito={(m) => { setOk(m); dados.recarregar() }} />
       ) : null}
-      <RodapeModulo10 />
     </div>
   )
 }
@@ -106,6 +106,10 @@ export function EstoquePage() {
 export function TabelaSaldo({ linhas }: { linhas: ReturnType<typeof tabelaSaldos> }) {
   if (!linhas.length) return <Vazio titulo="Catálogo vazio" texto="Quando a franqueadora cadastrar os itens padrão da rede, eles aparecem aqui." />
   return (
+    <div className="space-y-3">
+      <BotaoCsv arquivo="estoque-saldo" cabecalhos={['Item', 'Código', 'Categoria', 'Saldo', 'Unidade', 'Mínimo', 'Situação', 'Preço sugerido']}
+        linhas={linhas.map((l) => [l.item.nome, l.item.codigo, ROTULO_CATEGORIA[l.item.categoria], l.saldo, l.item.unidadeMedida, l.item.estoqueMinimo,
+          !l.item.ativo ? 'fora do catálogo' : l.nivel, l.item.precoSugeridoCentavos ? formatarPreco(l.item.precoSugeridoCentavos) : null])} />
     <div className="overflow-x-auto rounded-2xl border border-line bg-white">
       <table className="w-full text-left text-sm">
         <thead className="bg-paper text-xs uppercase tracking-wide text-ink/50">
@@ -136,6 +140,7 @@ export function TabelaSaldo({ linhas }: { linhas: ReturnType<typeof tabelaSaldos
         </tbody>
       </table>
     </div>
+    </div>
   )
 }
 
@@ -154,10 +159,12 @@ function Movimentar({ dados, onFeito }: { dados: UsoEstoque; onFeito: (msg: stri
   const saldoAtual = item ? mapa.get(item.id) ?? 0 : 0
 
   async function gravar() {
+    if (salvando || dados.simulando) return
     if (!dados.pessoa || !item) { setErro('Escolha o item.'); return }
     const qtd = Number(quantidade)
     const erros = validarMovimento(tipo, qtd, motivo, saldoAtual)
     if (erros.length) { setErro(erros.join(' ')); return }
+    if (!window.confirm(`Registrar ${ROTULO_TIPO_MOV[tipo].toLowerCase()} de ${qtd} ${item.unidadeMedida} de ${item.nome}? Movimentos não podem ser editados.`)) return
     setSalvando(true)
     setErro('')
     try {
@@ -210,6 +217,7 @@ export function Historico({ movimentos, itens, mostrarUnidade = false }: { movim
   const lista = (itemId ? movimentos.filter((m) => m.itemId === itemId) : movimentos).slice(0, 300)
   return (
     <section className="space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
       <div className="max-w-xs">
         <Campo label="Filtrar por item">
           <select className={inputClass} value={itemId} onChange={(e) => setItemId(e.target.value)}>
@@ -217,6 +225,15 @@ export function Historico({ movimentos, itens, mostrarUnidade = false }: { movim
             {itens.map((i) => <option key={i.id} value={i.id}>{i.nome}</option>)}
           </select>
         </Campo>
+      </div>
+        {lista.length ? <BotaoCsv arquivo="estoque-movimentos" cabecalhos={mostrarUnidade ? ['Quando', 'Unidade', 'Item', 'Tipo', 'Quantidade', 'Motivo', 'Quem'] : ['Quando', 'Item', 'Tipo', 'Quantidade', 'Motivo', 'Quem']}
+          linhas={lista.map((m) => {
+            const tipo = `${ROTULO_TIPO_MOV[m.tipo]}${m.origem !== 'manual' ? (m.origem === 'contagem' ? ' (contagem)' : ' (pedido)') : ''}`
+            const qtd = `${m.delta > 0 ? '+' : ''}${m.delta} ${m.unidadeMedida}`
+            return mostrarUnidade
+              ? [formatarData(m.criadoEmMs), m.unidadeNome || m.unidadeId, m.itemNome, tipo, qtd, m.motivo, m.nome]
+              : [formatarData(m.criadoEmMs), m.itemNome, tipo, qtd, m.motivo, m.nome]
+          })} /> : null}
       </div>
       {!lista.length ? <Vazio titulo="Nenhum movimento" texto="Entradas, saídas, vendas e ajustes aparecem aqui, do mais recente para o mais antigo." /> : (
         <div className="overflow-x-auto rounded-2xl border border-line bg-white">
@@ -271,11 +288,13 @@ function Contagens({ dados, onFeito }: { dados: UsoEstoque; onFeito: (msg: strin
   const linhas = linhasContagem(contaveis, mapa, numeros)
 
   async function executar(acao: 'salvar' | 'confirmar' | 'cancelar') {
-    if (!dados.pessoa) return
+    if (!dados.pessoa || salvando || dados.simulando) return
     if (acao !== 'cancelar') {
       const erros = validarContagem(linhas)
       if (erros.length) { setErro(erros.join(' ')); return }
     }
+    if (acao === 'confirmar' && !window.confirm('Confirmar esta contagem? As diferenças viram ajustes no estoque e não podem ser desfeitas.')) return
+    if (acao === 'cancelar' && !window.confirm('Cancelar esta contagem? Nenhum ajuste será gerado.')) return
     setSalvando(true)
     setErro('')
     try {
@@ -380,7 +399,7 @@ function Pedidos({ dados, rascunho, onRascunhoUsado, onFeito }: { dados: UsoEsto
   }, [rascunho, onRascunhoUsado])
 
   async function enviar() {
-    if (!dados.pessoa) return
+    if (!dados.pessoa || salvando || dados.simulando) return
     const escolhidas = linhas.filter((l) => l.itemId)
     const prontas = escolhidas.map((l) => {
       const item = ativos.find((i) => i.id === l.itemId)!
@@ -404,7 +423,9 @@ function Pedidos({ dados, rascunho, onRascunhoUsado, onFeito }: { dados: UsoEsto
   }
 
   async function agir(p: Pedido, acao: 'cancelar' | 'receber') {
-    if (!dados.pessoa) return
+    if (!dados.pessoa || salvando) return
+    if (acao === 'cancelar' && !window.confirm('Cancelar este pedido de reposição?')) return
+    if (acao === 'receber' && !window.confirm('Confirmar o recebimento? As quantidades enviadas entram no estoque da unidade.')) return
     setSalvando(true)
     setErro('')
     try {

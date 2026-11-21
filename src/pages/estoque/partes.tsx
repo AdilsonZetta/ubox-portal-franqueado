@@ -80,6 +80,3 @@ export function StatusPedidoSelo({ status }: { status: StatusPedido }) {
   return <Selo tom={tom}>{ROTULO_STATUS_PEDIDO[status]}</Selo>
 }
 
-export function RodapeModulo10() {
-  return <p className="text-center text-[11px] text-ink/35">Módulo 10 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
-}
