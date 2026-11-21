@@ -3,7 +3,7 @@ import { BotaoCsv } from '../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Lock } from 'lucide-react'
-import { Aviso, Campo, Carregando, Selo, Vazio, inputClass } from '../components/ui'
+import { Aviso, Campo, Carregando, LinkBotao, Selo, Vazio, inputClass } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { useVisao } from '../lib/visao'
@@ -48,11 +48,22 @@ export function BibliotecaPage() {
   )
   const filtros: Array<TipoExibicao | 'todos'> = tipos.length ? ['todos', ...tipos] : []
 
+  if (categoriaId && !atual) {
+    return (
+      <div className="mx-auto max-w-5xl space-y-4">
+        {carregando ? <Carregando texto="Carregando a pasta…" /> : erro ? (
+          <Aviso tom="erro">{erro} <button type="button" onClick={() => void atualizar()} className="underline">Tentar novamente</button></Aviso>
+        ) : <Vazio titulo="Pasta não encontrada" texto="A pasta pode ter sido movida ou não estar disponível para sua conta." />}
+        <LinkBotao to="/biblioteca">Voltar à biblioteca</LinkBotao>
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-4">
       <header className="cabecalho-pagina">
         <p className="text-sm text-muted">
-          <Link to="/biblioteca">Documentos</Link>
+          <Link to="/biblioteca">Biblioteca</Link>
           {trilha.map((categoria) => (
             <span key={categoria.id}>
               {'  /  '}
