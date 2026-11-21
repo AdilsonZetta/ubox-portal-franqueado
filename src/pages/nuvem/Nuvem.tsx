@@ -1,3 +1,4 @@
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ExternalLink, FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, inputClass } from '../../components/ui'
@@ -51,6 +52,7 @@ function Nuvem({ modo }: { modo: Modo }) {
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
   const [busca, setBusca] = useState('')
+  const [pasta, setPasta] = useState('')
   const [tag, setTag] = useState('')
   const [editando, setEditando] = useState<LinkNuvem | 'novo' | null>(null)
   const [tique, setTique] = useState(0)
@@ -66,7 +68,7 @@ function Nuvem({ modo }: { modo: Modo }) {
     return () => { vivo = false }
   }, [pessoa, pode, modo, tique])
 
-  const filtrados = useMemo(() => filtrarLinks(links, busca, tag), [links, busca, tag])
+  const filtrados = useMemo(() => filtrarLinks(links, busca, tag).filter((l) => !pasta || l.pasta === pasta), [links, busca, tag, pasta])
   const tags = useMemo(() => todasAsTags(links), [links])
   const pastas = useMemo(() => [...new Set([...links.map((l) => l.pasta), ...PASTAS_SUGERIDAS])].sort((a, b) => a.localeCompare(b, 'pt-BR')), [links])
   const daUnidade = (l: LinkNuvem) => modo === 'unidade' && l.dono === (pessoa?.unidadeId ?? '')
@@ -128,11 +130,21 @@ function Nuvem({ modo }: { modo: Modo }) {
             {tags.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </Campo>
+        <Campo label="Pasta">
+          <select className={inputClass} value={pasta} onChange={(e) => setPasta(e.target.value)}>
+            <option value="">Todas</option>
+            {[...new Set(links.map((l) => l.pasta))].sort((a, b) => a.localeCompare(b, 'pt-BR')).map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </Campo>
+        {pode && !carregando && !comoFranqueado ? <BotaoCsv arquivo={`nuvem-${modo}`} cabecalhos={['Título', 'Pasta', 'Etiquetas', 'Visibilidade', 'URL']}
+          linhas={[...agruparPorPasta(daRede), ...agruparPorPasta(privados)].flatMap((grupo) => grupo.links).map((l) => [l.titulo, l.pasta, l.tags.join(', '), ROTULO_VISIBILIDADE[l.visibilidade], l.url])} /> : null}
         <p className="pb-2 text-sm text-ink/50">{filtrados.length} de {links.length} link(s)</p>
       </section>
 
       {carregando ? <Carregando texto="Carregando os links…" /> : links.length === 0 ? (
         <Vazio titulo="Nenhum link ainda" texto={modo === 'rede' ? 'Publique o primeiro link do Drive para a rede, para algumas unidades ou só para a franqueadora.' : 'Guarde aqui os links do Drive da unidade. Os links que a franqueadora compartilhar também aparecem nesta tela.'} />
+      ) : !filtrados.length ? (
+        <Vazio titulo="Nenhum resultado para este filtro" texto="Ajuste a busca, a etiqueta ou a pasta." />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_260px]">
           <div className="space-y-6">
@@ -148,7 +160,7 @@ function Nuvem({ modo }: { modo: Modo }) {
           <aside className="space-y-2 rounded-3xl border border-line bg-white p-4 shadow-sm">
             <h2 className="text-sm font-bold">Adicionados recentemente</h2>
             <ol className="space-y-2">
-              {recentes(links).map((l) => (
+              {recentes(filtrados).map((l) => (
                 <li key={l.id} className="text-sm">
                   <a href={l.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-dark hover:underline">{l.titulo}</a>
                   <p className="text-[11px] text-ink/45">{l.pasta} · {formatarData(l.criadoEmMs)}</p>

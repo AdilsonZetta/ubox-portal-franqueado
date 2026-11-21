@@ -1,10 +1,12 @@
+import { normalizar } from '../../lib/text'
+import { BotaoCsv } from '../../components/BotaoCsv'
 import { useMemo, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { Aviso, Button, Campo, Carregando, Vazio, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData } from '../../lib/format'
-import { MAX_LISTA_CONFIG, calcularKpis, formatarReais, kpisPorUnidade, normalizarLista } from '../../lib/crm'
+import { ETAPAS, MAX_LISTA_CONFIG, ROTULO_ETAPA, calcularKpis, formatarReais, kpisPorUnidade, normalizarLista } from '../../lib/crm'
 import { salvarConfig } from '../../lib/crmApi'
 import { Painel } from './Crm'
 import { Numero, RodapeModulo11, useCrm } from './partes'
@@ -19,11 +21,18 @@ export function GestaoCrmPage() {
   const [params, setParams] = useSearchParams()
   const aba = (Object.keys(ROTULO_ABA).includes(params.get('aba') ?? '') ? params.get('aba') : 'rede') as Aba
   const [periodo, setPeriodo] = useState(90)
+  const [busca, setBusca] = useState('')
+  const [ordem, setOrdem] = useState('conversao')
   const [unidade, setUnidade] = useState('')
   const [okConfig, setOkConfig] = useState('')
   const agora = useMemo(() => Date.now(), [dados.leads])
   const desde = periodo ? agora - periodo * DIA : 0
+  const consulta = normalizar(busca.trim())
   const porUnidade = kpisPorUnidade(dados.leads, agora, desde)
+    .filter((u) => u.total > 0 && normalizar(u.unidadeNome).includes(consulta))
+  if (ordem === 'atraso') porUnidade.sort((a, b) => b.atrasados - a.atrasados || a.unidadeNome.localeCompare(b.unidadeNome, 'pt-BR'))
+  if (ordem === 'nome') porUnidade.sort((a, b) => a.unidadeNome.localeCompare(b.unidadeNome, 'pt-BR'))
+  const unidadeExibida = porUnidade.find((u) => u.unidadeId === unidade)
   const rede = calcularKpis(dados.leads, agora, desde)
 
   if (!user) return null
@@ -49,7 +58,7 @@ export function GestaoCrmPage() {
 
       {!dados.carregando && aba === 'rede' ? (
         <section className="space-y-4">
-          <div className="w-48">
+          <div className="flex flex-wrap items-end gap-3">
             <Campo label="Período (leads criados)">
               <select className={inputClass} value={periodo} onChange={(e) => setPeriodo(Number(e.target.value))}>
                 <option value={30}>Últimos 30 dias</option>
@@ -58,14 +67,26 @@ export function GestaoCrmPage() {
                 <option value={0}>Tudo</option>
               </select>
             </Campo>
+            <Campo label="Buscar unidade"><input className={inputClass} value={busca} onChange={(e) => setBusca(e.target.value)} /></Campo>
+            <Campo label="Ordenar por">
+              <select className={inputClass} value={ordem} onChange={(e) => setOrdem(e.target.value)}>
+                <option value="conversao">Maior conversão</option>
+                <option value="atraso">Mais atrasos</option>
+                <option value="nome">Nome</option>
+              </select>
+            </Campo>
+            <BotaoCsv arquivo="crm-rede"
+              cabecalhos={['Unidade', 'Leads', 'Abertos', 'Conversão (%)', 'Dias para fechar', 'Atrasados', 'Valor ganho', ...ETAPAS.map((etapa) => ROTULO_ETAPA[etapa])]}
+              linhas={porUnidade.map((u) => [u.unidadeNome, u.total, u.abertos, u.conversao, u.diasParaFechar, u.atrasados,
+                formatarReais(u.valorGanhoCentavos), ...ETAPAS.map((etapa) => u.porEtapa[etapa])])} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Numero rotulo="Leads na rede" valor={String(rede.total)} dica={`${porUnidade.length} unidade(s)`} />
+            <Numero rotulo="Leads na rede" valor={String(rede.total)} dica={`${porUnidade.length} unidade(s) na lista`} />
             <Numero rotulo="Conversão da rede" valor={rede.conversao === null ? '—' : `${rede.conversao}%`} dica={`${rede.ganhos} ganho(s) · ${rede.perdidos} perdido(s)`} />
             <Numero rotulo="Tempo até fechar" valor={rede.diasParaFechar === null ? '—' : `${rede.diasParaFechar.toLocaleString('pt-BR')} dias`} />
             <Numero rotulo="Follow-ups atrasados" valor={String(rede.atrasados)} />
           </div>
-          {!porUnidade.length ? <Vazio titulo="Nenhum lead na rede" texto="Quando as unidades cadastrarem leads, os números aparecem aqui." /> : (
+          {!porUnidade.length ? <Vazio titulo={dados.leads.length ? 'Nenhum resultado para este filtro' : 'Nenhum lead na rede'} texto={dados.leads.length ? 'Ajuste a busca ou o período.' : 'Quando as unidades cadastrarem leads, os números aparecem aqui.'} /> : (
             <div className="overflow-x-auto rounded-2xl border border-line bg-white">
               <table className="w-full text-left text-sm">
                 <thead className="bg-paper text-xs uppercase tracking-wide text-ink/50">
@@ -99,10 +120,10 @@ export function GestaoCrmPage() {
               </table>
             </div>
           )}
-          {unidade ? (
+          {unidadeExibida ? (
             <div className="space-y-2">
-              <h2 className="text-lg font-bold">{porUnidade.find((u) => u.unidadeId === unidade)?.unidadeNome}</h2>
-              <Painel leads={dados.leads.filter((l) => l.unidadeId === unidade)} agora={agora} />
+              <h2 className="text-lg font-bold">{unidadeExibida.unidadeNome}</h2>
+              <Painel leads={dados.leads.filter((l) => l.unidadeId === unidade && l.criadoEmMs >= desde)} agora={agora} />
             </div>
           ) : null}
         </section>

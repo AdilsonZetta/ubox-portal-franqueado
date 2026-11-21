@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { BotaoCsv } from '../../components/BotaoCsv'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CalendarDays, Download, ExternalLink, Megaphone, Search, Sparkles } from 'lucide-react'
 import { Aviso, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
@@ -13,9 +14,12 @@ import {
   situacaoCampanha,
   vigencia,
   type TipoMaterial,
+  type Vigencia,
 } from '../../lib/marketing'
 import { useVisao } from '../../lib/visao'
 import { useMarketing } from './useMarketing'
+
+const ROTULO_VIGENCIA: Record<Vigencia, string> = { vigente: 'Vigente', vencido: 'Vencido', futuro: 'Futuro' }
 
 export function MarketingPage() {
   const dados = useMarketing()
@@ -24,15 +28,17 @@ export function MarketingPage() {
   const [categoria, setCategoria] = useState('')
   const [campanhaId, setCampanhaId] = useState('')
   const [busca, setBusca] = useState('')
+  const [ordem, setOrdem] = useState('recentes')
+  const [periodo, setPeriodo] = useState<Vigencia>('vigente')
   const agora = Date.now()
-  const lista = useMemo(
-    () => filtrarMateriais(dados.materiais, { tipo, categoria, campanhaId, busca }, agora),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dados.materiais, tipo, categoria, campanhaId, busca],
-  )
-  const vigentes = useMemo(() => filtrarMateriais(dados.materiais, {}, agora), [dados.materiais]) // eslint-disable-line react-hooks/exhaustive-deps
-  const tipos = TIPOS_MATERIAL.filter((t) => vigentes.some((m) => m.tipo === t))
-  const categorias = categoriasDe(vigentes)
+  const disponiveis = dados.materiais.filter((m) => m.ativo && (dados.gestor || vigencia(m, agora) === 'vigente'))
+  const lista = filtrarMateriais(disponiveis, {
+    tipo, categoria, campanhaId, busca, incluirForaDaVigencia: dados.gestor,
+    vigencia: dados.gestor ? periodo : 'vigente',
+  }, agora)
+  if (ordem === 'nome') lista.sort((a, b) => a.titulo.localeCompare(b.titulo, 'pt-BR'))
+  const tipos = TIPOS_MATERIAL.filter((t) => disponiveis.some((m) => m.tipo === t))
+  const categorias = categoriasDe(disponiveis)
   const campanhas = new Map(dados.campanhas.map((c) => [c.id, c]))
   const proximas = proximasCampanhas(dados.campanhas, agora).slice(0, 4)
 
@@ -101,6 +107,21 @@ export function MarketingPage() {
             {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
           </select>
         ) : null}
+        {dados.gestor ? (
+          <select className={cx(inputClass, 'w-auto')} value={periodo} onChange={(e) => setPeriodo(e.target.value as Vigencia)} aria-label="Vigência">
+            <option value="vigente">Vigentes</option>
+            <option value="vencido">Vencidos</option>
+            <option value="futuro">Futuros</option>
+          </select>
+        ) : null}
+        <select className={cx(inputClass, 'w-auto')} value={ordem} onChange={(e) => setOrdem(e.target.value)} aria-label="Ordenar materiais">
+          <option value="recentes">Mais recentes</option>
+          <option value="nome">Título</option>
+        </select>
+        {!dados.carregando && !comoFranqueado && (dados.gestor || dados.participa) ? <BotaoCsv arquivo="materiais-marketing"
+          cabecalhos={['Título', 'Tipo', 'Categoria', 'Campanha', 'Formato', 'Validade']}
+          linhas={lista.map((m) => [m.titulo, ROTULO_TIPO[m.tipo], m.categoria, campanhas.get(m.campanhaId)?.titulo, m.formato,
+            m.validoAteMs ? formatarDia(m.validoAteMs) : 'Sem prazo'])} /> : null}
         {campanhaId ? (
           <button type="button" className="rounded-full bg-ink px-3 py-1 text-xs font-semibold text-white" onClick={() => setCampanhaId('')}>
             Campanha: {campanhas.get(campanhaId)?.titulo ?? campanhaId} ✕
@@ -118,7 +139,7 @@ export function MarketingPage() {
       ) : null}
 
       {dados.carregando ? <Carregando texto="Carregando materiais…" /> : null}
-      {!dados.carregando && !lista.length ? <Vazio titulo="Nenhum material aqui" texto="Quando a franqueadora publicar artes e campanhas, elas aparecem nesta página." /> : null}
+      {!dados.carregando && !lista.length ? <Vazio titulo={disponiveis.length ? 'Nenhum resultado para este filtro' : 'Nenhum material aqui'} texto={disponiveis.length ? 'Ajuste a busca ou os filtros.' : 'Quando a franqueadora publicar artes e campanhas, elas aparecem nesta página.'} /> : null}
 
       <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {lista.map((m) => {
@@ -130,6 +151,7 @@ export function MarketingPage() {
               ) : null}
               <div className="flex flex-wrap gap-1.5">
                 <Selo tom="marca">{ROTULO_TIPO[m.tipo]}</Selo>
+                {dados.gestor ? <Selo>{ROTULO_VIGENCIA[vigencia(m, agora)]}</Selo> : null}
                 {m.categoria ? <Selo>{m.categoria}</Selo> : null}
                 {!m.publico ? <Selo tom="alerta">Para a sua unidade</Selo> : null}
               </div>
