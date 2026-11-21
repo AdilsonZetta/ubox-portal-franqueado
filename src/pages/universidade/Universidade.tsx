@@ -2,7 +2,7 @@ import { normalizar } from '../../lib/text'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Award, GraduationCap, RotateCcw } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio, Campo, inputClass } from '../../components/ui'
+import { Aviso, Button, Carregando, Selo, Vazio, Campo, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { usePortal } from '../../lib/portal'
@@ -44,19 +44,24 @@ export function UniversidadePage() {
   const [busca, setBusca] = useState('')
   const [ordem, setOrdem] = useState('curriculo')
   const [equipe, setEquipe] = useState<TentativaProva[]>([])
+  const [tiqueEquipe, setTiqueEquipe] = useState(0)
+  const [carregandoEquipe, setCarregandoEquipe] = useState(true)
   const [erroEquipe, setErroEquipe] = useState('')
   const veEquipe = !comoFranqueado && user?.papel === 'franqueado'
 
   useEffect(() => {
     if (!user || !veEquipe) return
     let ativo = true
+    setCarregandoEquipe(true)
+    setErroEquipe('')
     listarResultados(user, false)
       .then((lista) => ativo && setEquipe(lista))
       .catch((falha) => ativo && setErroEquipe(mensagemErro(falha)))
+      .finally(() => ativo && setCarregandoEquipe(false))
     return () => {
       ativo = false
     }
-  }, [user, veEquipe])
+  }, [user, veEquipe, tiqueEquipe])
 
   const resumoEquipe = useMemo(() => resumirResultados(equipe, null), [equipe])
   const titulos = new Map(cursos.map((c) => [c.id, c.titulo]))
@@ -95,11 +100,11 @@ export function UniversidadePage() {
         ) : null}
       </header>
 
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {comoFranqueado ? <Aviso>Simulação: você vê a Universidade como {simulado?.nome}. Nada é gravado em nome dessa pessoa.</Aviso> : null}
       {!participa && !comoFranqueado ? <Aviso>Os cursos são feitos pelas unidades. Aqui você vê como eles aparecem; os resultados ficam na Gestão.</Aviso> : null}
       {carregando ? <Carregando texto="Carregando cursos…" /> : null}
-      {!carregando && !cursos.length ? <Vazio titulo="Nenhum curso publicado" texto="A franqueadora monta os cursos da formação aqui." /> : null}
+      {!carregando && !erro && !cursos.length ? <Vazio titulo="Nenhum curso publicado" texto="A franqueadora monta os cursos da formação aqui." /> : null}
 
       {participa && cursos.length ? (
         <section className="grid gap-3 sm:grid-cols-3" aria-label="Resumo da Universidade">
@@ -176,9 +181,10 @@ export function UniversidadePage() {
           <h2 className="flex items-center gap-2 border-b border-line bg-paper/60 px-5 py-3 text-sm font-bold uppercase tracking-wider text-muted">
             <GraduationCap className="h-4 w-4" aria-hidden="true" /> Resultados da minha equipe
           </h2>
-          {erroEquipe ? <div className="p-4"><Aviso tom="erro">{erroEquipe}</Aviso></div> : null}
-          {!resumoEquipe.length ? <p className="px-5 py-4 text-sm text-muted">Ninguém da unidade fez prova ainda.</p> : null}
-          {resumoEquipe.flatMap((u) => u.pessoas).map((p) => (
+          {erroEquipe ? <div className="p-4"><Aviso tom="erro"><p role="alert">{erroEquipe}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTiqueEquipe((t) => t + 1)}>Tentar novamente</Button></Aviso></div> : null}
+          {carregandoEquipe ? <div className="p-4"><Carregando texto="Carregando resultados da equipe…" /></div> : null}
+          {!carregandoEquipe && !erroEquipe && !resumoEquipe.length ? <p className="px-5 py-4 text-sm text-muted">Ninguém da unidade fez prova ainda.</p> : null}
+          {!carregandoEquipe && !erroEquipe && resumoEquipe.flatMap((u) => u.pessoas).map((p) => (
             <div key={p.uid} className="border-b border-line px-5 py-3 last:border-0">
               <p className="font-semibold">{p.nome}</p>
               <ul className="mt-1 flex flex-wrap gap-2">

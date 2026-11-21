@@ -52,6 +52,7 @@ export function GestaoUniversidadePage() {
   const [tentativas, setTentativas] = useState<TentativaProva[]>([])
   const [folhas, setFolhas] = useState<Map<string, number[]>>(new Map())
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
   const [tique, setTique] = useState(0)
@@ -65,6 +66,7 @@ export function GestaoUniversidadePage() {
     if (!user || !permitido) return
     let ativo = true
     setCarregando(true)
+    setErroCarga('')
     void Promise.all([listarCursos(true), listarProvas(), listarGabaritos(), listarTrilhaManuais(), listarResultados(user, true)])
       .then(([c, p, g, t, r]) => {
         if (!ativo) return
@@ -75,7 +77,7 @@ export function GestaoUniversidadePage() {
         setTentativas(r)
         return listarFolhas(r).then((f) => ativo && setFolhas(f))
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
@@ -209,9 +211,10 @@ export function GestaoUniversidadePage() {
 
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
+      {erroCarga ? <Aviso tom="erro"><p role="alert">{erroCarga}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
       {carregando ? <Carregando texto="Carregando a Universidade…" /> : null}
 
-      {aba === 'cursos' && !carregando ? (
+      {aba === 'cursos' && !carregando && !erroCarga ? (
         <div className="grid gap-5 lg:grid-cols-[18rem_1fr]">
           <aside className="space-y-2">
             <Button type="button" variant="secondary" className="w-full" onClick={() => abrir('')}>
@@ -356,7 +359,7 @@ export function GestaoUniversidadePage() {
         </div>
       ) : null}
 
-      {aba === 'resultados' && !carregando ? (
+      {aba === 'resultados' && !carregando && !erroCarga ? (
         <section className="space-y-4">
           <div className="flex flex-wrap items-center gap-3">
             <select className={cx(inputClass, 'w-auto')} value={unidadeFiltro} onChange={(e) => setUnidadeFiltro(e.target.value)} aria-label="Filtrar por unidade">
@@ -424,7 +427,6 @@ export function GestaoUniversidadePage() {
         </section>
       ) : null}
 
-      <p className="text-center text-[11px] text-muted">Módulo 5 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
     </div>
   )
 }

@@ -18,6 +18,8 @@ export function ProvaPage() {
   const prova = dados.provas.get(cursoId)
   const [respostas, setRespostas] = useState<Record<string, number>>({})
   const [enviando, setEnviando] = useState(false)
+  const [versaoDoEnvio, setVersaoDoEnvio] = useState<number | null>(null)
+  const [verificarEnvio, setVerificarEnvio] = useState(false)
   const [erro, setErro] = useState('')
   const [resultado, setResultado] = useState<{ aprovado: boolean; restantes: number; provaAtualizada: boolean } | null>(null)
   const { key } = useLocation()
@@ -25,6 +27,8 @@ export function ProvaPage() {
   // Abrir a prova de novo (mesma rota) começa uma folha em branco.
   useEffect(() => {
     setResultado(null)
+    setVersaoDoEnvio(null)
+    setVerificarEnvio(false)
     setRespostas({})
     setErro('')
   }, [key, cursoId])
@@ -36,6 +40,7 @@ export function ProvaPage() {
       Voltar para o curso
     </Link>
   )
+  if (dados.erro && !resultado) return <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso>
   if (!curso || !prova) {
     return (
       <div className="mx-auto max-w-3xl space-y-3">
@@ -75,20 +80,27 @@ export function ProvaPage() {
             ? 'Você já foi aprovado neste curso.'
             : estado?.tipo === 'reestudo'
               ? 'Você usou as 3 chances. Conclua o reestudo do manual para liberar novas tentativas.'
-              : 'A prova ainda não está liberada para você. Conclua as aulas do curso primeiro.'}
+              : estado?.tipo === 'corrigindo'
+                ? 'Sua tentativa foi registrada. Volte ao curso para finalizar a correção.'
+                : 'A prova ainda não está liberada para você. Conclua as aulas do curso primeiro.'}
         </Aviso>
         {voltar}
       </div>
     )
   }
 
+  if (versaoDoEnvio !== null && prova.versao !== versaoDoEnvio) {
+    return <div className="mx-auto max-w-3xl space-y-3"><Aviso>A prova foi atualizada. Volte ao curso para abrir a versão atual.</Aviso>{voltar}</div>
+  }
+
   const faltando = prova.perguntas.filter((p) => respostas[p.id] === undefined).length
 
   async function enviar(evento: FormEvent) {
     evento.preventDefault()
-    if (!user || !prova || estado?.tipo !== 'disponivel' || faltando) return
+    if (!user || !prova || estado?.tipo !== 'disponivel' || faltando || enviando || verificarEnvio) return
     if (!window.confirm(`Enviar a prova? Esta é a tentativa ${estado.numero} de ${MAX_TENTATIVAS} e não pode ser desfeita.`)) return
     setEnviando(true)
+    setVersaoDoEnvio(prova.versao)
     setErro('')
     try {
       const lista = prova.perguntas.map((p) => respostas[p.id])
@@ -97,6 +109,7 @@ export function ProvaPage() {
       dados.recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+      setVerificarEnvio(true)
     } finally {
       setEnviando(false)
     }
@@ -114,7 +127,7 @@ export function ProvaPage() {
           {estado.ciclo > 1 ? ` · ciclo ${estado.ciclo}` : ''} · nota mínima {prova.notaMinima}%. A correção é feita pelo servidor.
         </p>
       </div>
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? <Aviso tom="erro"><p role="alert">{erro} {verificarEnvio ? 'Verifique se a tentativa foi registrada antes de tentar novamente.' : 'Suas respostas foram mantidas. Você pode tentar enviar novamente.'}</p></Aviso> : null}
       <ol className="space-y-4">
         {prova.perguntas.map((pergunta, indice) => (
           <li key={pergunta.id} className="rounded-2xl border border-line bg-white p-5">
@@ -141,9 +154,13 @@ export function ProvaPage() {
         ))}
       </ol>
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={enviando || faltando > 0}>
-          {enviando ? 'Enviando…' : 'Enviar respostas'}
-        </Button>
+        {verificarEnvio ? (
+          <Button type="button" onClick={() => { setVerificarEnvio(false); dados.recarregar() }}>Verificar envio</Button>
+        ) : (
+          <Button type="submit" disabled={enviando || faltando > 0}>
+            {enviando ? 'Enviando…' : erro ? 'Tentar enviar novamente' : 'Enviar respostas'}
+          </Button>
+        )}
         {faltando ? <span className="text-sm text-ink/55">Falta{faltando === 1 ? '' : 'm'} {faltando} pergunta{faltando === 1 ? '' : 's'}.</span> : null}
       </div>
     </form>

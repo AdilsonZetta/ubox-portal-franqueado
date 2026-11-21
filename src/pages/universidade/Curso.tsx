@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Award, BookOpen, CheckCircle2, ClipboardList, Lock, RotateCcw } from 'lucide-react'
-import { Aviso, Carregando, Selo } from '../../components/ui'
+import { Aviso, Button, Carregando, Selo } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { estadoDoManual, formatarDuracao } from '../../lib/manuaisTrilha'
 import { podeModulo } from '../../lib/modulosAcesso'
@@ -20,36 +20,52 @@ export function CursoPage() {
   const dados = useUniversidade()
   const curso = dados.cursos.find((c) => c.id === cursoId)
   const prova = dados.provas.get(cursoId)
-  const emitindo = useRef(false)
-  const corrigindo = useRef(false)
+  const { recarregar } = dados
+  const { atualizar } = portal
+  const [tiqueCertificado, setTiqueCertificado] = useState(0)
+  const [tiqueCorrecao, setTiqueCorrecao] = useState(0)
+  const [erroCertificado, setErroCertificado] = useState('')
+  const [erroCorrecao, setErroCorrecao] = useState('')
   const selo = curso ? seloDoCurso(curso, dados) : null
   const estado = selo?.estado ?? null
   const certificado = portal.certificados.find((c) => c.trilhaId === cursoId && c.uid === user?.uid)
   const proprio = dados.participa && !comoFranqueado
+  const podeProcessar = proprio && !dados.erro
+  const aprovadaId = estado?.tipo === 'aprovado' ? estado.tentativa.id : null
+  const pendenteId = estado?.tipo === 'corrigindo' ? estado.tentativa.id : null
 
-  // Aprovado e sem certificado: emite (as rules conferem a tentativa aprovada).
-  useEffect(() => {
-    if (!user || !curso || !proprio || certificado || estado?.tipo !== 'aprovado' || emitindo.current) return
-    emitindo.current = true
-    void emitirCertificadoCurso(user, curso, estado.tentativa.id)
-      .then(() => portal.atualizar())
-      .catch(() => undefined)
-  }, [user, curso, proprio, certificado, estado, portal])
+  const emissao = useRef<{ id: string; tique: number } | null>(null)
+  const correcao = useRef<{ id: string; tique: number } | null>(null)
 
-  // Tentativa enviada mas sem correção (ex.: a conexão caiu): corrige agora.
   useEffect(() => {
-    if (!proprio || estado?.tipo !== 'corrigindo' || corrigindo.current) return
-    corrigindo.current = true
-    void corrigirTentativa(estado.tentativa.id)
-      .then(() => dados.recarregar())
-      .catch(() => undefined)
-      .finally(() => {
-        corrigindo.current = false
+    if (!user || !curso || !podeProcessar || certificado || !aprovadaId) return
+    if (emissao.current?.id === aprovadaId && emissao.current.tique === tiqueCertificado) return
+    const operacao = { id: aprovadaId, tique: tiqueCertificado }
+    emissao.current = operacao
+    setErroCertificado('')
+    void emitirCertificadoCurso(user, curso, aprovadaId)
+      .catch(() => {
+        if (emissao.current === operacao) setErroCertificado('Não foi possível confirmar a emissão do certificado.')
       })
-  }, [proprio, estado, dados])
+      .finally(() => void atualizar())
+  }, [user, curso, podeProcessar, certificado, aprovadaId, tiqueCertificado, atualizar])
+
+  useEffect(() => {
+    if (!podeProcessar || !pendenteId) return
+    if (correcao.current?.id === pendenteId && correcao.current.tique === tiqueCorrecao) return
+    const operacao = { id: pendenteId, tique: tiqueCorrecao }
+    correcao.current = operacao
+    setErroCorrecao('')
+    void corrigirTentativa(pendenteId)
+      .then(() => recarregar())
+      .catch(() => {
+        if (correcao.current === operacao) setErroCorrecao('Não foi possível corrigir sua última tentativa.')
+      })
+  }, [podeProcessar, pendenteId, tiqueCorrecao, recarregar])
 
   if (!user) return null
   if (dados.carregando) return <Carregando texto="Abrindo o curso…" />
+  if (dados.erro) return <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso>
   if (!curso) {
     return (
       <div className="mx-auto max-w-3xl space-y-3">
@@ -83,7 +99,12 @@ export function CursoPage() {
           {certificado ? (
             <Link to={`/certificado/${curso.id}`} className="font-semibold underline">Abrir certificado</Link>
           ) : (
-            'O certificado está sendo emitido.'
+            <span>{erroCertificado || 'O certificado está sendo emitido.'}{' '}
+              {proprio ? <Button type="button" variant="secondary" onClick={() => {
+                if (erroCertificado) setTiqueCertificado((t) => t + 1)
+                else void atualizar()
+              }}>{erroCertificado ? 'Tentar emitir novamente' : 'Atualizar certificado'}</Button> : null}
+            </span>
           )}
         </Aviso>
       ) : null}
@@ -150,7 +171,7 @@ export function CursoPage() {
             ) : estado?.tipo === 'aprovado' ? (
               <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-lime-dark"><Award className="h-4 w-4" aria-hidden="true" /> Aprovado.</p>
             ) : estado?.tipo === 'corrigindo' ? (
-              <p className="mt-3 text-sm text-ink/60">Sua última tentativa está sendo corrigida…</p>
+              erroCorrecao ? <Aviso tom="erro"><p role="alert">{erroCorrecao}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTiqueCorrecao((t) => t + 1)}>Tentar novamente</Button></Aviso> : <p role="status" className="mt-3 text-sm text-ink/60">Sua última tentativa está sendo corrigida…</p>
             ) : estado?.tipo === 'reestudo' ? (
               <div className="mt-3 space-y-2">
                 <Aviso>Você usou as {MAX_TENTATIVAS} chances deste ciclo. Conclua o reestudo do manual para liberar novas tentativas.</Aviso>
