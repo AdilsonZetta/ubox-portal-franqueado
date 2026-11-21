@@ -13,7 +13,7 @@ import {
   type Acesso,
   type SolicitacaoAcesso,
 } from '../../lib/senhas'
-import { listarEquipeDaUnidade } from '../../lib/gestao'
+import { useEquipeCofre } from './useEquipeCofre'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData, paraMillis } from '../../lib/format'
@@ -32,9 +32,13 @@ export function SolicitacoesPage() {
 
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoAcesso[]>([])
   const [acessos, setAcessos] = useState<Acesso[]>([])
-  const [equipeUnidade, setEquipeUnidade] = useState<{ uid: string; nome: string }[]>([])
+  const equipeCofre = useEquipeCofre(unidadeId)
+  const equipeUnidade = equipeCofre.membros
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [erroLista, setErroLista] = useState(false)
+  const [estadoSistemas, setEstadoSistemas] = useState<'carregando' | 'erro' | 'ok'>('carregando')
+  const [tentativa, setTentativa] = useState(0)
 
   // Filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('')
@@ -47,42 +51,35 @@ export function SolicitacoesPage() {
   const [solicitacaoRevogar, setSolicitacaoRevogar] = useState<SolicitacaoAcesso | null>(null)
 
   useEffect(() => {
-    if (!unidadeId) {
-      setEquipeUnidade([])
-      return
-    }
-    void listarEquipeDaUnidade(unidadeId)
-      .then((membros) => setEquipeUnidade(membros.map((m) => ({ uid: m.uid, nome: m.nome }))))
-      .catch(() => setEquipeUnidade([]))
-  }, [unidadeId])
-
-  useEffect(() => {
     if (!user || (!rede && !unidadeId)) {
       setCarregando(false)
       return
     }
     setCarregando(true)
+    setErroLista(false)
     const unsubSol = observarSolicitacoes(
       { rede, unidadeId },
       (itens) => {
+        setErroLista(false)
         setSolicitacoes(itens)
         setCarregando(false)
       },
-      (falha) => {
-        setErro(mensagemErro(falha))
+      () => {
+        setErroLista(true)
         setCarregando(false)
       },
     )
+    setEstadoSistemas('carregando')
     const unsubAc = observarAcessos(
       { rede, unidadeId },
-      setAcessos,
-      () => null,
+      (itens) => { setAcessos(itens); setEstadoSistemas('ok') },
+      () => setEstadoSistemas('erro'),
     )
     return () => {
       unsubSol()
       unsubAc()
     }
-  }, [user, rede, unidadeId])
+  }, [user, rede, unidadeId, tentativa])
 
   const solicitacoesFiltradas = useMemo(() => {
     return solicitacoes.filter((item) => {
@@ -104,11 +101,12 @@ export function SolicitacoesPage() {
     sol: SolicitacaoAcesso,
     novoStatus: 'aprovada' | 'recusada' | 'concluida',
   ) {
-    if (!user || comoFranqueado) return
+    if (!user || comoFranqueado || processandoId || estadoSistemas !== 'ok') return
     if (novoStatus === 'aprovada' && sol.tipo === 'revogar') {
       setSolicitacaoRevogar(sol)
       return
     }
+    if (novoStatus === 'aprovada' && !window.confirm(`Aprovar a solicitação de ${sol.solicitadoPorNome} para ${sol.acessoNome || 'um novo sistema'}?`)) return
     setProcessandoId(sol.id)
     setErro('')
     try {
@@ -149,7 +147,7 @@ export function SolicitacoesPage() {
           type="button"
           variant="primary"
           onClick={() => setModalNovaAberto(true)}
-          disabled={comoFranqueado}
+          disabled={comoFranqueado || estadoSistemas !== 'ok' || equipeCofre.carregando || equipeCofre.erro}
         >
           <span className="font-bold">+</span> Nova solicitação
         </Button>
@@ -158,12 +156,25 @@ export function SolicitacoesPage() {
 
       {comoFranqueado ? (
         <Aviso>
-          Modo de visualização do franqueado. As decisões e aprovações de solicitações ficam desabilitadas
-          nesta simulação.
+          Modo de visualização do franqueado. Nesta simulação, você pode consultar solicitações. Criar ou decidir pedidos fica desabilitado.
         </Aviso>
       ) : null}
 
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {equipeCofre.carregando ? <Carregando texto="Carregando a equipe da unidade…" /> : equipeCofre.erro ? (
+        <div className="space-y-2">
+          <Aviso tom="erro">Não foi possível carregar a equipe da unidade.</Aviso>
+          <Button type="button" variant="secondary" onClick={equipeCofre.recarregar}>Tentar novamente</Button>
+        </div>
+      ) : null}
+
+      {estadoSistemas === 'carregando' && !carregando ? <Carregando texto="Carregando os sistemas relacionados…" /> : null}
+      {estadoSistemas === 'erro' ? (
+        <div className="space-y-2">
+          <Aviso tom="erro">Não foi possível carregar os sistemas relacionados às solicitações.</Aviso>
+          <Button type="button" variant="secondary" onClick={() => setTentativa((n) => n + 1)}>Tentar novamente</Button>
+        </div>
+      ) : null}
 
       {/* Barra de Filtros */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-line bg-white p-3 shadow-sm">
@@ -204,6 +215,11 @@ export function SolicitacoesPage() {
       {carregando ? (
         <div className="p-8">
           <Carregando texto="Carregando solicitações…" />
+        </div>
+      ) : erroLista ? (
+        <div className="space-y-2 p-4">
+          <Aviso tom="erro">Não foi possível carregar as solicitações.</Aviso>
+          <Button type="button" variant="secondary" onClick={() => setTentativa((n) => n + 1)}>Tentar novamente</Button>
         </div>
       ) : solicitacoesFiltradas.length === 0 ? (
         <Vazio
@@ -258,7 +274,7 @@ export function SolicitacoesPage() {
                         type="button"
                         variant="primary"
                         onClick={() => handleDecidir(sol, 'aprovada')}
-                        disabled={emProcessamento}
+                        disabled={Boolean(processandoId) || estadoSistemas !== 'ok'}
                         className="text-xs py-1.5 px-3"
                       >
                         {emProcessamento ? 'Salvando…' : 'Aprovar'}
@@ -267,7 +283,7 @@ export function SolicitacoesPage() {
                         type="button"
                         variant="secondary"
                         onClick={() => handleDecidir(sol, 'recusada')}
-                        disabled={emProcessamento}
+                        disabled={Boolean(processandoId) || estadoSistemas !== 'ok'}
                         className="text-xs py-1.5 px-3"
                       >
                         Recusar
@@ -277,7 +293,7 @@ export function SolicitacoesPage() {
                           type="button"
                           variant="secondary"
                           onClick={() => handleDecidir(sol, 'concluida')}
-                          disabled={emProcessamento}
+                          disabled={Boolean(processandoId) || estadoSistemas !== 'ok'}
                           className="text-xs py-1.5 px-3"
                         >
                           Concluir

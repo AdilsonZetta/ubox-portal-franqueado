@@ -173,10 +173,12 @@ export const buscarSegredoSb: Operacoes['buscarSegredo'] = async (acessoId) => {
   try {
     const { data, error } = await requireSupabase().from('acesso_segredos')
       .select('login,senha,notas,atualizado_em,atualizado_por').eq('acesso_id', acessoId).maybeSingle()
-    const segredo = !error && data ? mapSegredoSb(data) : null
+    if (error) throw error
+    const segredo = data ? mapSegredoSb(data) : null
     if (segredo) return segredo
   } catch {
-    // A resposta original pode conter detalhes sensíveis.
+    // Mantém os detalhes da consulta fora dos erros exibidos.
+    throw new Error('Não foi possível consultar a credencial.')
   }
   throw new Error('Segredo não encontrado ou você não tem permissão para visualizá-lo.')
 }

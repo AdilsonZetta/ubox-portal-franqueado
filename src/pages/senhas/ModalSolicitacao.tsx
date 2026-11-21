@@ -77,9 +77,10 @@ export function ModalSolicitacao({
 
   async function submeter(evento: FormEvent) {
     evento.preventDefault()
+    if (salvando) return
     setErro('')
 
-    if (tipo !== 'novo_sistema' && !acessoId) {
+    if (tipo !== 'novo_sistema' && !selecionado) {
       setErro('Selecione o sistema da sua unidade para esta solicitação.')
       return
     }
@@ -100,6 +101,11 @@ export function ModalSolicitacao({
     } else {
       const membro = membrosEquipe.find((m) => m.uid === alvoUid)
       alvoNomeFinal = membro?.nome ?? ''
+    }
+
+    if ((tipo === 'pedir_acesso' || tipo === 'revogar') && !alvoNomeFinal) {
+      setErro('Selecione a pessoa da solicitação.')
+      return
     }
 
     setSalvando(true)

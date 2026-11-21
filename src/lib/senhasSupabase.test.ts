@@ -1,6 +1,28 @@
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
-import { describe, expect, it } from 'vitest'
-import { mapAcessoSb, mapEventoAcessoSb, mapSegredoSb, mapSolicitacaoAcessoSb } from './senhasSupabase'
+import { describe, expect, it, vi } from 'vitest'
+import { buscarSegredoSb, mapAcessoSb, mapEventoAcessoSb, mapSegredoSb, mapSolicitacaoAcessoSb } from './senhasSupabase'
+
+const { consultarSegredo } = vi.hoisted(() => ({ consultarSegredo: vi.fn() }))
+vi.mock('./supabase', () => ({
+  requireSupabase: () => ({
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: consultarSegredo }) }) }),
+  }),
+}))
+
+describe('leitura do segredo no Supabase', () => {
+  it('distingue falha de consulta de segredo indisponível sem propagar detalhes', async () => {
+    consultarSegredo.mockReset()
+    consultarSegredo
+      .mockResolvedValueOnce({ data: null, error: { message: 'detalhes da consulta' } })
+      .mockRejectedValueOnce(new Error('detalhes do transporte'))
+      .mockResolvedValueOnce({ data: null, error: null })
+
+    const mensagemFalha = 'Não foi possível consultar a credencial.'
+    await expect(buscarSegredoSb('acesso')).rejects.toThrow(mensagemFalha)
+    await expect(buscarSegredoSb('acesso')).rejects.toThrow(mensagemFalha)
+    await expect(buscarSegredoSb('acesso')).rejects.toThrow('Segredo não encontrado ou você não tem permissão para visualizá-lo.')
+  })
+})
 
 const data = '2026-11-20T17:00:00Z'
 const instante = Date.parse(data)

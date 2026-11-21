@@ -17,7 +17,7 @@ import {
   type Acesso,
   type SolicitacaoAcesso,
 } from '../../lib/senhas'
-import { listarEquipeDaUnidade } from '../../lib/gestao'
+import { useEquipeCofre } from './useEquipeCofre'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData, paraMillis } from '../../lib/format'
@@ -38,9 +38,14 @@ export function CofrePage() {
 
   const [acessos, setAcessos] = useState<Acesso[]>([])
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoAcesso[]>([])
-  const [equipeUnidade, setEquipeUnidade] = useState<{ uid: string; nome: string }[]>([])
+  const equipeCofre = useEquipeCofre(unidadeId)
+  const equipeUnidade = equipeCofre.membros
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [erroLista, setErroLista] = useState(false)
+  const [estadoSolicitacoes, setEstadoSolicitacoes] = useState<'carregando' | 'erro' | 'ok'>('carregando')
+  const [tentativaSolicitacoes, setTentativaSolicitacoes] = useState(0)
+  const [tentativa, setTentativa] = useState(0)
 
   // Filtros da tabela
   const [busca, setBusca] = useState('')
@@ -53,17 +58,6 @@ export function CofrePage() {
   const [solicitacaoRevogar, setSolicitacaoRevogar] = useState<SolicitacaoAcesso | null>(null)
   const [aprovandoId, setAprovandoId] = useState<string | null>(null)
 
-  // Carrega equipe da unidade
-  useEffect(() => {
-    if (!unidadeId) {
-      setEquipeUnidade([])
-      return
-    }
-    void listarEquipeDaUnidade(unidadeId)
-      .then((membros) => setEquipeUnidade(membros.map((m) => ({ uid: m.uid, nome: m.nome }))))
-      .catch(() => setEquipeUnidade([]))
-  }, [unidadeId])
-
   // Ouve acessos
   useEffect(() => {
     if (!user || (!rede && !unidadeId)) {
@@ -71,29 +65,32 @@ export function CofrePage() {
       return
     }
     setCarregando(true)
+    setErroLista(false)
     const unsub = observarAcessos(
       { rede, unidadeId },
       (itens) => {
+        setErroLista(false)
         setAcessos(itens)
         setCarregando(false)
       },
-      (falha) => {
-        setErro(mensagemErro(falha))
+      () => {
+        setErroLista(true)
         setCarregando(false)
       },
     )
     return unsub
-  }, [user, rede, unidadeId])
+  }, [user, rede, unidadeId, tentativa])
 
   // Ouve solicitações
   useEffect(() => {
     if (!user || (!rede && !unidadeId)) return
+    setEstadoSolicitacoes('carregando')
     return observarSolicitacoes(
       { rede, unidadeId },
-      setSolicitacoes,
-      (falha) => setErro(mensagemErro(falha)),
+      (itens) => { setSolicitacoes(itens); setEstadoSolicitacoes('ok') },
+      () => setEstadoSolicitacoes('erro'),
     )
-  }, [user, rede, unidadeId])
+  }, [user, rede, unidadeId, tentativaSolicitacoes])
 
   // Filtro de acessos
   const acessosFiltrados = useMemo(
@@ -151,7 +148,7 @@ export function CofrePage() {
             type="button"
             variant="secondary"
             onClick={() => setModalPedirAberto(true)}
-            disabled={comoFranqueado}
+            disabled={comoFranqueado || carregando || erroLista || equipeCofre.carregando || equipeCofre.erro}
           >
             Pedir acesso
           </Button>
@@ -161,7 +158,7 @@ export function CofrePage() {
             type="button"
             variant="primary"
             onClick={() => setModalNovoAberto(true)}
-            disabled={comoFranqueado}
+            disabled={comoFranqueado || equipeCofre.carregando || equipeCofre.erro}
           >
             <span className="font-bold">+</span> Novo sistema
           </Button>
@@ -184,6 +181,12 @@ export function CofrePage() {
       ) : null}
 
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {equipeCofre.carregando ? <Carregando texto="Carregando a equipe da unidade…" /> : equipeCofre.erro ? (
+        <div className="space-y-2">
+          <Aviso tom="erro">Não foi possível carregar a equipe da unidade.</Aviso>
+          <Button type="button" variant="secondary" onClick={equipeCofre.recarregar}>Tentar novamente</Button>
+        </div>
+      ) : null}
 
       {/* 4 KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -191,13 +194,13 @@ export function CofrePage() {
           <p className="text-xs font-bold uppercase tracking-wider text-ink/40">
             {rede ? 'Sistemas da rede' : 'Sistemas da unidade'}
           </p>
-          <p className="mt-1.5 text-3xl font-black text-ink">{kpis.totalSistemas}</p>
+          <p className="mt-1.5 text-3xl font-black text-ink">{carregando || erroLista ? '—' : kpis.totalSistemas}</p>
           <p className="mt-1 text-xs text-ink/50">{rede ? 'Homologados pela franqueadora' : 'Sistemas cadastrados no cofre'}</p>
         </article>
 
         <article className="rounded-2xl border border-line bg-white p-4 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-ink/40">Pessoas com acesso</p>
-          <p className="mt-1.5 text-3xl font-black text-ink">{kpis.totalPessoas}</p>
+          <p className="mt-1.5 text-3xl font-black text-ink">{carregando || erroLista || equipeCofre.carregando || equipeCofre.erro ? '—' : kpis.totalPessoas}</p>
           <p className="mt-1 truncate text-xs text-ink/50">{rede ? 'Rede Ubox' : unidadeNome}</p>
         </article>
 
@@ -208,14 +211,14 @@ export function CofrePage() {
               kpis.totalVencidas > 0 ? 'text-brand-dark' : 'text-ink'
             }`}
           >
-            {kpis.totalVencidas}
+            {carregando || erroLista ? '—' : kpis.totalVencidas}
           </p>
           <p className="mt-1 text-xs text-ink/50">Sem rotação há mais de 90 dias</p>
         </article>
 
         <article className="rounded-2xl border border-line bg-white p-4 shadow-sm">
           <p className="text-xs font-bold uppercase tracking-wider text-ink/40">Pedidos em aberto</p>
-          <p className="mt-1.5 text-3xl font-black text-ink">{kpis.pedidosEmAberto}</p>
+          <p className="mt-1.5 text-3xl font-black text-ink">{estadoSolicitacoes === 'ok' ? kpis.pedidosEmAberto : '—'}</p>
           <p className="mt-1 text-xs text-ink/50">Aguardando aprovação</p>
         </article>
       </div>
@@ -270,7 +273,12 @@ export function CofrePage() {
             <div className="p-8">
               <Carregando texto="Carregando sistemas do cofre…" />
             </div>
-          ) : acessosFiltrados.length === 0 ? (
+          ) : erroLista ? (
+        <div className="space-y-2 p-4">
+          <Aviso tom="erro">Não foi possível carregar os sistemas do cofre.</Aviso>
+          <Button type="button" variant="secondary" onClick={() => setTentativa((n) => n + 1)}>Tentar novamente</Button>
+        </div>
+      ) : acessosFiltrados.length === 0 ? (
             <div className="p-6">
               <Vazio
                 titulo="Nenhum sistema no cofre"
@@ -349,12 +357,17 @@ export function CofrePage() {
                 to="/senhas/solicitacoes"
                 className="text-xs font-semibold text-brand hover:underline"
               >
-                Ver todas ({solicitacoes.length})
+                Ver todas{estadoSolicitacoes === 'ok' ? ` (${solicitacoes.length})` : ''}
               </Link>
             </div>
 
             <div className="mt-3 space-y-3">
-              {solicitacoesRecentes.length === 0 ? (
+              {estadoSolicitacoes === 'carregando' ? <Carregando texto="Carregando solicitações…" /> : estadoSolicitacoes === 'erro' ? (
+                <div className="space-y-2">
+                  <Aviso tom="erro">Não foi possível carregar as solicitações.</Aviso>
+                  <Button type="button" variant="secondary" onClick={() => setTentativaSolicitacoes((n) => n + 1)}>Tentar novamente</Button>
+                </div>
+              ) : solicitacoesRecentes.length === 0 ? (
                 <p className="py-4 text-center text-xs text-ink/50">
                   Nenhuma solicitação de acesso recente.
                 </p>
@@ -376,13 +389,15 @@ export function CofrePage() {
                     {sol.status === 'aberta' && !comoFranqueado && user.papel === 'franqueado' && unidadeId ? (
                       <button
                         type="button"
-                        disabled={aprovandoId === sol.id}
+                        disabled={Boolean(aprovandoId) || carregando || erroLista}
                         onClick={() => {
                           void (async () => {
+                            if (aprovandoId || carregando || erroLista) return
                             if (sol.tipo === 'revogar') {
                               setSolicitacaoRevogar(sol)
                               return
                             }
+                            if (!window.confirm(`Aprovar a solicitação de ${sol.solicitadoPorNome} para ${sol.acessoNome || 'um novo sistema'}?`)) return
                             setAprovandoId(sol.id)
                             setErro('')
                             try {

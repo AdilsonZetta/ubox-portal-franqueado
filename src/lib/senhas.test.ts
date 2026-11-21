@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mapAcesso, mapEventoAcesso, mapSegredo, mapSolicitacaoAcesso } from './senhas'
+import { urlSistemaValida, mapAcesso, mapEventoAcesso, mapSegredo, mapSolicitacaoAcesso } from './senhas'
 
 describe('Central de Acessos — Mapeamento de dados', () => {
   it('mapeia acesso válido e ignora campos inválidos', () => {
@@ -73,4 +73,12 @@ describe('Central de Acessos — Mapeamento de dados', () => {
     expect(solicitacao).not.toBeNull()
     expect(solicitacao?.status).toBe('aberta')
   })
+})
+
+it('aceita URL HTTPS completa ou campo opcional em branco', () => {
+  expect(urlSistemaValida('')).toBe(true)
+  expect(urlSistemaValida('https://sistema.exemplo/entrar')).toBe(true)
+  expect(urlSistemaValida('https://')).toBe(false)
+  expect(urlSistemaValida('http://sistema.exemplo')).toBe(false)
+  expect(urlSistemaValida('https:///sistema.exemplo')).toBe(false)
 })

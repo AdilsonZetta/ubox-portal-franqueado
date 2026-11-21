@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useFocusTrap } from '../../lib/focusTrap'
-import { Aviso, Button, Campo, inputClass } from '../../components/ui'
+import { Aviso, Button, Campo, Carregando, inputClass } from '../../components/ui'
 import { buscarSegredo, type Acesso, type SolicitacaoAcesso } from '../../lib/senhas'
 
 interface ModalAprovarRevogacaoProps {
@@ -25,44 +25,38 @@ export function ModalAprovarRevogacao({
   const [carregandoSegredo, setCarregandoSegredo] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
+  const [erroSegredo, setErroSegredo] = useState(false)
+  const [tentativa, setTentativa] = useState(0)
+  const [confirmacaoSenha, setConfirmacaoSenha] = useState('')
+  const acessoId = acesso?.id
+  const solicitacaoId = solicitacao?.id
 
-  const senhaInputRef = useRef<HTMLInputElement>(null)
   const armadilhaRef = useFocusTrap<HTMLDivElement>(Boolean(aberto && solicitacao))
 
   useEffect(() => {
-    if (!aberto || !solicitacao || !acesso) {
-      setLogin('')
-      setNovaSenha('')
-      setNotas('')
-      setErro('')
-      setSalvando(false)
-      return
-    }
+    setLogin('')
+    setNovaSenha('')
+    setConfirmacaoSenha('')
+    setMostrarSenha(false)
+    setNotas('')
+    setErro('')
+  }, [aberto, solicitacaoId])
 
+  useEffect(() => {
+    if (!aberto || !acessoId) return
     let ativo = true
     setCarregandoSegredo(true)
-    setErro('')
-
-    buscarSegredo(acesso.id)
+    setErroSegredo(false)
+    void buscarSegredo(acessoId)
       .then((seg) => {
         if (!ativo) return
         setLogin(seg.login)
         setNotas(seg.notas)
       })
-      .catch(() => {
-        // Se não conseguir ler segredo anterior, prossegue com campos em branco
-      })
-      .finally(() => {
-        if (ativo) {
-          setCarregandoSegredo(false)
-          setTimeout(() => senhaInputRef.current?.focus(), 50)
-        }
-      })
-
-    return () => {
-      ativo = false
-    }
-  }, [aberto, solicitacao, acesso])
+      .catch(() => { if (ativo) setErroSegredo(true) })
+      .finally(() => { if (ativo) setCarregandoSegredo(false) })
+    return () => { ativo = false }
+  }, [aberto, acessoId, tentativa])
 
   useEffect(() => {
     if (!aberto) return
@@ -79,17 +73,23 @@ export function ModalAprovarRevogacao({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (salvando || carregandoSegredo || !acessoId) return
     if (!novaSenha.trim()) {
       setErro('A nova senha é obrigatória.')
       return
     }
+    if (novaSenha !== confirmacaoSenha) {
+      setErro('As duas senhas precisam ser iguais.')
+      return
+    }
+    if (erroSegredo && !window.confirm('O login e as notas atuais não foram carregados. Confirma gravar os valores informados neste formulário e revogar o acesso?')) return
     setSalvando(true)
     setErro('')
     try {
       await aoConfirmar(novaSenha.trim(), login.trim(), notas.trim())
       aoFechar()
-    } catch (falha: unknown) {
-      setErro(falha instanceof Error ? falha.message : 'Falha ao aprovar revogação.')
+    } catch {
+      setErro('Não foi possível revogar o acesso e registrar a nova senha. Tente novamente.')
     } finally {
       setSalvando(false)
     }
@@ -103,7 +103,7 @@ export function ModalAprovarRevogacao({
       aria-labelledby="titulo-modal-revogacao"
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
     >
-      <div className="w-full max-w-lg rounded-3xl border border-line bg-white p-6 shadow-xl">
+      <div className="max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-3xl border border-line bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between border-b border-line pb-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-wider text-brand">
@@ -139,8 +139,8 @@ export function ModalAprovarRevogacao({
         <div className="mt-4 rounded-2xl border border-brand/30 bg-brand/10 p-3 text-xs text-ink leading-relaxed">
           <p className="font-bold text-brand-dark">Proteção do cofre no desligamento:</p>
           <p className="mt-0.5 text-ink/80">
-            A aprovação encerra imediatamente o acesso de{' '}
-            <span className="font-semibold">{solicitacao.alvoNome || 'colaborador'}</span> e troca a senha no cofre no mesmo passo para que credenciais antigas não continuem ativas.
+            Depois de trocar a senha no sistema externo, a aprovação encerra o acesso de{' '}
+            <span className="font-semibold">{solicitacao.alvoNome || 'colaborador'}</span> no cofre e registra a nova senha no mesmo passo.
           </p>
           {acesso?.visivelParaEquipe ? (
             <p className="mt-2 font-semibold text-brand-dark" role="note">
@@ -155,6 +155,13 @@ export function ModalAprovarRevogacao({
           )}
         </div>
 
+        {!acessoId ? <Aviso tom="erro">O sistema desta solicitação não está disponível.</Aviso> : null}
+        {carregandoSegredo ? <Carregando texto="Carregando as credenciais atuais…" /> : erroSegredo ? (
+          <div className="mt-4 space-y-2">
+            <Aviso tom="erro">Não foi possível carregar o login e as notas atuais. Você pode tentar novamente ou preencher os campos antes de confirmar.</Aviso>
+            <Button type="button" variant="secondary" disabled={salvando} onClick={() => setTentativa((n) => n + 1)}>Tentar novamente</Button>
+          </div>
+        ) : null}
         <form onSubmit={handleSubmit} className="mt-4 space-y-4">
           <Campo label="Usuário / Login no sistema">
             <input
@@ -173,7 +180,6 @@ export function ModalAprovarRevogacao({
           >
             <div className="relative">
               <input
-                ref={senhaInputRef}
                 required
                 type={mostrarSenha ? 'text' : 'password'}
                 maxLength={500}
@@ -193,6 +199,11 @@ export function ModalAprovarRevogacao({
             </div>
           </Campo>
 
+          <Campo label="Confirme a nova senha">
+            <input required type="password" autoComplete="new-password" maxLength={500} className={inputClass}
+              value={confirmacaoSenha} onChange={(e) => setConfirmacaoSenha(e.target.value)} disabled={salvando} />
+          </Campo>
+
           <Campo label="Notas e orientações (opcional)">
             <textarea
               rows={2}
@@ -209,7 +220,7 @@ export function ModalAprovarRevogacao({
             <Button type="button" variant="secondary" onClick={aoFechar} disabled={salvando}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={salvando || !novaSenha.trim()}>
+            <Button type="submit" disabled={salvando || carregandoSegredo || !acessoId}>
               {salvando ? 'Aprovando e rotacionando…' : 'Revogar e trocar senha'}
             </Button>
           </div>
