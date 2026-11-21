@@ -1,5 +1,6 @@
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { useMemo, useRef, useState } from 'react'
+import { Upload } from 'lucide-react'
 import { Button, Carregando, Vazio } from '../../components/ui'
 import { carregarPortal, salvarCategoria, salvarDocumento } from '../../lib/api'
 import { useAuth } from '../../lib/auth'
@@ -53,6 +54,7 @@ function gruposDoPlano(plano: PlanoImportacao, pacote: PacoteConteudo) {
 export default function ImportarConteudo() {
   const { user } = useAuth()
   const { atualizar } = usePortal()
+  const [nomeArquivo, setNomeArquivo] = useState('')
   const [pacote, setPacote] = useState<PacoteConteudo | null>(null)
   const [existentes, setExistentes] = useState<ExistentesImportacao | null>(null)
   const [erros, setErros] = useState<string[]>([])
@@ -73,6 +75,15 @@ export default function ImportarConteudo() {
   ]) ?? [], [pacote])
   const temRestritos = grupos.some((grupo) => grupo.itens.some((item) => item.restrito))
   const total = grupos.reduce((soma, grupo) => soma + grupo.itens.length, 0)
+  const totaisPorAcao = useMemo(() => {
+    const totais = new Map<AcaoImportacao, number>()
+    for (const grupo of grupos) {
+      for (const item of grupo.itens) {
+        totais.set(item.acao, (totais.get(item.acao) ?? 0) + 1)
+      }
+    }
+    return totais
+  }, [grupos])
 
   async function preparar(arquivo?: File) {
     if (!user || ocupado.current) return
@@ -82,6 +93,7 @@ export default function ImportarConteudo() {
     setErros([])
     try {
       if (arquivo) {
+        setNomeArquivo(arquivo.name)
         setPacote(null)
         setRelatorio(null)
         setProgresso({ feito: 0, total: 0, chave: '' })
@@ -187,17 +199,28 @@ export default function ImportarConteudo() {
       </header>
 
       <section className={CARTAO}>
-        <label className="block text-sm font-semibold" htmlFor="arquivo-pacote">Arquivo do pacote</label>
-        <p id="limite-pacote" className="mt-1 text-sm text-ink-soft">Selecione um arquivo .json de até 5 MB.</p>
         <input
           id="arquivo-pacote" type="file" accept=".json,application/json" aria-describedby="limite-pacote" disabled={bloqueado}
-          className="mt-3 block w-full rounded-lg text-sm file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-paper file:px-3 file:py-2 file:font-semibold file:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-dark disabled:opacity-60"
+          className="peer sr-only"
           onChange={(e) => {
             const arquivo = e.currentTarget.files?.[0]
             e.currentTarget.value = ''
             if (arquivo) void preparar(arquivo)
           }}
         />
+        <label
+          htmlFor="arquivo-pacote"
+          className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-dashed border-line-control bg-paper p-4 transition-portal peer-enabled:hover:bg-surface peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-dark peer-disabled:cursor-not-allowed peer-disabled:opacity-60 motion-reduce:transition-none"
+        >
+          <span className="grid size-11 shrink-0 place-items-center rounded-[10px] bg-lime-tint text-lime-dark" aria-hidden="true">
+            <Upload className="size-5" />
+          </span>
+          <span className="min-w-0">
+            <span className="block text-sm font-semibold">{nomeArquivo ? 'Trocar arquivo' : 'Selecionar arquivo .json'}</span>
+            {nomeArquivo ? <span className="mt-1 block wrap-anywhere text-sm text-ink">{nomeArquivo}</span> : null}
+            <span id="limite-pacote" className="mt-1 block text-xs text-ink-soft">Limite de 5&nbsp;MB.</span>
+          </span>
+        </label>
         {lendo ? <div className="mt-3" role="status"><Carregando texto="Preparando a prévia…" /></div> : null}
         {erros.length > 0 ? (
           <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
@@ -216,24 +239,26 @@ export default function ImportarConteudo() {
         <section className={CARTAO} aria-labelledby="previa-pacote">
           <h2 id="previa-pacote" className="text-xl font-bold">Prévia da importação</h2>
           <p className="mt-1 break-words text-sm text-ink-soft">{pacote.titulo}</p>
-          <dl className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-            {grupos.map((grupo) => (
-              <div key={grupo.titulo} className="rounded-xl bg-paper p-3">
-                <dt className="text-sm text-ink-soft">{grupo.titulo}</dt>
-                <dd className="mt-1 text-lg font-bold tabular-nums">{grupo.itens.length}</dd>
-              </div>
-            ))}
-          </dl>
           {total ? (
             <>
+              <dl aria-label="Totais por ação" className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-5">
+                {(Object.keys(ROTULO_ACAO) as AcaoImportacao[]).map((acao) => (
+                  <div key={acao} className="rounded-xl bg-paper p-3">
+                    <dt className="text-sm text-ink-soft">{ROTULO_ACAO[acao]}</dt>
+                    <dd className="mt-1 text-lg font-bold tabular-nums">{totaisPorAcao.get(acao) ?? 0}</dd>
+                  </div>
+                ))}
+              </dl>
               <div className="mt-4 space-y-2">
                 {grupos.filter((grupo) => grupo.itens.length > 0).map((grupo) => (
-                  <details key={grupo.titulo} open className="rounded-xl border border-line px-3">
-                    <summary className="cursor-pointer rounded py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-brand-dark">{grupo.titulo}</summary>
+                  <details key={grupo.titulo} className="rounded-xl border border-line px-3">
+                    <summary className="min-h-11 cursor-pointer rounded py-3 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-brand-dark">
+                      {grupo.titulo} <span className="font-medium text-ink-soft">({grupo.itens.length})</span>
+                    </summary>
                     <ul className="divide-y divide-line border-t border-line text-sm">
                       {grupo.itens.map((item) => (
                         <li key={item.item.chave} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5">
-                          <div className="min-w-0 break-words">
+                          <div className="min-w-0 wrap-anywhere">
                             <span className="font-medium">{item.nome}</span>
                             {item.existente ? (
                               <p className="mt-1 text-xs text-ink-soft">

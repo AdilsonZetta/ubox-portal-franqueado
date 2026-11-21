@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, Clock, Lock, PlayCircle, RotateCcw } from 'lucide-react'
-import { Aviso, Button, Carregando, Selo, Vazio, cx } from '../../components/ui'
+import { Aviso, Button, Carregando, LinkBotao, Selo, Vazio, cx } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData, paraMillis } from '../../lib/format'
@@ -107,7 +107,11 @@ export function TrilhaManuaisPage() {
       {carregando ? <Carregando texto="Carregando a trilha…" /> : null}
 
       {!carregando && !erro && !todos.length ? (
-        <Vazio titulo="Nenhum manual na trilha ainda" texto="Quando a franqueadora montar a trilha, os manuais aparecem aqui na ordem certa." />
+        <Vazio
+          titulo="Nenhum manual na trilha ainda"
+          texto="Quando a franqueadora montar a trilha, os manuais aparecem aqui na ordem certa."
+          acao={<LinkBotao to="/biblioteca">Abrir documentos</LinkBotao>}
+        />
       ) : null}
 
       {todos.length ? (

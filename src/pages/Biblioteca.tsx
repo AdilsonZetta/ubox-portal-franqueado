@@ -3,7 +3,7 @@ import { BotaoCsv } from '../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { Lock } from 'lucide-react'
-import { Aviso, Campo, Carregando, LinkBotao, Selo, Vazio, inputClass } from '../components/ui'
+import { Aviso, Button, Campo, Carregando, LinkBotao, Selo, Vazio, inputClass } from '../components/ui'
 import { useAuth } from '../lib/auth'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { useVisao } from '../lib/visao'
@@ -91,23 +91,23 @@ export function BibliotecaPage() {
       {erro ? <Aviso tom="erro">{erro} <button type="button" onClick={() => void atualizar()} className="underline">Tentar novamente</button></Aviso> : null}
       {carregando ? <Carregando /> : null}
       {filhos.length ? (
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="flex flex-wrap gap-2">
           {filhos.map((categoria) => (
-            <Link key={categoria.id} to={`/biblioteca/${categoria.id}`} className="shrink-0 rounded-xl border border-line bg-surface px-3 py-2 text-sm hover:border-brand">
+            <Link key={categoria.id} to={`/biblioteca/${categoria.id}`} className="flex min-h-11 max-w-full items-center rounded-xl border border-line bg-surface px-3 py-2 text-sm wrap-anywhere hover:border-ink/20">
               {categoria.nome.replace(/^\d+\s*/, '')}
             </Link>
           ))}
         </div>
       ) : null}
       {filtros.length ? (
-      <div className="flex gap-2 overflow-x-auto" role="group" aria-label="Filtrar por tipo">
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtrar por tipo">
         {filtros.map((item) => (
           <button
             key={item}
             type="button"
             onClick={() => setFiltro(item)}
             aria-pressed={item === filtro}
-            className={item === filtro ? 'min-h-9 shrink-0 rounded-full bg-lime px-3 py-1 text-xs font-semibold text-ink' : 'min-h-9 shrink-0 rounded-full border border-line bg-surface px-3 py-1 text-xs font-semibold text-muted hover:bg-table-head'}
+            className={item === filtro ? 'min-h-11 rounded-full bg-lime px-3 py-1 text-xs font-semibold text-ink' : 'min-h-11 rounded-full border border-line bg-surface px-3 py-1 text-xs font-semibold text-muted hover:bg-table-head'}
           >
             {item === 'todos' ? 'Todos' : rotuloExibicao(item)}
           </button>
@@ -138,7 +138,7 @@ export function BibliotecaPage() {
                 <div key={documento.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0" aria-label={`${documento.titulo}: bloqueado pela trilha`}>
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-muted"><Lock className="h-4 w-4" aria-hidden="true" /></span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium text-muted">{documento.titulo}</span>
+                    <span className="block wrap-anywhere font-medium text-muted">{documento.titulo}</span>
                     <span className="text-xs text-muted">Abre na trilha de manuais, depois do manual anterior.</span>
                   </span>
                   <Link to="/manuais/trilha" className="shrink-0 text-xs font-semibold text-brand-dark hover:underline">Ver na trilha</Link>
@@ -150,7 +150,7 @@ export function BibliotecaPage() {
                 <Link to={`/documento/${documento.id}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-4 py-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-[10px] font-bold uppercase text-ink/70">{seloExibicao(tipoExibicao(documento))}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{documento.titulo}</span>
+                    <span className="block wrap-anywhere font-medium">{documento.titulo}</span>
                     <span className="text-xs text-muted">Atualizado {formatarData(documento.atualizadoEm)}</span>
                   </span>
                   <span className="hidden text-xs text-muted sm:block">v{documento.versao}</span>
@@ -168,7 +168,16 @@ export function BibliotecaPage() {
           })}
         </div>
       ) : !carregando && !erro ? (
-        <Vazio titulo={daPasta.length ? 'Nenhum resultado para este filtro' : 'Nenhum documento'} texto={daPasta.length ? 'Ajuste a busca ou o tipo de documento.' : gestor ? "Use Novo documento para cadastrar um material." : "A franqueadora publica os materiais oficiais nesta área."} />
+        <Vazio
+          titulo={daPasta.length ? 'Nenhum resultado para este filtro' : 'Nenhum documento'}
+          texto={daPasta.length ? 'Ajuste a busca ou o tipo de documento.' : gestor ? 'Use Novo documento para cadastrar um material.' : 'A franqueadora publica os materiais oficiais nesta área.'}
+          acao={daPasta.length ? (
+            <Button type="button" variant="secondary" onClick={() => {
+              setBusca('')
+              setFiltro('todos')
+            }}>Limpar filtros</Button>
+          ) : undefined}
+        />
       ) : null}
     </div>
   )
