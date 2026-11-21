@@ -1,4 +1,4 @@
-import { initializeApp, type FirebaseApp } from 'firebase/app'
+import { getApps, initializeApp, type FirebaseApp } from 'firebase/app'
 import { getAuth, connectAuthEmulator, type Auth } from 'firebase/auth'
 import { getFirestore, connectFirestoreEmulator, type Firestore } from 'firebase/firestore'
 import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check'
@@ -27,6 +27,44 @@ if (iniciar && firebaseApp && APPCHECK_SITE_KEY && typeof window !== 'undefined'
     provider: new ReCaptchaEnterpriseProvider(APPCHECK_SITE_KEY),
     isTokenAutoRefreshEnabled: true,
   })
+}
+
+
+const APP_AI = 'ubox-ai'
+let appAi: FirebaseApp | null | undefined
+
+/**
+ * App mínimo só para o AI Logic (Gemini). Não inicializa Auth nem Firestore.
+ * É preguiçoso: não roda no carregamento de /entrar, só quando a IA é pedida.
+ * No backend firebase reutiliza o app padrão (já com App Check, se houver).
+ */
+export function obterAppParaAi(): FirebaseApp | null {
+  if (firebaseApp) return firebaseApp
+  if (appAi !== undefined) return appAi
+  if (!resolved.configured) {
+    appAi = null
+    return null
+  }
+  if (typeof window === 'undefined') return null
+  try {
+    const existente = getApps().find((app) => app.name === APP_AI)
+    const app = existente ?? initializeApp(resolved.config, APP_AI)
+    if (APPCHECK_SITE_KEY) {
+      try {
+        initializeAppCheck(app, {
+          provider: new ReCaptchaEnterpriseProvider(APPCHECK_SITE_KEY),
+          isTokenAutoRefreshEnabled: true,
+        })
+      } catch {
+        // App Check já inicializado neste app (HMR ou segunda chamada).
+      }
+    }
+    appAi = app
+    return app
+  } catch {
+    appAi = null
+    return null
+  }
 }
 
 export function requireDb(): Firestore {
