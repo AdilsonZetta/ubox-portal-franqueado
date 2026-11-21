@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, PenLine } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, cx, inputClass } from '../../components/ui'
@@ -23,7 +23,7 @@ import {
 import { andamentoAcaoUnidade, assinarCiencia, criarAcao, decidirAcao, lerAuditoria, listarAcoesDaAuditoria } from '../../lib/auditoriaApi'
 import { useVisao } from '../../lib/visao'
 import { LinkEvidencia, ScoreSelo } from '../checklist/partes'
-import { Assinatura, ResultadoSelo, RodapeModulo8, StatusAcaoSelo, StatusAudSelo } from './partes'
+import { Assinatura, ResultadoSelo, StatusAcaoSelo, StatusAudSelo } from './partes'
 
 const COR = { ok: 'bg-lime/25 text-lime-dark', nao_ok: 'bg-red-100 text-red-800', na: 'bg-ink/5 text-ink/60', '': 'bg-ink/5 text-ink/40' }
 
@@ -41,10 +41,12 @@ export function AuditoriaPage() {
   const [execucao, setExecucao] = useState<ExecucaoChecklist | null>(null)
   const [execFalhou, setExecFalhou] = useState(false)
   const [carregando, setCarregando] = useState(true)
+  const [erroCarga, setErroCarga] = useState('')
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
   const [contestacao, setContestacao] = useState('')
   const [ciente, setCiente] = useState(false)
+  const gravacaoEmCurso = useRef(false)
   const [gravando, setGravando] = useState(false)
   const [novaAcao, setNovaAcao] = useState<Record<string, { descricao: string; responsavel: string; prazo: string }>>({})
   const [andamento, setAndamento] = useState<Record<string, { evidencia: string; comentario: string }>>({})
@@ -59,26 +61,27 @@ export function AuditoriaPage() {
   useEffect(() => {
     if (!user) return
     let ativo = true
+    setErroCarga('')
     setCarregando(true)
     void lerAuditoria(id)
       .then(async (a) => {
         if (!ativo) return
         if (!a) {
-          setErro('Auditoria não encontrada.')
+          setErroCarga('Auditoria não encontrada.')
           return
         }
-        setAuditoria(a)
         const [lista, exec] = await Promise.all([
           a.status === 'rascunho' ? Promise.resolve([]) : listarAcoesDaAuditoria(leComoGestor, a),
           a.checklistExecucaoId ? lerExecucao(a.checklistExecucaoId).catch(() => null) : Promise.resolve(null),
         ])
         if (!ativo) return
+        setAuditoria(a)
         setAcoes(lista)
         setExecucao(exec)
         // Sem leitura (permissão ou documento ausente), não dá para conferir o score gravado.
         setExecFalhou(Boolean(a.checklistExecucaoId) && !exec)
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
@@ -86,18 +89,22 @@ export function AuditoriaPage() {
   }, [id, user, leComoGestor, tique])
 
   if (!user) return null
-  const a = auditoria
+  const a = auditoria?.id === id ? auditoria : null
   const franqueadoDaUnidade = !!a && !comoFranqueado && user.papel === 'franqueado' && user.unidadeId === a.unidadeId
   const daUnidade = !!a && !comoFranqueado && (user.papel === 'franqueado' || user.papel === 'equipe_franqueado') && user.unidadeId === a.unidadeId
 
   async function darCiencia() {
+    if (gravacaoEmCurso.current || carregando) return
     if (!a) return
     if (!ciente) {
       setErro('Marque a declaração de ciência antes de assinar.')
       return
     }
-    setGravando(true)
     setErro('')
+    if (!window.confirm('Assinar a ciência e concluir esta auditoria?')) return
+    gravacaoEmCurso.current = true
+    setGravando(true)
+    setOk('')
     try {
       await assinarCiencia(user!, a.id, contestacao)
       setOk('Ciência assinada. A auditoria está concluída e não muda mais.')
@@ -105,11 +112,13 @@ export function AuditoriaPage() {
     } catch (falha) {
       setErro(mensagemErro(falha))
     } finally {
+      gravacaoEmCurso.current = false
       setGravando(false)
     }
   }
 
   async function criarPlano(itemId: string, itemTexto: string) {
+    if (gravacaoEmCurso.current || carregando) return
     if (!a) return
     const f = novaAcao[itemId] ?? { descricao: '', responsavel: '', prazo: '' }
     if (f.descricao.trim().length < 2 || f.responsavel.trim().length < 2 || !f.prazo) {
@@ -117,6 +126,10 @@ export function AuditoriaPage() {
       return
     }
     setErro('')
+    if (!window.confirm('Criar esta ação corretiva no plano da unidade?')) return
+    gravacaoEmCurso.current = true
+    setGravando(true)
+    setOk('')
     try {
       await criarAcao(user!, a, { itemId, itemTexto }, { descricao: f.descricao, responsavel: f.responsavel, prazo: deInputData(f.prazo) })
       setNovaAcao({ ...novaAcao, [itemId]: { descricao: '', responsavel: '', prazo: '' } })
@@ -124,10 +137,14 @@ export function AuditoriaPage() {
       recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      gravacaoEmCurso.current = false
+      setGravando(false)
     }
   }
 
   async function atualizar(acao: AcaoAuditoria, status: StatusAcao) {
+    if (gravacaoEmCurso.current || carregando) return
     const f = andamento[acao.id] ?? { evidencia: acao.evidenciaUrl, comentario: acao.comentarioUnidade }
     if (status === 'concluida_unidade' && !linkHttpsValido(f.evidencia.trim())) {
       setErro('Para concluir, informe o link https da evidência (foto no Drive, por exemplo).')
@@ -138,28 +155,43 @@ export function AuditoriaPage() {
       return
     }
     setErro('')
+    if (status === 'concluida_unidade' && !window.confirm('Enviar esta ação para validação da franqueadora?')) return
+    gravacaoEmCurso.current = true
+    setGravando(true)
+    setOk('')
     try {
       await andamentoAcaoUnidade(user!, acao.id, status, f.evidencia, f.comentario)
       setOk(status === 'concluida_unidade' ? 'Ação enviada para validação da franqueadora.' : 'Andamento registrado.')
       recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      gravacaoEmCurso.current = false
+      setGravando(false)
     }
   }
 
   async function decidir(acao: AcaoAuditoria, status: 'validada' | 'reaberta') {
+    if (gravacaoEmCurso.current || carregando) return
     const comentario = comentarioFr[acao.id] ?? ''
     if (status === 'reaberta' && comentario.trim().length < 2) {
       setErro('Para reabrir, explique à unidade o que falta.')
       return
     }
     setErro('')
+    if (!window.confirm(status === 'validada' ? 'Validar esta ação e encerrar a pendência?' : 'Reabrir esta ação para a unidade?')) return
+    gravacaoEmCurso.current = true
+    setGravando(true)
+    setOk('')
     try {
       await decidirAcao(user!, acao.id, status, comentario)
       setOk(status === 'validada' ? 'Ação validada.' : 'Ação reaberta para a unidade.')
       recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
+    } finally {
+      gravacaoEmCurso.current = false
+      setGravando(false)
     }
   }
 
@@ -171,10 +203,13 @@ export function AuditoriaPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-5">
       <p className="text-sm text-ink/50">{voltar} / Auditoria</p>
+      {comoFranqueado ? <Aviso>Simulação em modo de leitura. Assinaturas e alterações do plano ficam indisponíveis.</Aviso> : null}
       {carregando && !a ? <Carregando texto="Abrindo a auditoria…" /> : null}
+      {erroCarga ? <Aviso tom="erro"><span role="alert">{erroCarga}</span> <Button variant="ghost" onClick={recarregar}>Tentar novamente</Button></Aviso> : null}
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {gravando ? <Carregando texto="Gravando alteração…" /> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
-      {a ? (
+      {a && !erroCarga ? (
         <>
           <header className="rounded-3xl border border-line bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -217,6 +252,7 @@ export function AuditoriaPage() {
             {execFalhou ? (
               <p className="mt-3 flex items-center gap-1.5 text-xs font-semibold text-amber-800">
                 <AlertTriangle className="h-4 w-4" aria-hidden="true" /> Não foi possível conferir o checklist de referência: vale o score gravado na auditoria ({a.checklistScore}%).
+                <Button variant="ghost" disabled={carregando || gravando} onClick={recarregar}>Tentar novamente</Button>
               </p>
             ) : null}
             {!resultadoConfere ? <p className="mt-2 text-xs font-semibold text-red-700">O resultado gravado não confere com a pontuação.</p> : null}
@@ -277,7 +313,7 @@ export function AuditoriaPage() {
                   <span>Declaro que tomei ciência do resultado desta auditoria ({a.score}%, {a.resultado}). Assinar ciência não significa concordar; use a contestação se for o caso.</span>
                 </label>
                 <p className="font-serif text-xl italic">{user.nome}</p>
-                <Button type="button" onClick={() => void darCiencia()} disabled={gravando}>{gravando ? 'Assinando…' : 'Assinar ciência'}</Button>
+                <Button type="button" onClick={() => void darCiencia()} disabled={gravando || carregando}>Assinar ciência</Button>
               </div>
             ) : null}
             {a.status === 'aguardando_ciencia' && daUnidade && !franqueadoDaUnidade ? <p className="text-xs text-ink/55">Só o franqueado da unidade assina a ciência.</p> : null}
@@ -310,7 +346,7 @@ export function AuditoriaPage() {
                           <input className={inputClass} maxLength={1000} placeholder="Comentário da unidade" aria-label="Comentário da unidade" value={f.comentario} onChange={(e) => setAndamento({ ...andamento, [ac.id]: { ...f, comentario: e.target.value } })} />
                           <div className="flex gap-2 sm:col-span-2">
                             {proximos.map((s) => (
-                              <Button key={s} type="button" variant={s === 'concluida_unidade' ? 'primary' : 'secondary'} onClick={() => void atualizar(ac, s)}>
+                              <Button key={s} type="button" variant={s === 'concluida_unidade' ? 'primary' : 'secondary'} onClick={() => void atualizar(ac, s)} disabled={gravando || carregando}>
                                 {s === 'concluida_unidade' ? 'Concluir e enviar para validação' : `Marcar como ${ROTULO_STATUS_ACAO[s].toLowerCase()}`}
                               </Button>
                             ))}
@@ -320,8 +356,8 @@ export function AuditoriaPage() {
                       {gestor && ac.status === 'concluida_unidade' ? (
                         <div className="mt-3 flex flex-wrap items-center gap-2">
                           <input className={cx(inputClass, 'max-w-md flex-1 py-1.5')} maxLength={1000} placeholder="Comentário (obrigatório para reabrir)" aria-label="Comentário da franqueadora" value={comentarioFr[ac.id] ?? ''} onChange={(e) => setComentarioFr({ ...comentarioFr, [ac.id]: e.target.value })} />
-                          <Button type="button" onClick={() => void decidir(ac, 'validada')}>Validar</Button>
-                          <Button type="button" variant="danger" onClick={() => void decidir(ac, 'reaberta')}>Reabrir</Button>
+                          <Button type="button" onClick={() => void decidir(ac, 'validada')} disabled={gravando || carregando}>Validar</Button>
+                          <Button type="button" variant="danger" onClick={() => void decidir(ac, 'reaberta')} disabled={gravando || carregando}>Reabrir</Button>
                         </div>
                       ) : null}
                     </li>
@@ -341,7 +377,7 @@ export function AuditoriaPage() {
                           <input className={inputClass} maxLength={1000} placeholder="Ação corretiva" aria-label={`Ação para ${r.texto}`} value={f.descricao} onChange={(e) => setNovaAcao({ ...novaAcao, [r.itemId]: { ...f, descricao: e.target.value } })} />
                           <input className={inputClass} maxLength={120} placeholder="Responsável" aria-label={`Responsável por ${r.texto}`} value={f.responsavel} onChange={(e) => setNovaAcao({ ...novaAcao, [r.itemId]: { ...f, responsavel: e.target.value } })} />
                           <input type="date" className={inputClass} aria-label={`Prazo de ${r.texto}`} value={f.prazo} onChange={(e) => setNovaAcao({ ...novaAcao, [r.itemId]: { ...f, prazo: e.target.value } })} />
-                          <Button type="button" onClick={() => void criarPlano(r.itemId, r.texto)}>Criar ação</Button>
+                          <Button type="button" onClick={() => void criarPlano(r.itemId, r.texto)} disabled={gravando || carregando}>Criar ação</Button>
                         </div>
                       </div>
                     )
@@ -352,7 +388,6 @@ export function AuditoriaPage() {
           ) : null}
         </>
       ) : null}
-      <RodapeModulo8 />
     </div>
   )
 }
