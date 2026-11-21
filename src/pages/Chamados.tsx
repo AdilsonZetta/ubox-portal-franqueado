@@ -45,6 +45,8 @@ export function ChamadosPage() {
   const unidadeId = rede ? null : pessoa?.unidadeId ?? null
   const [chamados, setChamados] = useState<Chamado[]>([])
   const [erro, setErro] = useState('')
+  const [erroCarga, setErroCarga] = useState('')
+  const [tique, setTique] = useState(0)
   const [selecionado, setSelecionado] = useState<string | null>(null)
   const [filtros, setFiltros] = useState({ unidade: '', status: '', categoria: '', prioridade: '' })
   const [busca, setBusca] = useState('')
@@ -58,15 +60,15 @@ export function ChamadosPage() {
     if (!user || (!rede && !unidadeId)) return
     setCarregando(true)
     setChamados([])
-    setErro('')
+    setErroCarga('')
     return observarChamados({ rede, unidadeId }, (lista) => {
       setChamados(lista)
       setCarregando(false)
     }, (falha) => {
-      setErro(mensagemErro(falha))
+      setErroCarga(mensagemErro(falha))
       setCarregando(false)
     })
-  }, [user, rede, unidadeId])
+  }, [user, rede, unidadeId, tique])
 
   const visiveis = useMemo(() => {
     const agora = Date.now()
@@ -120,8 +122,8 @@ export function ChamadosPage() {
           {rede ? 'Todas as unidades. Assuma, responda e acompanhe o prazo.' : 'Pedidos da sua unidade para a franqueadora. Anexos entram como link.'}
         </p>
       </header>
-      {comoFranqueado ? <Aviso>Visualização do franqueado. Os botões de ação ficam disponíveis quando você volta para a franqueadora ou entra com a conta da unidade.</Aviso> : null}
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {comoFranqueado ? <Aviso>Simulação: você está vendo os chamados como {simulado?.nome}, mas não pode abrir, comentar ou mudar o status em nome da unidade. Para agir, volte à visão da franqueadora ou entre com a conta da unidade.</Aviso> : null}
+      {erroCarga ? <Aviso tom="erro"><p role="alert">{erroCarga}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTique((n) => n + 1)}>Tentar novamente</Button></Aviso> : null}
       {rede ? (
         <div className="grid gap-3 sm:grid-cols-3">
           <article className="rounded-2xl border border-line bg-white px-4 py-3">
@@ -153,7 +155,7 @@ export function ChamadosPage() {
           </select>
         </Campo>
         <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={soAtrasados} onChange={(e) => setSoAtrasados(e.target.checked)} /> Somente atrasados</label>
-        {!carregando ? <BotaoCsv arquivo="chamados" cabecalhos={['Título', 'Unidade', 'Status', 'Categoria', 'Prioridade', 'Abertura']}
+        {!carregando && !erroCarga ? <BotaoCsv arquivo="chamados" cabecalhos={['Título', 'Unidade', 'Status', 'Categoria', 'Prioridade', 'Abertura']}
           linhas={visiveis.map((c) => [c.titulo, c.unidadeNome, nomeStatus(c.status), nomeCategoria(c.categoria), nomePrioridade(c.prioridade), formatarData(c.criadoEm)])} /> : null}
       </div>
       {rede ? (
@@ -176,7 +178,15 @@ export function ChamadosPage() {
           className="space-y-3 rounded-2xl border border-line bg-white p-4"
           onSubmit={(evento) => {
             evento.preventDefault()
-            if (!user || comoFranqueado) return
+            if (!user || comoFranqueado || abrindo) return
+            if (form.titulo.trim().length < 2) {
+              setErro('Escreva um título com pelo menos 2 caracteres.')
+              return
+            }
+            if (form.descricao.trim().length < 2) {
+              setErro('Descreva o pedido (pelo menos 2 caracteres).')
+              return
+            }
             const anexos = form.links.split('\n').map((linha) => linha.trim()).filter(Boolean).map((url) => ({ nome: url, url }))
             if (anexos.some((anexo) => !anexo.url.startsWith('https://'))) {
               setErro('Cada anexo precisa ser um link que começa com https://')
@@ -208,13 +218,14 @@ export function ChamadosPage() {
           <Campo label="Anexos por link" hint="Um https:// por linha. Opcional.">
             <textarea className={inputClass} rows={2} value={form.links} onChange={(evento) => setForm({ ...form, links: evento.target.value })} />
           </Campo>
-          <Button type="submit" disabled={abrindo || comoFranqueado}>{abrindo ? 'Abrindo…' : 'Abrir chamado'}</Button>
+          {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
+          <Button type="submit" disabled={abrindo || comoFranqueado}>{abrindo ? 'Abrindo…' : erro ? 'Tentar abrir novamente' : 'Abrir chamado'}</Button>
         </form>
       )}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
         <div className="space-y-2">
           {carregando ? <Carregando texto="Carregando chamados…" /> : null}
-          {!carregando && !erro && !visiveis.length ? <Vazio titulo={chamados.length ? 'Nenhum resultado para este filtro' : 'Nenhum chamado'} texto={chamados.length ? 'Ajuste a busca ou os filtros.' : 'Quando um pedido for aberto, ele aparece aqui.'} /> : null}
+          {!carregando && !erroCarga && !visiveis.length ? <Vazio titulo={chamados.length ? 'Nenhum resultado para este filtro' : 'Nenhum chamado'} texto={chamados.length ? 'Ajuste a busca ou os filtros.' : 'Quando um pedido for aberto, ele aparece aqui.'} /> : null}
           {visiveis.map((chamado) => {
             const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, Date.now(), paraMillis(chamado.reabertoEm))
             return (
@@ -231,20 +242,34 @@ export function ChamadosPage() {
             )
           })}
         </div>
-        {atual ? <Detalhe chamado={atual} rede={rede} leitura={comoFranqueado} admin={ehAdmin} aoErro={setErro} /> : null}
+        {atual && !erroCarga ? <Detalhe chamado={atual} rede={rede} leitura={comoFranqueado} admin={ehAdmin} /> : null}
       </div>
     </div>
   )
 }
 
-function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; rede: boolean; leitura: boolean; admin: boolean; aoErro: (texto: string) => void }) {
+function Detalhe({ chamado, rede, leitura, admin }: { chamado: Chamado; rede: boolean; leitura: boolean; admin: boolean }) {
   const { user } = useAuth()
   const [eventos, setEventos] = useState<EventoChamado[]>([])
   const [texto, setTexto] = useState('')
   const [nota, setNota] = useState(5)
   const [equipe, setEquipe] = useState<{ uid: string; nome: string }[]>([])
+  const [erroAcao, setErroAcao] = useState('')
+  const [erroEventos, setErroEventos] = useState('')
+  const [tiqueEventos, setTiqueEventos] = useState(0)
+  const [seloStatus, setSeloStatus] = useState(0)
+  const [enviandoComentario, setEnviandoComentario] = useState(false)
+  const [agindo, setAgindo] = useState(false)
 
-  useEffect(() => observarEventos(chamado.id, setEventos, (falha) => aoErro(mensagemErro(falha))), [chamado.id, aoErro])
+  useEffect(() => {
+    setErroEventos('')
+    return observarEventos(chamado.id, setEventos, (falha) => setErroEventos(mensagemErro(falha)))
+  }, [chamado.id, tiqueEventos])
+
+  useEffect(() => {
+    setErroAcao('')
+    setTexto('')
+  }, [chamado.id])
 
   useEffect(() => {
     if (!admin) return
@@ -258,10 +283,14 @@ function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; 
   const podeEncerrar = Boolean(user && (user.papel === 'franqueado' || user.uid === chamado.abertoPor))
 
   async function agir(promessa: Promise<unknown>) {
+    setAgindo(true)
+    setErroAcao('')
     try {
       await promessa
     } catch (falha) {
-      aoErro(mensagemErro(falha))
+      setErroAcao(mensagemErro(falha))
+    } finally {
+      setAgindo(false)
     }
   }
 
@@ -285,6 +314,8 @@ function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; 
           ))}
         </ul>
       ) : null}
+      {erroEventos ? <Aviso tom="erro"><p role="alert">{erroEventos}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTiqueEventos((n) => n + 1)}>Tentar carregar a conversa novamente</Button></Aviso> : null}
+      {erroAcao ? <Aviso tom="erro"><p role="alert">{erroAcao}</p></Aviso> : null}
       <ol className="space-y-2 border-l border-line pl-3">
         {eventos.map((evento) => (
           <li key={evento.id}>
@@ -299,27 +330,36 @@ function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; 
           onSubmit={(evento) => {
             evento.preventDefault()
             const comentario = texto.trim()
-            if (!comentario) return
-            setTexto('')
-            void agir(comentarChamado(user, chamado.id, comentario))
+            if (!comentario) {
+              setErroAcao('Escreva um comentário antes de enviar.')
+              return
+            }
+            if (enviandoComentario || agindo) return
+            setEnviandoComentario(true)
+            setErroAcao('')
+            void comentarChamado(user, chamado.id, comentario)
+              .then(() => setTexto(''))
+              .catch((falha: unknown) => setErroAcao(mensagemErro(falha)))
+              .finally(() => setEnviandoComentario(false))
           }}
         >
           <Campo label="Comentário">
-            <textarea className={inputClass} rows={2} value={texto} onChange={(evento) => setTexto(evento.target.value)} />
+            <textarea className={inputClass} rows={2} value={texto} onChange={(evento) => { setTexto(evento.target.value); if (erroAcao) setErroAcao('') }} />
           </Campo>
-          <Button type="submit" variant="secondary">Enviar comentário</Button>
+          <Button type="submit" variant="secondary" disabled={enviandoComentario || agindo}>{enviandoComentario ? 'Enviando…' : erroAcao && texto.trim() ? 'Tentar enviar novamente' : 'Enviar comentário'}</Button>
         </form>
       )}
       {!leitura && rede ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => void agir(assumirChamado(user, chamado, { uid: user.uid, nome: user.nome }))}>Assumir</Button>
+          <Button variant="secondary" disabled={agindo} onClick={() => void agir(assumirChamado(user, chamado, { uid: user.uid, nome: user.nome }))}>Assumir</Button>
           {admin && equipe.length ? (
             <select
               className={`${inputClass} max-w-xs`}
               value=""
               onChange={(evento) => {
                 const pessoa = equipe.find((item) => item.uid === evento.target.value)
-                if (pessoa) void agir(assumirChamado(user, chamado, pessoa))
+                evento.currentTarget.value = ''
+                if (pessoa && window.confirm(`Atribuir este chamado a ${pessoa.nome}?`)) void agir(assumirChamado(user, chamado, pessoa))
               }}
             >
               <option value="">Atribuir a…</option>
@@ -327,11 +367,24 @@ function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; 
             </select>
           ) : null}
           <select
+            key={`${chamado.id}-${chamado.status}-${seloStatus}`}
             className={`${inputClass} max-w-xs`}
+            disabled={agindo}
             value={STATUS_FRANQUEADORA.includes(chamado.status) ? chamado.status : ''}
             onChange={(evento) => {
               const status = evento.target.value as StatusChamado
-              if (status && status !== chamado.status) void agir(mudarStatus(user, chamado, status))
+              if (!status || status === chamado.status) return
+              const rotulo = nomeStatus(status)
+              const ok = window.confirm(
+                status === 'resolvido'
+                  ? `Marcar este chamado como ${rotulo}? A unidade poderá fechar ou reabrir em seguida.`
+                  : `Alterar o status para ${rotulo}?`,
+              )
+              if (!ok) {
+                setSeloStatus((n) => n + 1)
+                return
+              }
+              void agir(mudarStatus(user, chamado, status))
             }}
           >
             {!STATUS_FRANQUEADORA.includes(chamado.status) ? <option value="">Status da franqueadora</option> : null}
@@ -348,11 +401,17 @@ function Detalhe({ chamado, rede, leitura, admin, aoErro }: { chamado: Chamado; 
                   {[1, 2, 3, 4, 5].map((valor) => <option key={valor} value={valor}>{valor}</option>)}
                 </select>
               </label>
-              <Button onClick={() => void agir(mudarStatus(user, chamado, 'fechado', { avaliacao: nota }))}>Fechar e avaliar</Button>
+              <Button disabled={agindo} onClick={() => {
+                if (!window.confirm(`Fechar este chamado com a nota ${nota}?`)) return
+                void agir(mudarStatus(user, chamado, 'fechado', { avaliacao: nota }))
+              }}>Fechar e avaliar</Button>
             </>
           ) : null}
           {chamado.status === 'fechado' || chamado.status === 'resolvido' ? (
-            <Button variant="secondary" onClick={() => void agir(mudarStatus(user, chamado, 'aberto'))}>Reabrir</Button>
+            <Button variant="secondary" disabled={agindo} onClick={() => {
+              if (!window.confirm('Reabrir este chamado? Ele volta para a fila da franqueadora.')) return
+              void agir(mudarStatus(user, chamado, 'aberto'))
+            }}>Reabrir</Button>
           ) : null}
         </div>
       ) : null}
