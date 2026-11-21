@@ -8,7 +8,7 @@ import { mensagemErro } from '../../lib/errors'
 import { formatarDia } from '../../lib/format'
 import { formatarReais, hojeISO, kpisClientes, resumoCobrancas, validarCliente, type ClienteForm } from '../../lib/cliente'
 import { criarCliente } from '../../lib/clienteApi'
-import { Numero, RodapeModulo12, SituacaoSelo, useClientes, type UsoClientes } from './partes'
+import { Numero, SituacaoSelo, useClientes, type UsoClientes } from './partes'
 
 export function ClientesPage() {
   const dados = useClientes()
@@ -27,11 +27,10 @@ export function ClientesPage() {
     .sort((a, b) => (ordem === 'atraso' ? (b.cobranca?.atrasadas ?? 0) - (a.cobranca?.atrasadas ?? 0) : 0)
       || a.c.nome.localeCompare(b.c.nome, 'pt-BR'))
 
-  if (!dados.carregando && !dados.participa) {
+  if (!dados.participa) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <Vazio titulo="Painel do Cliente é da unidade" texto="Os cadastros e contratos dos locatários ficam só com a unidade (franqueado e equipe com o módulo). A franqueadora, inclusive o admin e a simulação, não acessa estes dados." />
-        <RodapeModulo12 />
       </div>
     )
   }
@@ -47,9 +46,9 @@ export function ClientesPage() {
         <Button type="button" onClick={() => setNovo(true)}><Plus className="h-4 w-4" aria-hidden="true" /> Novo cliente</Button>
       </header>
 
-      {dados.erro ? <Aviso tom="erro">{dados.erro}</Aviso> : null}
+      {dados.erro ? <div className="space-y-2"><Aviso tom="erro">Não foi possível carregar os clientes.</Aviso><Button type="button" variant="secondary" onClick={dados.recarregar}>Tentar novamente</Button></div> : null}
       {novo ? <NovoCliente dados={dados} onFechar={() => setNovo(false)} /> : null}
-      {dados.carregando ? <Carregando texto="Carregando os clientes…" /> : (
+      {dados.carregando ? <Carregando texto="Carregando os clientes…" /> : dados.erro ? null : (
         <>
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Numero rotulo="Clientes ativos" valor={String(k.ativos)} dica={`${k.linksAtivos} com link ativo`} />
@@ -102,7 +101,6 @@ export function ClientesPage() {
           </section>
         </>
       )}
-      <RodapeModulo12 />
     </div>
   )
 }
@@ -133,6 +131,7 @@ function NovoCliente({ dados, onFechar }: { dados: UsoClientes; onFechar: () => 
   const [salvando, setSalvando] = useState(false)
 
   async function gravar() {
+    if (salvando) return
     if (!dados.pessoa) return
     const erros = validarCliente(f)
     if (erros.length) { setErro(erros.join(' ')); return }
@@ -157,7 +156,7 @@ function NovoCliente({ dados, onFechar }: { dados: UsoClientes; onFechar: () => 
       <p className="text-xs text-ink/55">O link do cliente nasce desativado; ative quando for enviar.</p>
       <div className="flex gap-2">
         <Button type="button" onClick={() => void gravar()} disabled={salvando}>{salvando ? 'Salvando…' : 'Cadastrar e abrir'}</Button>
-        <Button type="button" variant="ghost" onClick={onFechar}>Cancelar</Button>
+        <Button type="button" variant="ghost" onClick={onFechar} disabled={salvando}>Cancelar</Button>
       </div>
     </section>
   )

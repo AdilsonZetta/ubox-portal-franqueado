@@ -197,16 +197,27 @@ export const ordenarVisitas = (l: Visita[]) => [...l].sort((a, b) => `${b.data}$
 
 export const ordenarRecados = (l: Recado[]) => [...l].sort((a, b) => b.criadoEmMs - a.criadoEmMs)
 
+function dataValida(dia: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dia) || dia.startsWith('0000-')) return false
+  const data = new Date(`${dia}T00:00:00Z`)
+  return Number.isFinite(data.getTime()) && data.toISOString().slice(0, 10) === dia
+}
+
+function valorInformado(valor: string): boolean {
+  return /\d/.test(valor) && /^(?:R\$\s*)?[\d.,-]+$/i.test(valor.trim())
+}
+
 export function validarCliente(f: ClienteForm): string[] {
   const erros: string[] = []
   if (f.nome.trim().length < 2) erros.push('Informe o nome do cliente.')
   if (!/^[0-9 ()+.-]{0,30}$/.test(f.telefone.trim())) erros.push('Telefone só com números, espaços, parênteses, + . e -.')
   if (f.email.trim() && !/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(f.email.trim())) erros.push('E-mail inválido.')
   if (!f.box.trim()) erros.push('Informe o box.')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(f.contratoInicio)) erros.push('Informe o início do contrato.')
-  if (f.contratoFim && f.contratoFim < f.contratoInicio) erros.push('O fim do contrato não pode ser antes do início.')
+  if (!dataValida(f.contratoInicio)) erros.push('Informe o início do contrato.')
+  if (f.contratoFim && !dataValida(f.contratoFim)) erros.push('Informe uma data válida para o fim do contrato.')
+  else if (f.contratoFim && f.contratoFim < f.contratoInicio) erros.push('O fim do contrato não pode ser antes do início.')
   const v = centavos(f.valorMensal)
-  if (!f.valorMensal.trim() || !Number.isFinite(v) || v < 0 || v > 100_000_000) erros.push('Mensalidade inválida.')
+  if (!valorInformado(f.valorMensal) || !Number.isFinite(v) || v < 0 || v > 100_000_000) erros.push('Mensalidade inválida.')
   const d = Number(f.diaVencimento)
   if (!Number.isInteger(d) || d < 1 || d > 28) erros.push('Dia de vencimento entre 1 e 28.')
   return erros
@@ -214,10 +225,10 @@ export function validarCliente(f: ClienteForm): string[] {
 
 export function validarCobranca(c: { competencia: string; valor: string; vencimento: string }): string[] {
   const erros: string[] = []
-  if (!/^\d{4}-\d{2}$/.test(c.competencia)) erros.push('Informe o mês de referência.')
+  if (!dataValida(`${c.competencia}-01`)) erros.push('Informe o mês de referência.')
   const v = centavos(c.valor)
-  if (!Number.isFinite(v) || v <= 0) erros.push('Valor inválido.')
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(c.vencimento)) erros.push('Informe o vencimento.')
+  if (!valorInformado(c.valor) || !Number.isFinite(v) || v <= 0) erros.push('Valor inválido.')
+  if (!dataValida(c.vencimento)) erros.push('Informe o vencimento.')
   return erros
 }
 

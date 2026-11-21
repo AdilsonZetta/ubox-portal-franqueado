@@ -10,6 +10,7 @@ import {
   situacao,
   tokenValido,
   validarCliente,
+  validarCobranca,
   validarRecado,
   vencimentoDe,
   type Cliente,
@@ -86,6 +87,9 @@ describe('módulo 12: painel do cliente', () => {
     expect(validarCliente({ ...f, contratoFim: '2026-10-01' })).toHaveLength(1)
     expect(validarCliente({ ...f, email: 'x@' })).toHaveLength(1)
     expect(validarCliente({ ...f, valorMensal: '' })).toHaveLength(1)
+    expect(validarCliente({ ...f, valorMensal: 'R$' })).toContain('Mensalidade inválida.')
+    expect(validarCliente({ ...f, contratoInicio: '2026-11-31' })).toContain('Informe o início do contrato.')
+    expect(validarCliente({ ...f, contratoFim: '2027-02-29' })).toContain('Informe uma data válida para o fim do contrato.')
     expect(validarRecado('Olá', true, '')).toHaveLength(1)
     expect(validarRecado('Olá', true, 'Grok Bot')).toEqual([])
   })
@@ -104,4 +108,10 @@ describe('módulo 12: competência', () => {
     const { formatarCompetencia } = await import('./cliente')
     expect(formatarCompetencia('2026-12')).toBe('Dezembro de 2026')
   })
+})
+
+it('valida o mês e o dia de vencimento da cobrança', () => {
+  expect(validarCobranca({ competencia: '2026-13', vencimento: '2026-12-10', valor: '10' })).toContain('Informe o mês de referência.')
+  expect(validarCobranca({ competencia: '2026-02', vencimento: '2026-02-30', valor: '10' })).toContain('Informe o vencimento.')
+  expect(validarCobranca({ competencia: '2028-02', vencimento: '2028-02-29', valor: '10' })).toEqual([])
 })
