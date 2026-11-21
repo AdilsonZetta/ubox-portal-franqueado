@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CheckCircle2, Clock, Eye } from 'lucide-react'
 import { Anexos, DocumentoView } from '../../components/DocumentoView'
-import { Aviso, Button, Carregando, Selo } from '../../components/ui'
+import { Aviso, Button, Carregando, LinkBotao, Selo } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData } from '../../lib/format'
@@ -29,6 +29,13 @@ export function EstudoManualPage() {
   const { documentoId = '' } = useParams()
   const { user } = useAuth()
   const { comoFranqueado } = useVisao()
+  if (!user) return null
+  return <EstudoPorManual key={JSON.stringify([documentoId, user.uid, comoFranqueado])} documentoId={documentoId} />
+}
+
+function EstudoPorManual({ documentoId }: { documentoId: string }) {
+  const { user } = useAuth()
+  const { comoFranqueado } = useVisao()
   const portal = usePortal()
   const documento = portal.documentos.find((item) => item.id === documentoId)
   const [itens, setItens] = useState<ItemTrilhaManual[]>([])
@@ -36,6 +43,10 @@ export function EstudoManualPage() {
   const [progresso, setProgresso] = useState<ProgressoManual | null>(null)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [erroCarga, setErroCarga] = useState('')
+  const [erroInicio, setErroInicio] = useState('')
+  const [tentativa, setTentativa] = useState(0)
+  const [iniciando, setIniciando] = useState(false)
   const [aviso, setAviso] = useState('')
   const [inicioLocal, setInicioLocal] = useState<number | null>(null)
   const [agora, setAgora] = useState(() => Date.now())
@@ -53,58 +64,58 @@ export function EstudoManualPage() {
   const monitorar = Boolean(participa && item && progresso && !concluido)
   const restante = item && inicioLocal !== null ? segundosRestantes(inicioLocal, agora, item.tempoMinimoSeg) : item?.tempoMinimoSeg ?? 0
 
-  // Ao trocar de manual, nada do anterior fica na tela.
-  useEffect(() => {
-    setProgresso(null)
-    setInicioLocal(null)
-    setAviso('')
-    setErro('')
-    fora.current = false
-  }, [documentoId])
-
   // Carrega a trilha e o progresso da pessoa.
   useEffect(() => {
     if (!user) return
     let ativo = true
     setCarregando(true)
+    setErroCarga('')
     void Promise.all([listarTrilhaManuais(), participa ? listarMeuProgresso(user.uid) : Promise.resolve([])])
       .then(([trilha, meus]) => {
         if (!ativo) return
         setItens(ordenarTrilha(trilha))
         setProgressos(meus)
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
     }
-  }, [user, participa, documentoId])
+  }, [user, participa, tentativa])
 
   // Começa (ou recomeça) o cronômetro no servidor e no cliente.
   const comecar = useCallback(async () => {
     if (!user || !item || reiniciando.current) return
     reiniciando.current = true
+    setIniciando(true)
+    setErroInicio('')
     setInicioLocal(null)
     try {
       const atual = await iniciarOuReiniciar(user, item)
+      if (!atual) {
+        setErroInicio('O cronômetro não foi confirmado pelo servidor.')
+        return
+      }
       setProgresso(atual)
-      if (atual && atual.status !== 'concluido' && !fora.current) {
+      if (atual.status !== 'concluido' && !fora.current) {
         // O início local é marcado depois da gravação: o servidor sempre conta pelo menos o mesmo tempo.
         setInicioLocal(Date.now())
         setAgora(Date.now())
       }
     } catch (falha) {
-      setErro(mensagemErro(falha))
+      setErroInicio(mensagemErro(falha))
     } finally {
       reiniciando.current = false
+      setIniciando(false)
     }
   }, [user, item])
 
+  const podeIniciar = Boolean(participa && documento && item?.ativo && estado && estado !== 'bloqueado' && !carregando && !erroCarga)
   useEffect(() => {
-    if (!participa || !item || !estado || estado === 'bloqueado') return
+    if (!podeIniciar) return
     void comecar()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [participa, item?.documentoId, estado === 'bloqueado'])
+  }, [podeIniciar])
 
   // Sair da tela zera: aba oculta ou janela sem foco (exceto foco num vídeo ou manual interativo da própria página).
   // O cronômetro fica parado enquanto a pessoa está fora e recomeça do zero quando ela volta.
@@ -115,7 +126,7 @@ export function EstudoManualPage() {
       if (fora.current) return
       fora.current = true
       setInicioLocal(null)
-      setAviso('Você saiu da tela, o tempo recomeçou. Ele volta a contar do zero quando você estiver aqui.')
+      setAviso('Você saiu da tela. Ao voltar, o tempo de leitura começa do zero.')
     }
     const voltou = () => {
       if (!fora.current || !naTela()) return
@@ -176,11 +187,19 @@ export function EstudoManualPage() {
 
   if (!user) return null
   if (carregando || (portal.carregando && !documento)) return <Carregando texto="Abrindo o manual…" />
+  if (erroCarga) return (
+    <div className="mx-auto max-w-3xl space-y-3">
+      <Aviso tom="erro">{erroCarga}{' '}
+        <Button type="button" variant="ghost" onClick={() => setTentativa((valor) => valor + 1)}>Tentar novamente</Button>
+      </Aviso>
+      <LinkBotao to="/manuais/trilha">Voltar para a trilha</LinkBotao>
+    </div>
+  )
   if (!item || !item.ativo) {
     return (
       <div className="mx-auto max-w-3xl space-y-3">
         <Aviso tom="erro">Este manual não está na trilha.</Aviso>
-        <Link to="/manuais/trilha" className="text-sm font-semibold text-brand-dark">Voltar para a trilha</Link>
+        <LinkBotao to="/manuais/trilha">Voltar para a trilha</LinkBotao>
       </div>
     )
   }
@@ -188,11 +207,19 @@ export function EstudoManualPage() {
     return (
       <div className="mx-auto max-w-3xl space-y-3">
         <Aviso>Este manual abre quando você concluir o anterior da trilha.</Aviso>
-        <Link to="/manuais/trilha" className="text-sm font-semibold text-brand-dark">Voltar para a trilha</Link>
+        <LinkBotao to="/manuais/trilha">Voltar para a trilha</LinkBotao>
       </div>
     )
   }
-  if (!documento) return <Aviso tom="erro">O documento deste manual não está disponível para o seu usuário.</Aviso>
+  if (!documento) return (
+    <div className="mx-auto max-w-3xl space-y-3">
+      <Aviso tom="erro">
+        {portal.erro || 'O documento deste manual não está disponível para o seu usuário.'}
+        {portal.erro ? <Button type="button" variant="ghost" onClick={() => void portal.atualizar()}>Tentar novamente</Button> : null}
+      </Aviso>
+      <LinkBotao to="/manuais/trilha">Voltar para a trilha</LinkBotao>
+    </div>
+  )
 
   const percentual = item.tempoMinimoSeg ? Math.round(((item.tempoMinimoSeg - restante) / item.tempoMinimoSeg) * 100) : 100
 
@@ -215,7 +242,7 @@ export function EstudoManualPage() {
             ) : participa ? (
               <p className="text-xs text-ink/60">
                 {inicioLocal === null ? (
-                  'Cronômetro parado. Volte para esta tela para ele contar do zero.'
+                  iniciando ? 'Iniciando o cronômetro…' : erroInicio ? 'O cronômetro está parado.' : 'Ao voltar para esta tela, o cronômetro começa do zero.'
                 ) : restante > 0 ? (
                   <>
                     Faltam <strong className="text-ink">{formatarDuracao(restante)}</strong> de {formatarDuracao(item.tempoMinimoSeg)}. Fique nesta tela: se sair, o tempo recomeça.
@@ -251,6 +278,11 @@ export function EstudoManualPage() {
       </div>
 
       {aviso ? <Aviso>{aviso}</Aviso> : null}
+      {erroInicio ? (
+        <Aviso tom="erro">Falha ao iniciar o cronômetro. {erroInicio}{' '}
+          <Button type="button" variant="ghost" onClick={() => void comecar()}>Tentar iniciar novamente</Button>
+        </Aviso>
+      ) : null}
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
 
       <article className="rounded-3xl border border-line bg-white p-5 shadow-sm md:p-8">

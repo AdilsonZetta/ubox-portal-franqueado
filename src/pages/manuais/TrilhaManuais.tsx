@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CheckCircle2, Clock, Lock, PlayCircle, RotateCcw } from 'lucide-react'
-import { Aviso, Carregando, Selo, Vazio, cx } from '../../components/ui'
+import { Aviso, Button, Carregando, Selo, Vazio, cx } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData, paraMillis } from '../../lib/format'
@@ -34,6 +34,7 @@ export function TrilhaManuaisPage() {
   const [equipe, setEquipe] = useState<ProgressoManual[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState('')
+  const [tentativa, setTentativa] = useState(0)
 
   useEffect(() => {
     if (!user || !pessoa) {
@@ -60,7 +61,7 @@ export function TrilhaManuaisPage() {
     return () => {
       ativo = false
     }
-  }, [user, pessoa, comoFranqueado])
+  }, [user, pessoa, comoFranqueado, tentativa])
 
   const etapas = useMemo(() => montarTrilhaDoUsuario(itens, meus), [itens, meus])
   const todos = etapas.flatMap((etapa) => etapa.itens)
@@ -93,7 +94,11 @@ export function TrilhaManuaisPage() {
         ) : null}
       </header>
 
-      {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
+      {erro ? (
+        <Aviso tom="erro">{erro}{' '}
+          <Button type="button" variant="ghost" onClick={() => setTentativa((valor) => valor + 1)}>Tentar novamente</Button>
+        </Aviso>
+      ) : null}
       {comoFranqueado ? <Aviso>Simulação: você vê a trilha como {simulado?.nome}. Nada é gravado em nome dessa pessoa.</Aviso> : null}
       {!fazTrilha(pessoa) && !comoFranqueado ? (
         <Aviso>A trilha é feita pelas unidades. Aqui você vê como ela aparece; o acompanhamento fica na Gestão da trilha.</Aviso>
@@ -101,7 +106,7 @@ export function TrilhaManuaisPage() {
 
       {carregando ? <Carregando texto="Carregando a trilha…" /> : null}
 
-      {!carregando && !todos.length ? (
+      {!carregando && !erro && !todos.length ? (
         <Vazio titulo="Nenhum manual na trilha ainda" texto="Quando a franqueadora montar a trilha, os manuais aparecem aqui na ordem certa." />
       ) : null}
 

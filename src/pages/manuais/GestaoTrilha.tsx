@@ -363,7 +363,6 @@ export function GestaoTrilhaPage() {
         </section>
       ) : null}
 
-      <p className="text-center text-[11px] text-muted">Módulo 4 construído e revisado pelo Grok Bot no Cursor (o Antigravity estava sem cota nesta rodada).</p>
     </div>
   )
 }
