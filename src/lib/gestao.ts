@@ -10,6 +10,7 @@ import {
   atualizarUnidadeSb,
   atualizarUsuarioSb,
   criarContaSb,
+  type ContaCriadaSb,
   enviarRedefinicaoSb,
   listarEquipeDaUnidadeSb,
   listarUnidadesSb,
@@ -57,23 +58,22 @@ export async function criarUnidade(dados: {
   email: string
   modulosLiberados: string[]
   criadoPor: string
-}): Promise<{ id: string; senha: string; uid: string }> {
-  const senha = senhaProvisoria()
+}): Promise<{ id: string } & (ContaCriadaSb | { senha: string; uid: string })> {
   const modulos = dados.modulosLiberados.filter((slug) => SLUGS_FRANQUEADO.includes(slug))
   const id = `un-${crypto.randomUUID().slice(0, 8)}`
   if (BACKEND === 'supabase') {
-    const uid = await criarContaSb({
+    const conta = await criarContaSb({
       tipo: 'unidade',
       unidadeId: id,
       nome: dados.nome.trim(),
       cidade: dados.cidade.trim(),
       responsavel: dados.responsavel.trim(),
       email: dados.email.trim(),
-      senha,
       modulosLiberados: modulos,
     })
-    return { id, senha, uid }
+    return { id, ...conta }
   }
+  const senha = senhaProvisoria()
   const banco = requireDb()
   const uid = await criarLoginEGravar(dados.email, senha, async (novoUid) => {
     await runTransaction(banco, async (tx) => {
@@ -178,13 +178,11 @@ export async function listarUnidades(): Promise<Unidade[]> {
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
 }
 
-export async function criarUsuarioEquipe(conta: Omit<NovaConta, 'senha'> & { senha?: string }): Promise<string> {
-  const senha = conta.senha || senhaProvisoria()
+export async function criarUsuarioEquipe(conta: Omit<NovaConta, 'senha'> & { senha?: string }): Promise<ContaCriadaSb | { senha: string }> {
   if (BACKEND === 'supabase') {
-    await criarContaSb({
+    return criarContaSb({
       tipo: 'equipe',
       email: conta.email.trim(),
-      senha,
       nome: conta.nome.trim(),
       papel: conta.papel,
       ativo: conta.ativo,
@@ -193,10 +191,10 @@ export async function criarUsuarioEquipe(conta: Omit<NovaConta, 'senha'> & { sen
       unidadeId: conta.unidadeId,
       modulosLiberados: conta.modulosLiberados,
     })
-    return senha
   }
+  const senha = conta.senha || senhaProvisoria()
   await criarLoginEGravar(conta.email, senha, (uid) => criarPerfil(uid, { ...conta, senha }))
-  return senha
+  return { senha }
 }
 
 export async function listarEquipeDaUnidade(unidadeId: string): Promise<Usuario[]> {

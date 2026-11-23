@@ -229,7 +229,7 @@ export function NovaSenhaPage() {
 
   return (
     <Moldura>
-      <h2 className="text-2xl font-bold">Criar nova senha</h2>
+      <h2 className="text-2xl font-bold">Criar sua senha</h2>
       <p className="mt-2 text-sm text-muted">Escolha a senha que você vai usar para entrar no portal.</p>
       <form onSubmit={enviar} className="mt-6 space-y-4">
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}

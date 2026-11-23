@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { LinkCriado, type AcessoPorLink } from '../components/LinkCriado'
 import { Aviso, Button, Campo, Carregando, Vazio, inputClass } from '../components/ui'
 import { SLUGS_FRANQUEADO, MODULOS, subconjunto } from '../data/modulos'
 import { atualizarModulosDoUsuario, criarUsuarioEquipe, enviarEmailRedefinicao, listarEquipeDaUnidade } from '../lib/gestao'
 import { listarUsuarios } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
+import { BACKEND } from '../lib/backend'
+import { gerarLinkSenhaSb } from '../lib/gestaoSupabase'
+import type { Usuario } from '../types'
 
 export function useListaAcessos<T>(consultar: () => Promise<T[]>) {
   const [lista, setLista] = useState<T[]>([])
@@ -32,14 +36,14 @@ export function useListaAcessos<T>(consultar: () => Promise<T[]>) {
     return () => { ativo = false }
   }, [consultar, tique])
 
-  async function gravar(acao: () => Promise<unknown>) {
+  async function gravar(acao: () => Promise<unknown>, atualizarLista = true) {
     if (operacaoEmCurso.current || carregando || erroCarga) return
     operacaoEmCurso.current = true
     setGravando(true)
     setErro('')
     try {
       await acao()
-      recarregar()
+      if (atualizarLista) recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
     } finally {
@@ -88,7 +92,7 @@ export function Checks({ valor, teto, onChange, disabled }: { valor: string[]; t
   )
 }
 
-export function SenhaCriada({ email, senha, aoFechar }: { email: string; senha: string; aoFechar?: () => void }) {
+function SenhaCriada({ email, senha }: { email: string; senha: string }) {
   const [aviso, setAviso] = useState('')
   const enviando = useRef(false)
   const [ocupado, setOcupado] = useState(false)
@@ -106,7 +110,6 @@ export function SenhaCriada({ email, senha, aoFechar }: { email: string; senha: 
             setAviso('Selecione e copie a senha manualmente.')
           }
         }}>Copiar</Button>
-        {aoFechar && <Button type="button" variant="ghost" onClick={aoFechar}>Ocultar senha</Button>}
         <Button
           type="button"
           variant="ghost"
@@ -133,9 +136,43 @@ export function SenhaCriada({ email, senha, aoFechar }: { email: string; senha: 
   )
 }
 
+type AcessoCriado = AcessoPorLink | { email: string; senha: string }
+
+function ResultadoCadastro({ acesso, aoFechar, ocupado }: {
+  acesso: AcessoCriado | null
+  aoFechar: () => void
+  ocupado: boolean
+}) {
+  if (!acesso) return null
+  if ('senha' in acesso) return <SenhaCriada {...acesso} />
+  return <LinkCriado key={acesso.link ?? acesso.uid} acesso={acesso} aoFechar={aoFechar} ocupado={ocupado} />
+}
+
+export function GerarNovoLink({ pessoa, estado, desabilitado, aoGerar }: {
+  pessoa: Usuario
+  estado: Pick<ReturnType<typeof useListaAcessos<unknown>>, 'gravar' | 'bloqueado'>
+  desabilitado?: boolean
+  aoGerar: (acesso: AcessoPorLink) => void
+}) {
+  if (BACKEND !== 'supabase' || pessoa.papel === 'admin') return null
+
+  return (
+    <Button type="button" variant="ghost" disabled={estado.bloqueado || desabilitado} onClick={() => {
+      if (estado.bloqueado || desabilitado) return
+      if (!window.confirm(`Gerar um novo link para ${pessoa.nome || pessoa.email}? O link anterior deixa de funcionar.`)) return
+      void estado.gravar(async () => {
+        const acesso = await gerarLinkSenhaSb(pessoa.uid)
+        aoGerar({ ...acesso, uid: pessoa.uid, email: pessoa.email })
+      }, false)
+    }}>
+      Gerar novo link
+    </Button>
+  )
+}
+
 export function GestaoUsuariosPage() {
   const { user } = useAuth()
-  const [criada, setCriada] = useState<{ email: string; senha: string } | null>(null)
+  const [criada, setCriada] = useState<AcessoCriado | null>(null)
   const [form, setForm] = useState({ nome: '', email: '', modulos: ['manuais'] as string[] })
 
   const estado = useListaAcessos(listarEquipeFranqueadora)
@@ -150,14 +187,14 @@ export function GestaoUsuariosPage() {
         <p className="text-sm text-muted">Gerencie as contas e os módulos da equipe da franqueadora.</p>
       </header>
       {erro ? <Aviso tom="erro"><span role="alert">{erro}</span></Aviso> : null}
-      {criada ? <SenhaCriada email={criada.email} senha={criada.senha} /> : null}
+      <ResultadoCadastro acesso={criada} aoFechar={() => setCriada(null)} ocupado={gravando} />
       <form
         className="space-y-3 rounded-2xl border border-line bg-surface p-4"
         onSubmit={(evento) => {
           evento.preventDefault()
           if (bloqueado || !user) return
           void gravar(async () => {
-            const senha = await criarUsuarioEquipe({
+            const acesso = await criarUsuarioEquipe({
               nome: form.nome,
               email: form.email,
               papel: 'equipe_franqueadora',
@@ -168,7 +205,7 @@ export function GestaoUsuariosPage() {
               ativo: true,
               criadoPor: user.uid,
             })
-            setCriada({ email: form.email, senha })
+            setCriada({ email: form.email.trim(), ...acesso })
             setForm({ nome: '', email: '', modulos: ['manuais'] })
           })
         }}
@@ -189,12 +226,15 @@ export function GestaoUsuariosPage() {
                 <span className="font-semibold">{pessoa.nome}</span>
                 <span className="block text-xs text-muted">{pessoa.email} · {pessoa.ativo ? 'Ativo' : 'Inativo'}</span>
               </span>
-              <Button variant="secondary" disabled={bloqueado} onClick={() => {
-                if (pessoa.ativo && !window.confirm(`Desativar o acesso de ${pessoa.nome}?`)) return
-                void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo }))
-              }}>
-                {pessoa.ativo ? 'Desativar' : 'Ativar'}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {user?.papel === 'admin' && pessoa.uid !== user.uid && <GerarNovoLink pessoa={pessoa} estado={estado} aoGerar={setCriada} />}
+                <Button variant="secondary" disabled={bloqueado} onClick={() => {
+                  if (pessoa.ativo && !window.confirm(`Desativar o acesso de ${pessoa.nome}?`)) return
+                  void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo }))
+                }}>
+                  {pessoa.ativo ? 'Desativar' : 'Ativar'}
+                </Button>
+              </div>
             </div>
             <div className="mt-3">
               <Checks valor={pessoa.modulosLiberados ?? []} teto={teto} disabled={bloqueado} onChange={(modulos) => void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { modulosLiberados: modulos }))} />
@@ -208,7 +248,7 @@ export function GestaoUsuariosPage() {
 
 export function MinhaEquipePage() {
   const { user } = useAuth()
-  const [criada, setCriada] = useState<{ email: string; senha: string } | null>(null)
+  const [criada, setCriada] = useState<AcessoCriado | null>(null)
   const [form, setForm] = useState({ nome: '', email: '', modulos: [] as string[] })
   const teto = user?.modulosLiberados ?? []
 
@@ -228,7 +268,7 @@ export function MinhaEquipePage() {
       {!user.unidadeId ? <Aviso tom="erro">Esta conta ainda não está ligada a uma unidade criada pela franqueadora.</Aviso> : null}
       {user.modulosLiberados === undefined ? <Aviso>A franqueadora ainda precisa gravar os módulos desta unidade antes da equipe ser criada.</Aviso> : null}
       {erro ? <Aviso tom="erro"><span role="alert">{erro}</span></Aviso> : null}
-      {criada ? <SenhaCriada email={criada.email} senha={criada.senha} /> : null}
+      <ResultadoCadastro acesso={criada} aoFechar={() => setCriada(null)} ocupado={gravando} />
       <form
         className="space-y-3 rounded-2xl border border-line bg-surface p-4"
         onSubmit={(evento) => {
@@ -239,7 +279,7 @@ export function MinhaEquipePage() {
             return
           }
           void gravar(async () => {
-            const senha = await criarUsuarioEquipe({
+            const acesso = await criarUsuarioEquipe({
               nome: form.nome,
               email: form.email,
               papel: 'equipe_franqueado',
@@ -250,7 +290,7 @@ export function MinhaEquipePage() {
               ativo: true,
               criadoPor: user.uid,
             })
-            setCriada({ email: form.email, senha })
+            setCriada({ email: form.email.trim(), ...acesso })
             setForm({ nome: '', email: '', modulos: [] })
           })
         }}
@@ -266,14 +306,17 @@ export function MinhaEquipePage() {
       <ul className="space-y-2">
         {!estado.carregando && !estado.erroCarga && user.unidadeId && equipe.map((pessoa) => (
           <li key={pessoa.uid} className="rounded-2xl border border-line bg-surface px-4 py-3">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-semibold">{pessoa.nome}<span className="block text-xs font-normal text-muted">{pessoa.email}</span></span>
-              <Button variant="secondary" disabled={bloqueado} onClick={() => {
-                if (pessoa.ativo && !window.confirm(`Desativar o acesso de ${pessoa.nome}?`)) return
-                void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo, teto }))
-              }}>
-                {pessoa.ativo ? 'Desativar' : 'Ativar'}
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {pessoa.uid !== user.uid && pessoa.unidadeId === user.unidadeId && pessoa.papel === 'equipe_franqueado' && <GerarNovoLink pessoa={pessoa} estado={estado} aoGerar={setCriada} />}
+                <Button variant="secondary" disabled={bloqueado} onClick={() => {
+                  if (pessoa.ativo && !window.confirm(`Desativar o acesso de ${pessoa.nome}?`)) return
+                  void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo, teto }))
+                }}>
+                  {pessoa.ativo ? 'Desativar' : 'Ativar'}
+                </Button>
+              </div>
             </div>
             <div className="mt-3">
               <Checks
