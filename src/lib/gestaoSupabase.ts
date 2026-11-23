@@ -12,6 +12,8 @@ export interface LinhaUnidade {
   id: string
   nome: string
   cidade: string | null
+  uf?: string | null
+  cnpj?: string | null
   responsavel: string
   email: string
   uid: string | null
@@ -27,6 +29,8 @@ export function mapUnidadeSupabase(l: LinhaUnidade): Unidade {
     id: l.id,
     nome: l.nome ?? '',
     cidade: l.cidade ?? '',
+    uf: l.uf ?? '',
+    cnpj: l.cnpj ?? '',
     responsavel: l.responsavel ?? '',
     email: l.email ?? '',
     uid: l.uid || null,
@@ -71,6 +75,41 @@ export async function listarUnidadesSb(): Promise<Unidade[]> {
   const { data, error } = await requireSupabase().from('unidades').select('*')
   falhou(error)
   return ((data ?? []) as LinhaUnidade[]).map(mapUnidadeSupabase).sort(porNome)
+}
+
+export async function buscarUnidadeSb(id: string): Promise<Unidade | null> {
+  const { data, error } = await requireSupabase().from('unidades').select('*').eq('id', id).maybeSingle()
+  falhou(error)
+  return data ? mapUnidadeSupabase(data as LinhaUnidade) : null
+}
+
+export async function listarUsuariosDaUnidadeSb(unidadeId: string): Promise<Usuario[]> {
+  const { data, error } = await requireSupabase().from('usuarios').select('*').eq('unidade_id', unidadeId)
+    .in('papel', ['franqueado', 'equipe_franqueado'])
+  falhou(error)
+  return ((data ?? []) as LinhaUsuario[]).map(mapUsuarioSupabase).filter((u): u is Usuario => u !== null).sort(porNome)
+}
+
+export type DadosUnidade = Pick<Unidade, 'nome' | 'cidade' | 'uf' | 'cnpj' | 'modulosLiberados' | 'ativo'>
+
+export async function salvarUnidadeSb(id: string | null, dados: DadosUnidade): Promise<string> {
+  const { data, error } = await requireSupabase().rpc('salvar_unidade', {
+    p_id: id,
+    p_nome: dados.nome,
+    p_cidade: dados.cidade,
+    p_uf: dados.uf ?? '',
+    p_cnpj: dados.cnpj ?? '',
+    p_modulos: dados.modulosLiberados,
+    p_ativo: dados.ativo,
+  })
+  falhou(error)
+  if (typeof data !== 'string') throw new Error('Não foi possível salvar a unidade.')
+  return data
+}
+
+export async function definirResponsavelUnidadeSb(unidadeId: string, uid: string): Promise<void> {
+  const { error } = await requireSupabase().rpc('definir_responsavel_unidade', { p_unidade_id: unidadeId, p_uid: uid })
+  falhou(error)
 }
 
 export async function listarEquipeDaUnidadeSb(unidadeId: string): Promise<Usuario[]> {

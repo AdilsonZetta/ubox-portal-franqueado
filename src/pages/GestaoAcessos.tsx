@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Aviso, Button, Campo, Carregando, Vazio, inputClass } from '../components/ui'
 import { SLUGS_FRANQUEADO, MODULOS, subconjunto } from '../data/modulos'
-import { atualizarModulosDoUsuario, atualizarUnidade, criarUnidade, criarUsuarioEquipe, enviarEmailRedefinicao, listarEquipeDaUnidade, listarUnidades } from '../lib/gestao'
+import { atualizarModulosDoUsuario, criarUsuarioEquipe, enviarEmailRedefinicao, listarEquipeDaUnidade } from '../lib/gestao'
 import { listarUsuarios } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
-import type { Unidade } from '../types'
 
-function useListaAcessos<T>(consultar: () => Promise<T[]>) {
+export function useListaAcessos<T>(consultar: () => Promise<T[]>) {
   const [lista, setLista] = useState<T[]>([])
   const [carregando, setCarregando] = useState(true)
   const [erroCarga, setErroCarga] = useState('')
@@ -70,7 +69,7 @@ async function listarEquipeFranqueadora() {
   return lista.filter((pessoa) => pessoa.papel === 'equipe_franqueadora')
 }
 
-function Checks({ valor, teto, onChange, disabled }: { valor: string[]; teto: string[]; disabled?: boolean; onChange: (slugs: string[]) => void }) {
+export function Checks({ valor, teto, onChange, disabled }: { valor: string[]; teto: string[]; disabled?: boolean; onChange: (slugs: string[]) => void }) {
   const opcoes = MODULOS.filter((modulo) => teto.includes(modulo.slug))
   return (
     <div className="grid gap-2 sm:grid-cols-2">
@@ -89,109 +88,48 @@ function Checks({ valor, teto, onChange, disabled }: { valor: string[]; teto: st
   )
 }
 
-function SenhaCriada({ email, senha }: { email: string; senha: string }) {
+export function SenhaCriada({ email, senha, aoFechar }: { email: string; senha: string; aoFechar?: () => void }) {
   const [aviso, setAviso] = useState('')
   const enviando = useRef(false)
   const [ocupado, setOcupado] = useState(false)
   return (
     <Aviso tom="ok">
       <p>
-        Login criado para <strong>{email}</strong>. Senha provisória, mostrada só agora: <strong>{senha}</strong>
+        Login criado para <strong className="break-all">{email}</strong>. Senha provisória, mostrada só agora: <strong className="break-all">{senha}</strong>
       </p>
-      <Button
-        type="button"
-        variant="ghost"
-        disabled={ocupado}
-        onClick={() => {
-          if (enviando.current) return
-          enviando.current = true
-          setOcupado(true)
-          setAviso('')
-          void enviarEmailRedefinicao(email)
-            .then(() => setAviso('E-mail de redefinição enviado.'))
-            .catch((falha: unknown) => setAviso(mensagemErro(falha)))
-            .finally(() => {
-              enviando.current = false
-              setOcupado(false)
-             })
-        }}
-      >
-        {ocupado ? 'Enviando…' : 'Enviar e-mail de redefinição de senha'}
-      </Button>
+      <div className="flex flex-wrap gap-1">
+        <Button type="button" variant="ghost" onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(senha)
+            setAviso('Senha copiada.')
+          } catch {
+            setAviso('Selecione e copie a senha manualmente.')
+          }
+        }}>Copiar</Button>
+        {aoFechar && <Button type="button" variant="ghost" onClick={aoFechar}>Ocultar senha</Button>}
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={ocupado}
+          onClick={() => {
+            if (enviando.current) return
+            enviando.current = true
+            setOcupado(true)
+            setAviso('')
+            void enviarEmailRedefinicao(email)
+              .then(() => setAviso('E-mail de redefinição enviado.'))
+              .catch((falha: unknown) => setAviso(mensagemErro(falha)))
+              .finally(() => {
+                enviando.current = false
+                setOcupado(false)
+              })
+          }}
+        >
+          {ocupado ? 'Enviando…' : 'Enviar e-mail de redefinição de senha'}
+        </Button>
+      </div>
       {aviso ? <p role="status" className="mt-1">{aviso}</p> : null}
     </Aviso>
-  )
-}
-
-export function FranqueadoraPage() {
-  const { user } = useAuth()
-  const [criada, setCriada] = useState<{ email: string; senha: string } | null>(null)
-  const [form, setForm] = useState({ nome: '', cidade: '', responsavel: '', email: '', modulos: ['manuais', 'universidade'] })
-  const [editando, setEditando] = useState<Unidade | null>(null)
-
-  const estado = useListaAcessos(listarUnidades)
-  const { lista: unidades, erro, gravar, gravando, bloqueado } = estado
-
-  return (
-    <div className="mx-auto max-w-4xl space-y-6">
-      <header className="cabecalho-pagina">
-        <p className="text-sm font-medium text-muted">Gestão da Franqueadora</p>
-        <h1 className="text-2xl font-bold">Unidades franqueadas</h1>
-        <p className="text-sm text-muted">Cadastre a unidade, o responsável e os módulos que ela pode ver.</p>
-      </header>
-      {erro ? <Aviso tom="erro"><span role="alert">{erro}</span></Aviso> : null}
-      {criada ? <SenhaCriada email={criada.email} senha={criada.senha} /> : null}
-      <form
-        className="space-y-3 rounded-2xl border border-line bg-surface p-4"
-        onSubmit={(evento) => {
-          evento.preventDefault()
-          if (bloqueado || !user) return
-          void gravar(async () => {
-            if (editando) {
-              await atualizarUnidade(editando, { nome: form.nome, cidade: form.cidade, responsavel: form.responsavel, modulosLiberados: form.modulos, ativo: editando.ativo })
-            } else {
-              const resultado = await criarUnidade({ nome: form.nome, cidade: form.cidade, responsavel: form.responsavel, email: form.email, modulosLiberados: form.modulos, criadoPor: user.uid })
-              setCriada({ email: form.email, senha: resultado.senha })
-            }
-            setEditando(null)
-            setForm({ nome: '', cidade: '', responsavel: '', email: '', modulos: ['manuais', 'universidade'] })
-          })
-        }}
-      >
-        <h2 className="font-bold">{editando ? `Editar ${editando.nome}` : 'Criar franqueado'}</h2>
-        <div className="grid gap-3 md:grid-cols-2">
-          <Campo label="Nome da unidade"><input className={inputClass} required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></Campo>
-          <Campo label="Cidade"><input className={inputClass} required value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} /></Campo>
-          <Campo label="Responsável"><input className={inputClass} required value={form.responsavel} onChange={(e) => setForm({ ...form, responsavel: e.target.value })} /></Campo>
-          <Campo label="E-mail de login"><input className={inputClass} type="email" required disabled={Boolean(editando)} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Campo>
-        </div>
-        <Checks valor={form.modulos} teto={SLUGS_FRANQUEADO} onChange={(modulos) => setForm({ ...form, modulos })} />
-        <div className="flex gap-2">
-          <Button type="submit" disabled={bloqueado}>{gravando ? 'Gravando…' : editando ? 'Salvar unidade' : 'Criar franqueado'}</Button>
-          {editando ? <Button type="button" variant="secondary" onClick={() => { setEditando(null); setForm({ nome: '', cidade: '', responsavel: '', email: '', modulos: ['manuais', 'universidade'] }) }}>Cancelar</Button> : null}
-        </div>
-      </form>
-      <EstadoListaAcessos {...estado} vazio={!unidades.length} />
-      <ul className="space-y-2">
-        {!estado.carregando && !estado.erroCarga && unidades.map((unidade) => (
-          <li key={unidade.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-surface px-4 py-3">
-            <span>
-              <span className="block font-semibold">{unidade.nome}</span>
-              <span className="text-xs text-muted">{unidade.responsavel} · {unidade.email} · {unidade.cidade} · {unidade.ativo ? 'Ativa' : 'Inativa'}</span>
-            </span>
-            <span className="flex gap-2">
-              <Button variant="secondary" disabled={bloqueado} onClick={() => { setEditando(unidade); setCriada(null); setForm({ nome: unidade.nome, cidade: unidade.cidade, responsavel: unidade.responsavel, email: unidade.email, modulos: unidade.modulosLiberados }) }}>Editar</Button>
-              <Button variant={unidade.ativo ? 'danger' : 'primary'} disabled={bloqueado || editando?.id === unidade.id} onClick={() => {
-                if (unidade.ativo && !window.confirm(`Desativar a unidade ${unidade.nome}?`)) return
-                void gravar(() => atualizarUnidade(unidade, { nome: unidade.nome, cidade: unidade.cidade, responsavel: unidade.responsavel, modulosLiberados: unidade.modulosLiberados, ativo: !unidade.ativo }))
-              }}>
-                {unidade.ativo ? 'Desativar' : 'Ativar'}
-              </Button>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
   )
 }
 
@@ -208,9 +146,8 @@ export function GestaoUsuariosPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-6">
       <header className="cabecalho-pagina">
-        <p className="text-sm font-medium text-muted">Gestão de Usuários</p>
-        <h1 className="text-2xl font-bold">Equipe da franqueadora</h1>
-        <p className="text-sm text-muted">Cada pessoa vê só os módulos marcados. Gestão da Franqueadora e esta tela ficam só com o admin.</p>
+        <h1 className="text-2xl font-bold">Usuários da franqueadora</h1>
+        <p className="text-sm text-muted">Gerencie as contas e os módulos da equipe da franqueadora.</p>
       </header>
       {erro ? <Aviso tom="erro"><span role="alert">{erro}</span></Aviso> : null}
       {criada ? <SenhaCriada email={criada.email} senha={criada.senha} /> : null}

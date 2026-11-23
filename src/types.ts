@@ -25,6 +25,8 @@ export interface Unidade {
   id: string
   nome: string
   cidade: string
+  uf?: string
+  cnpj?: string
   responsavel: string
   email: string
   uid: string | null
