@@ -10,7 +10,8 @@ import { AuthProvider, useAuth } from './lib/auth'
 import { useVisao, VisaoProvider } from './lib/visao'
 import { PortalProvider } from './lib/portal'
 import { AguardandoPage, CadastroPage, CompletarPage, ConfigPendentePage, EntrarPage, NovaSenhaPage, RecuperarPage } from './pages/AuthPages'
-import { FranqueadoraPage, GestaoUsuariosPage, MinhaEquipePage } from './pages/GestaoAcessos'
+import { GestaoUsuariosPage, MinhaEquipePage } from './pages/GestaoAcessos'
+import { FranqueadoraPage, UnidadePage } from './pages/Unidades'
 import { ChamadosPage } from './pages/Chamados'
 import { SenhasPage, SenhasPermissoesPage, SenhasSolicitacoesPage } from './pages/senhas'
 import { BibliotecaPage } from './pages/Biblioteca'
@@ -167,6 +168,7 @@ function Area() {
           <Route path="/notificacoes" element={<NotificacoesPage />} />
           <Route path="/perfil" element={<PerfilPage />} />
           <Route path="/franqueadora" element={<Admin><FranqueadoraPage /></Admin>} />
+          <Route path="/franqueadora/unidade/:id" element={<Admin><UnidadePage /></Admin>} />
           <Route path="/gestao-usuarios" element={<Admin><GestaoUsuariosPage /></Admin>} />
           <Route path="/minha-equipe" element={<MinhaEquipePage />} />
           <Route path="/chamados" element={<ChamadosPage />} />

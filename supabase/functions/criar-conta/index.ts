@@ -7,7 +7,6 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
 
 const ORIGENS = ['https://adilsonzetta.github.io', 'http://localhost:5173', 'http://127.0.0.1:5173']
-const PAPEIS_CRIAVEIS = ['franqueado', 'equipe_franqueadora', 'equipe_franqueado']
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,}$/
 
 function cors(req: Request): Record<string, string> {
@@ -62,7 +61,13 @@ Deno.serve(async (req) => {
   const senha = typeof corpo.senha === 'string' ? corpo.senha : ''
   if (!EMAIL.test(email)) return resposta(req, 400, { erro: 'E-mail inválido.' })
   if (senha.length < 6 || senha.length > 72) return resposta(req, 400, { erro: 'A senha provisória precisa ter de 6 a 72 caracteres.' })
-  if (tipo === 'equipe' && !PAPEIS_CRIAVEIS.includes(String(corpo.papel))) return resposta(req, 400, { erro: 'Papel inválido.' })
+  const unidadeId = texto(corpo.unidadeId, 80)
+  const papelCompativel = unidadeId
+    ? corpo.papel === 'franqueado' || corpo.papel === 'equipe_franqueado'
+    : corpo.papel === 'equipe_franqueadora'
+  if (tipo === 'equipe' && !papelCompativel) {
+    return resposta(req, 400, { erro: 'Função incompatível com o vínculo do usuário.' })
+  }
 
   const admin = createClient(url, servico, { auth: { persistSession: false, autoRefreshToken: false } })
   const { data: tentativaPermitida, error: erroLimite } = await admin.rpc('registrar_criacao_conta', { p_uid: sessao.user.id })
@@ -84,7 +89,7 @@ Deno.serve(async (req) => {
 
   const gravacao = tipo === 'unidade'
     ? await comoQuemChamou.rpc('criar_unidade_com_responsavel', {
-        p_unidade_id: texto(corpo.unidadeId, 80),
+        p_unidade_id: unidadeId,
         p_nome: texto(corpo.nome, 120),
         p_cidade: texto(corpo.cidade, 120),
         p_responsavel: nome,
@@ -101,7 +106,7 @@ Deno.serve(async (req) => {
         recusado: false,
         unidade: texto(corpo.unidade, 120),
         cidade: texto(corpo.cidade, 120),
-        unidade_id: texto(corpo.unidadeId, 80) || null,
+        unidade_id: unidadeId || null,
         modulos_liberados: lista(corpo.modulosLiberados),
         criado_por: sessao.user.id,
       })
