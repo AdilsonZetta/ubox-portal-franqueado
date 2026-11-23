@@ -137,12 +137,22 @@ export async function atualizarUnidadeSb(id: string, patch: { nome: string; cida
 }
 
 export type PedidoCriarConta =
-  | { tipo: 'equipe'; email: string; senha: string; nome: string; papel: string; ativo: boolean; unidade: string; cidade: string; unidadeId: string | null; modulosLiberados: string[] }
-  | { tipo: 'unidade'; email: string; senha: string; unidadeId: string; nome: string; cidade: string; responsavel: string; modulosLiberados: string[] }
+  | { tipo: 'equipe'; email: string; nome: string; papel: string; ativo: boolean; unidade: string; cidade: string; unidadeId: string | null; modulosLiberados: string[] }
+  | { tipo: 'unidade'; email: string; unidadeId: string; nome: string; cidade: string; responsavel: string; modulosLiberados: string[] }
 
-/** Chama a Edge Function criar-conta com a sessão atual; devolve o id do login novo. */
-export async function criarContaSb(pedido: PedidoCriarConta): Promise<string> {
-  const { data, error } = await requireSupabase().functions.invoke<{ uid?: string; erro?: string }>('criar-conta', { body: pedido })
+export interface LinkSenhaGerado {
+  link: string
+  expiraEm: string
+}
+
+export type ContaCriadaSb = { uid: string } & (
+  LinkSenhaGerado | { link: null; erroLink: string; expiraEm?: undefined }
+)
+
+type RespostaCriarConta = { link?: string | null; expiraEm?: string; uid?: string; erro?: string; erroLink?: string }
+
+async function chamarCriarConta(pedido: PedidoCriarConta | { acao: 'link'; uid: string }) {
+  const { data, error } = await requireSupabase().functions.invoke<RespostaCriarConta>('criar-conta', { body: pedido })
   if (error) {
     let mensagem = error.message
     if (error instanceof FunctionsHttpError) {
@@ -151,8 +161,20 @@ export async function criarContaSb(pedido: PedidoCriarConta): Promise<string> {
     }
     throw new Error(mensagem)
   }
+  return data
+}
+
+export async function criarContaSb(pedido: PedidoCriarConta): Promise<ContaCriadaSb> {
+  const data = await chamarCriarConta(pedido)
   if (!data?.uid) throw new Error(data?.erro || 'Não foi possível criar a conta.')
-  return data.uid
+  if (data.link && data.expiraEm) return { uid: data.uid, link: data.link, expiraEm: data.expiraEm }
+  return { uid: data.uid, link: null, erroLink: data.erroLink || 'Não foi possível gerar o link.' }
+}
+
+export async function gerarLinkSenhaSb(uid: string): Promise<LinkSenhaGerado> {
+  const data = await chamarCriarConta({ acao: 'link', uid })
+  if (!data?.link || !data.expiraEm) throw new Error(data?.erro || 'Não foi possível gerar o link.')
+  return { link: data.link, expiraEm: data.expiraEm }
 }
 
 export async function enviarRedefinicaoSb(email: string): Promise<void> {

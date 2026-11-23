@@ -1,10 +1,10 @@
 import { useCallback, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Building2, ChevronRight } from 'lucide-react'
+import { LinkCriado, type AcessoPorLink } from '../components/LinkCriado'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, inputClass } from '../components/ui'
 import { SLUGS_FRANQUEADO } from '../data/modulos'
 import { BACKEND } from '../lib/backend'
-import { senhaProvisoria } from '../lib/criarConta'
 import { atualizarModulosDoUsuario, atualizarUnidade, listarUnidades } from '../lib/gestao'
 import {
   buscarUnidadeSb, criarContaSb, definirResponsavelUnidadeSb, listarUsuariosDaUnidadeSb,
@@ -12,7 +12,7 @@ import {
 } from '../lib/gestaoSupabase'
 import { cnpjValido, filtrarUnidades, formatarCnpj, ufValida, UFS_BRASIL, type FiltroStatusUnidade } from '../lib/unidades'
 import type { Unidade, Usuario } from '../types'
-import { Checks, SenhaCriada, useListaAcessos } from './GestaoAcessos'
+import { Checks, GerarNovoLink, useListaAcessos } from './GestaoAcessos'
 
 const usaSupabase = BACKEND === 'supabase'
 const classeFormulario = 'space-y-4 rounded-2xl border border-line bg-surface p-4 sm:p-6'
@@ -259,7 +259,7 @@ function DetalheUnidade({ id }: { id: string }) {
   }, [id])
   const estado = useListaAcessos(consultar)
   const [painel, setPainel] = useState<{ tipo: 'unidade' | 'novo' } | { tipo: 'modulos'; uid: string } | null>(null)
-  const [senhaCriada, setSenhaCriada] = useState<{ email: string; senha: string } | null>(null)
+  const [acessoCriado, setAcessoCriado] = useState<AcessoPorLink | null>(null)
   const [avisoResponsavel, setAvisoResponsavel] = useState(false)
   const { unidade, pessoas } = estado.lista[0] ?? { unidade: null, pessoas: [] }
   const bloquear = estado.bloqueado || Boolean(painel)
@@ -273,7 +273,7 @@ function DetalheUnidade({ id }: { id: string }) {
     <div className="mx-auto max-w-5xl space-y-6">
       <Link to="/franqueadora" className={classeLink}><ArrowLeft className="size-4" aria-hidden="true" /> Voltar para unidades</Link>
       {estado.erro && <Aviso tom="erro"><span role="alert">{estado.erro}</span></Aviso>}
-      {senhaCriada && <SenhaCriada key={senhaCriada.email} {...senhaCriada} aoFechar={() => setSenhaCriada(null)} />}
+      {acessoCriado && <LinkCriado key={acessoCriado.link ?? acessoCriado.uid} acesso={acessoCriado} aoFechar={() => setAcessoCriado(null)} ocupado={estado.gravando} />}
       {avisoResponsavel && <Aviso><span role="status">O login foi criado, mas não foi possível registrar esse gestor como responsável da unidade.</span></Aviso>}
       {estado.carregando && <Carregando texto="Carregando unidade e usuários…" />}
       {estado.erroCarga && <ErroCarga erro={estado.erroCarga} tentar={estado.recarregar} />}
@@ -296,7 +296,7 @@ function DetalheUnidade({ id }: { id: string }) {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 id="usuarios-unidade" className="text-xl font-bold">Usuários da unidade</h2>
             <Button disabled={bloquear} onClick={() => {
-              setSenhaCriada(null)
+              setAcessoCriado(null)
               setAvisoResponsavel(false)
               estado.setErro('')
               setPainel({ tipo: 'novo' })
@@ -305,15 +305,14 @@ function DetalheUnidade({ id }: { id: string }) {
           {painel?.tipo === 'novo' && <FormUsuario unidade={unidade} ocupado={estado.bloqueado} cancelar={fecharPainel}
             criado={(novo) => void estado.gravar(async () => {
               if (novo.nome.length < 2) throw new Error('Informe o nome do usuário.')
-              const senha = senhaProvisoria()
-              const uid = await criarContaSb({
-                ...novo, tipo: 'equipe', senha, ativo: true, unidadeId: id, unidade: unidade.nome, cidade: unidade.cidade,
+              const acesso = await criarContaSb({
+                ...novo, tipo: 'equipe', ativo: true, unidadeId: id, unidade: unidade.nome, cidade: unidade.cidade,
               })
-              setSenhaCriada({ email: novo.email, senha })
+              setAcessoCriado({ ...acesso, email: novo.email })
               fecharPainel()
               if (novo.papel === 'franqueado' && !unidade.uid) {
                 try {
-                  await definirResponsavelUnidadeSb(id, uid)
+                  await definirResponsavelUnidadeSb(id, acesso.uid)
                 } catch {
                   setAvisoResponsavel(true)
                 }
@@ -333,6 +332,7 @@ function DetalheUnidade({ id }: { id: string }) {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
+                    <GerarNovoLink pessoa={pessoa} estado={estado} desabilitado={Boolean(painel)} aoGerar={setAcessoCriado} />
                     <Button variant="ghost" disabled={bloquear} onClick={() => { estado.setErro(''); setPainel({ tipo: 'modulos', uid: pessoa.uid }) }}>Editar módulos</Button>
                     <Button variant={pessoa.ativo ? 'danger' : 'secondary'} disabled={bloquear} onClick={() => {
                       const acao = pessoa.ativo ? 'Desativar' : 'Reativar'
