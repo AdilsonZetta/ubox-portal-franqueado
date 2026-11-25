@@ -45,3 +45,9 @@ it('formata a validade em hora local com dois dígitos', () => {
   const local = new Date(2026, 0, 2, 9, 5)
   expect(formatarValidadeLink(local.toISOString())).toBe('Válido até 09:05 de 02/01')
 })
+
+it('gera o link de senha na raiz do subdomínio da franqueadora', () => {
+  expect(montarLinkSenha('https://uboxfranqueadora.ubox.net.br', 'token+&')).toBe(
+    'https://uboxfranqueadora.ubox.net.br/?token_hash=token%2B%26&type=recovery',
+  )
+})

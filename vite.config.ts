@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
-  base: '/ubox-portal-franqueado/',
+  base: './',
   plugins: [
     react(),
     tailwindcss(),
