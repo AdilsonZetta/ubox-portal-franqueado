@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { consultarBoletos, periodoDeConsulta } from './asaas.ts'
+import { validarNovaConfiguracao } from './configuracao.ts'
 
 const periodo = { inicio: '2028-02-01', fim: '2028-02-29' }
 const documento = '123.456.789-09'
@@ -69,4 +70,12 @@ test('lê a próxima página e distingue falha do Asaas de uma lista vazia', asy
   await assert.rejects(consultarBoletos({
     ...config, buscar: async () => new Response('indisponível', { status: 503 }),
   }, consulta))
+})
+
+test('rejeita chaves de outro ambiente ou com espaços', () => {
+  const config = { ambiente: 'sandbox', chave: '$aact_hmlg_teste' }
+  assert.deepEqual(validarNovaConfiguracao(config), config)
+  assert.equal(validarNovaConfiguracao({ ...config, ambiente: 'producao' }), null)
+  assert.equal(validarNovaConfiguracao({ ...config, chave: '$aact_hmlg_ com espaço' }), null)
+  assert.equal(validarNovaConfiguracao({ ...config, chave: '$aact_hmlg_' }), null)
 })

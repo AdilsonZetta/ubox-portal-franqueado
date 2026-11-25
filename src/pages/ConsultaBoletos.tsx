@@ -54,7 +54,7 @@ export function ConsultaBoletos() {
   }
 
   return (
-    <section aria-labelledby="consulta-boletos-titulo" className="mt-6 space-y-4 rounded-2xl border border-line bg-surface p-5 sm:p-6">
+    <section aria-labelledby="consulta-boletos-titulo" className="space-y-4 rounded-2xl border border-line bg-surface p-5 sm:p-6">
       <div>
         <h2 id="consulta-boletos-titulo" className="text-lg font-bold">Consultar boletos no Asaas</h2>
         <p className="mt-1 text-sm text-muted">Veja a situação de cada boleto pelo documento do pagador e pelo mês de vencimento.</p>

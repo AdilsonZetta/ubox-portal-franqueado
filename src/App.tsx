@@ -21,6 +21,7 @@ import { DocumentoPage } from './pages/Documento'
 import { AtribuicoesPage } from './pages/Atribuicoes'
 import { HomePage } from './pages/Home'
 import { MeusCertificadosPage } from './pages/MeusCertificados'
+import { ControleAcessoPage } from './pages/ControleAcesso'
 import { ModuloEmBrevePage, ModulosPage } from './pages/Modulos'
 import { ModelosPage } from './pages/Modelos'
 import { NotificacoesPage } from './pages/Notificacoes'
@@ -116,6 +117,7 @@ function Area() {
           }
         >
           <Route path="/" element={<ModulosPage />} />
+          <Route path="/modulos/acesso" element={<ControleAcessoPage />} />
           <Route path="/modulos/:slug" element={<ModuloEmBrevePage />} />
           <Route path="/manuais" element={<HomePage />} />
           <Route path="/manuais/trilha" element={<TrilhaManuaisPage />} />

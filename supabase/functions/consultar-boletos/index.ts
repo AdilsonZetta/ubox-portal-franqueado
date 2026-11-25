@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 
 import { ORIGENS } from '../criar-conta/regras.ts'
 import { consultarBoletos, periodoDeConsulta } from './asaas.ts'
+import { lerConfiguracao, validarNovaConfiguracao } from './configuracao.ts'
 
 Deno.serve(async (req) => {
   const origem = req.headers.get('Origin')
@@ -37,19 +38,38 @@ Deno.serve(async (req) => {
   }
 
   const corpo: unknown = await req.json().catch(() => null)
-  const consulta = corpo && typeof corpo === 'object' && 'cpfCnpj' in corpo && 'mes' in corpo
-    ? periodoDeConsulta(corpo.cpfCnpj, corpo.mes)
-    : null
-  if (!consulta) return responder(400, { erro: 'Confira o CPF ou CNPJ e o mês de vencimento.' })
+  if (!corpo || typeof corpo !== 'object') return responder(400, { erro: 'Pedido inválido.' })
 
-  const chave = Deno.env.get('ASAAS_API_KEY')
-  const ambiente = Deno.env.get('ASAAS_AMBIENTE')
-  if (!chave || (ambiente !== 'sandbox' && ambiente !== 'producao')) {
-    return responder(503, { erro: 'A consulta de boletos ainda precisa ser configurada pela franqueadora.' })
+  // A credencial do Vault só pode ser lida ou gravada pelo servidor após a verificação do administrador.
+  const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const acao = 'acao' in corpo ? corpo.acao : 'consultar'
+  if (acao === 'salvar-configuracao') {
+    const config = validarNovaConfiguracao(corpo)
+    if (!config) return responder(400, { erro: 'Confira se a chave corresponde ao ambiente escolhido.' })
+    const { error } = await admin.rpc('ubox_asaas_salvar_configuracao', {
+      p_ambiente: config.ambiente, p_chave: config.chave,
+    })
+    if (error) return responder(500, { erro: 'Não foi possível salvar a configuração.' })
+    return responder(200, { ambiente: config.ambiente })
   }
 
+  if (acao !== 'consultar' && acao !== 'ler-configuracao') return responder(400, { erro: 'Pedido inválido.' })
+  const { data, error } = await admin.rpc('ubox_asaas_ler_configuracao')
+  if (error) return responder(503, { erro: 'Não foi possível carregar a configuração do Asaas.' })
+
+  const config = lerConfiguracao(data) ?? lerConfiguracao({
+    chave: Deno.env.get('ASAAS_API_KEY'),
+    ambiente: Deno.env.get('ASAAS_AMBIENTE'),
+  })
+  if (acao === 'ler-configuracao') return responder(200, { ambiente: config?.ambiente ?? null })
+  const consulta = 'cpfCnpj' in corpo && 'mes' in corpo ? periodoDeConsulta(corpo.cpfCnpj, corpo.mes) : null
+  if (!consulta) return responder(400, { erro: 'Confira o CPF ou CNPJ e o mês de vencimento.' })
+  if (!config) return responder(503, { erro: 'Preencha a configuração do Asaas no módulo.' })
+
   try {
-    const boletos = await consultarBoletos({ chave, ambiente }, consulta)
+    const boletos = await consultarBoletos(config, consulta)
     return responder(200, { boletos })
   } catch {
     return responder(502, { erro: 'Não foi possível consultar os boletos no Asaas. Tente novamente.' })
