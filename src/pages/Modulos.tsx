@@ -4,6 +4,8 @@ import { Textura } from '../components/Textura'
 import { Link, useParams } from 'react-router-dom'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
 import { useAuth } from '../lib/auth'
+import { BACKEND } from '../lib/backend'
+import { ConsultaBoletos } from './ConsultaBoletos'
 import { primeiroNome } from '../lib/format'
 import { podeModulo } from '../lib/modulosAcesso'
 import { useVisao } from '../lib/visao'
@@ -102,6 +104,9 @@ export function ModulosPage() {
 
 export function ModuloEmBrevePage() {
   const { slug = '' } = useParams()
+  const { user } = useAuth()
+  const { ehAdmin, comoFranqueado } = useVisao()
+  const podeConsultarBoletos = slug === 'acesso' && BACKEND === 'supabase' && user?.papel === 'admin' && ehAdmin && !comoFranqueado
   const modulo = moduloPorSlug(slug)
   if (!modulo || modulo.ativo) {
     return (
@@ -114,12 +119,13 @@ export function ModuloEmBrevePage() {
   return (
     <div className="mx-auto max-w-2xl">
         <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/10 text-brand">
-          <Icone className="h-7 w-7" />
+          <Icone className="h-7 w-7" aria-hidden="true" />
         </span>
         <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-muted">{modulo.grupo}</p>
         <h1 className="mt-1 text-3xl font-bold">{modulo.nome}</h1>
-        <div className="mt-3"><Selo>Em breve</Selo></div>
-        <p className="mt-4 text-ink/70">{modulo.descricao} Este módulo ainda não está ligado. Quando abrir, a unidade vai encontrar aqui:</p>
+        <div className="mt-3"><Selo>{podeConsultarBoletos ? 'Acesso facial em breve' : 'Em breve'}</Selo></div>
+        {podeConsultarBoletos ? <ConsultaBoletos /> : null}
+        <p className="mt-4 text-ink/70">{modulo.descricao} Recursos previstos:</p>
         <ul className="mt-6 space-y-3">
           {modulo.recursos.map((recurso) => (
             <li key={recurso} className="rounded-2xl border border-line bg-surface px-4 py-3 text-sm">
