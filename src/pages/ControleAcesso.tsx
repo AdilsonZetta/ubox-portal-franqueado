@@ -6,7 +6,7 @@ import { BACKEND } from '../lib/backend'
 import { podeModulo } from '../lib/modulosAcesso'
 import { useVisao } from '../lib/visao'
 import { ConfiguracaoAsaas } from './ConfiguracaoAsaas'
-import { ConsultaBoletos } from './ConsultaBoletos'
+import { PrepararFacial } from './PrepararFacial'
 
 export function ControleAcessoPage() {
   const { user } = useAuth()
@@ -28,7 +28,7 @@ export function ControleAcessoPage() {
       {admin && BACKEND === 'supabase' ? (
         <>
           <ConfiguracaoAsaas />
-          <ConsultaBoletos />
+          <PrepararFacial />
         </>
       ) : (
         <Aviso>A consulta por CPF ou CNPJ está disponível para a administração da franqueadora.</Aviso>

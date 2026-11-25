@@ -17,9 +17,19 @@ function mesAtual() {
   return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`
 }
 
-export function ConsultaBoletos() {
+export interface BoletoSelecionado {
+  boleto: BoletoAsaas
+  cpfCnpj: string
+  mes: string
+}
+
+export function ConsultaBoletos({ selecionar, limparSelecao }: {
+  selecionar?: (selecao: BoletoSelecionado) => void
+  limparSelecao?: () => void
+}) {
   const [carregando, setCarregando] = useState(false)
-  const [boletos, setBoletos] = useState<BoletoAsaas[] | null>(null)
+  const [resultado, setResultado] = useState<{ boletos: BoletoAsaas[]; cpfCnpj: string; mes: string } | null>(null)
+  const boletos = resultado?.boletos
   const [erro, setErro] = useState('')
 
   async function consultar(event: FormEvent<HTMLFormElement>) {
@@ -28,8 +38,9 @@ export function ConsultaBoletos() {
     const cpfCnpj = String(formulario.get('cpfCnpj') ?? '')
     const mes = String(formulario.get('mes') ?? '')
 
+    limparSelecao?.()
     setErro('')
-    setBoletos(null)
+    setResultado(null)
     setCarregando(true)
     try {
       const { data, error } = await requireSupabase().functions.invoke<{ boletos: BoletoAsaas[] }>('consultar-boletos', {
@@ -42,7 +53,7 @@ export function ConsultaBoletos() {
         else if (status === 404 || status === 503) setErro('A consulta no Asaas ainda precisa ser configurada.')
         else setErro('Não foi possível consultar o Asaas. Tente consultar novamente.')
       } else if (Array.isArray(data?.boletos)) {
-        setBoletos(data.boletos)
+        setResultado({ boletos: data.boletos, cpfCnpj, mes })
       } else {
         setErro('O Asaas retornou uma resposta incompleta. Tente consultar novamente.')
       }
@@ -59,7 +70,7 @@ export function ConsultaBoletos() {
         <h2 id="consulta-boletos-titulo" className="text-lg font-bold">Consultar boletos no Asaas</h2>
         <p className="mt-1 text-sm text-muted">Veja a situação de cada boleto pelo documento do pagador e pelo mês de vencimento.</p>
       </div>
-      <form onSubmit={consultar} onChange={() => { setBoletos(null); setErro('') }}>
+      <form onSubmit={consultar} onChange={() => { setResultado(null); setErro(''); limparSelecao?.() }}>
         <fieldset disabled={carregando} className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)_auto] sm:items-end">
           <Campo label="CPF ou CNPJ">
             <input name="cpfCnpj" className={inputClass} maxLength={32} autoComplete="off" spellCheck={false} required />
@@ -87,9 +98,16 @@ export function ConsultaBoletos() {
                   </p>
                   <p className="mt-1 text-xs text-muted wrap-anywhere">{boleto.id}</p>
                 </div>
-                <Selo tom={boleto.situacao === 'pago' ? 'lima' : boleto.situacao === 'vencido' ? 'alerta' : 'neutro'}>
-                  {ROTULOS[boleto.situacao]}
-                </Selo>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Selo tom={boleto.situacao === 'pago' ? 'lima' : boleto.situacao === 'vencido' ? 'alerta' : 'neutro'}>
+                    {ROTULOS[boleto.situacao]}
+                  </Selo>
+                  {selecionar && resultado ? (
+                    <Button type="button" variant="secondary" onClick={() => selecionar({ boleto, cpfCnpj: resultado.cpfCnpj, mes: resultado.mes })}>
+                      Selecionar boleto
+                    </Button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>

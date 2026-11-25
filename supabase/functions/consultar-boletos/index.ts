@@ -3,6 +3,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2'
 import { ORIGENS } from '../criar-conta/regras.ts'
 import { consultarBoletos, periodoDeConsulta } from './asaas.ts'
 import { lerConfiguracao, validarNovaConfiguracao } from './configuracao.ts'
+import { boletoParaVinculo } from './vinculo.ts'
 
 Deno.serve(async (req) => {
   const origem = req.headers.get('Origin')
@@ -55,7 +56,19 @@ Deno.serve(async (req) => {
     return responder(200, { ambiente: config.ambiente })
   }
 
-  if (acao !== 'consultar' && acao !== 'ler-configuracao') return responder(400, { erro: 'Pedido inválido.' })
+  if (acao === 'listar-contratos-faciais') {
+    const unidadeId = 'unidadeId' in corpo ? corpo.unidadeId : null
+    if (typeof unidadeId !== 'string' || !unidadeId || unidadeId.length > 80) {
+      return responder(400, { erro: 'Selecione uma unidade.' })
+    }
+    const { data: contratos, error: erroContratos } = await admin.from('clientes')
+      .select('id, nome, box, unidades!inner(ativo), acesso_facial_vinculos(pessoa_terminal, asaas_boleto_id, asaas_ambiente, vencimento)')
+      .eq('unidade_id', unidadeId).eq('unidades.ativo', true).eq('status', 'ativo').order('nome').order('id')
+    if (erroContratos) return responder(500, { erro: 'Não foi possível listar os contratos.' })
+    return responder(200, { contratos })
+  }
+
+  if (acao !== 'consultar' && acao !== 'ler-configuracao' && acao !== 'vincular-boleto-facial') return responder(400, { erro: 'Pedido inválido.' })
   const { data, error } = await admin.rpc('ubox_asaas_ler_configuracao')
   if (error) return responder(503, { erro: 'Não foi possível carregar a configuração do Asaas.' })
 
@@ -68,10 +81,30 @@ Deno.serve(async (req) => {
   if (!consulta) return responder(400, { erro: 'Confira o CPF ou CNPJ e o mês de vencimento.' })
   if (!config) return responder(503, { erro: 'Preencha a configuração do Asaas no módulo.' })
 
+  let boletos
   try {
-    const boletos = await consultarBoletos(config, consulta)
-    return responder(200, { boletos })
+    boletos = await consultarBoletos(config, consulta)
   } catch {
     return responder(502, { erro: 'Não foi possível consultar os boletos no Asaas. Tente novamente.' })
   }
+
+  if (acao === 'vincular-boleto-facial') {
+    const clienteId = 'clienteId' in corpo ? corpo.clienteId : null
+    const boleto = boletoParaVinculo(boletos, 'boletoId' in corpo ? corpo.boletoId : null)
+    if (typeof clienteId !== 'string' || !clienteId || clienteId.length > 80 || !boleto) {
+      return responder(409, { erro: 'Confira o contrato e selecione um boleto encontrado nessa consulta.' })
+    }
+    const { data: pessoaTerminal, error: erroVinculo } = await admin.rpc('ubox_vincular_boleto_facial', {
+      p_cliente: clienteId,
+      p_ambiente: config.ambiente,
+      p_boleto: boleto.id,
+      p_vencimento: boleto.vencimento,
+      p_autor: sessao.user.id,
+    })
+    if (erroVinculo?.code === '23505') return responder(409, { erro: 'Este boleto já está vinculado a outro contrato.' })
+    if (erroVinculo) return responder(500, { erro: 'Não foi possível salvar o vínculo.' })
+    if (!pessoaTerminal) return responder(409, { erro: 'O contrato ou a unidade não está ativo.' })
+    return responder(200, { pessoaTerminal, ambiente: config.ambiente, boletoId: boleto.id, vencimento: boleto.vencimento })
+  }
+  return responder(200, { boletos })
 })
