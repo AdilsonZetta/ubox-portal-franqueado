@@ -114,7 +114,7 @@ export function ModuloEmBrevePage() {
   return (
     <div className="mx-auto max-w-2xl">
         <span className="grid h-14 w-14 place-items-center rounded-2xl bg-brand/10 text-brand">
-          <Icone className="h-7 w-7" />
+          <Icone className="h-7 w-7" aria-hidden="true" />
         </span>
         <p className="mt-5 text-xs font-bold uppercase tracking-[0.16em] text-muted">{modulo.grupo}</p>
         <h1 className="mt-1 text-3xl font-bold">{modulo.nome}</h1>

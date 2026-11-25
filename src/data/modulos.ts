@@ -127,7 +127,9 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: ScanLine,
-    descricao: 'Entradas da unidade ligadas ao contrato do box.',
+    descricao: 'Consulta de boletos e integração facial da unidade.',
+    ativo: true,
+    para: '/modulos/acesso',
     recursos: ['Entradas e saídas', 'Contrato', 'Horários', 'Ocorrências'],
   },
   {
