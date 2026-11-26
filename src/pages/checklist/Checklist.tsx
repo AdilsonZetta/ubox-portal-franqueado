@@ -7,6 +7,7 @@ import {
   ROTULO_PERIODO,
   ROTULO_TIPO_CK,
   inicioPeriodo,
+  liberacaoChecklist,
   mediaScore,
   naoConformidades,
   situacaoModelo,
@@ -14,14 +15,15 @@ import {
 } from '../../lib/checklist'
 import { useVisao } from '../../lib/visao'
 import { ListaExecucoes, ScoreSelo, SituacaoSelo } from './partes'
-import { useChecklist } from './useChecklist'
+import { useChecklist, useRelogioChecklist } from './useChecklist'
 
 const DIA = 86_400_000
 const ORDEM: Record<Situacao, number> = { atrasado: 0, pendente: 1, avulso: 2, em_dia: 3 }
 
 export function ChecklistPage() {
   const { comoFranqueado, simulado } = useVisao()
-  const agora = Date.now()
+  const agora = useRelogioChecklist()
+  const instante = new Date(agora)
   // Início do dia (estável entre renderizações) menos ~2 meses: cobre o período anterior do mensal.
   const dados = useChecklist({ deMs: inicioPeriodo('diaria', agora) - 62 * DIA })
 
@@ -31,7 +33,7 @@ export function ChecklistPage() {
 
   const cartoes = dados.modelos
     .filter((m) => m.ativo)
-    .map((m) => ({ modelo: m, ...situacaoModelo(m, dados.execucoes, agora) }))
+    .map((m) => ({ modelo: m, ...situacaoModelo(m, dados.execucoes, agora), ...liberacaoChecklist(m, instante) }))
     .sort((a, b) => ORDEM[a.situacao] - ORDEM[b.situacao] || a.modelo.titulo.localeCompare(b.modelo.titulo, 'pt-BR'))
   const atrasados = cartoes.filter((c) => c.situacao === 'atrasado').length
   const pendentes = cartoes.filter((c) => c.situacao === 'pendente').length
@@ -77,9 +79,10 @@ export function ChecklistPage() {
             <h2 className="text-lg font-bold">Checklists da unidade</h2>
             {!cartoes.length ? <Vazio titulo="Nenhum checklist liberado" texto="A franqueadora ainda não publicou checklists para a sua unidade." /> : null}
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cartoes.map(({ modelo, situacao, ultimaMs }) => (
+              {cartoes.map(({ modelo, situacao, ultimaMs, liberado, horario }) => (
                 <li key={modelo.id} className={cx('flex flex-col rounded-2xl border bg-surface p-4 shadow-sm', situacao === 'atrasado' ? 'border-red-300' : 'border-line')}>
                   <div className="flex flex-wrap gap-1.5">
+                    {!liberado ? <Selo tom="alerta">Abre às {horario}</Selo> : null}
                     <SituacaoSelo situacao={situacao} />
                     <Selo tom="marca">{ROTULO_TIPO_CK[modelo.tipo]}</Selo>
                     <Selo>{ROTULO_FREQ[modelo.frequencia]}</Selo>
@@ -90,8 +93,11 @@ export function ChecklistPage() {
                     {modelo.totalItens} itens · {ultimaMs ? `último em ${formatarData(ultimaMs)}` : 'nunca preenchido'}
                     {modelo.frequencia !== 'avulsa' && situacao === 'em_dia' ? ` · feito ${ROTULO_PERIODO[modelo.frequencia]}` : ''}
                   </p>
+                  {horario ? <p className="mt-2 text-sm text-ink-soft">Disponível a partir das {horario} (Brasília)</p> : null}
                   <div className="mt-auto pt-3">
-                    {dados.simulando ? null : (
+                    {dados.simulando ? null : !liberado ? (
+                      <Button type="button" className="w-full" disabled>Preencher checklist</Button>
+                    ) : (
                       <Link
                         to={`/checklist/preencher/${modelo.id}`}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark"

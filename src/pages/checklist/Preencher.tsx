@@ -11,6 +11,7 @@ import {
   ROTULO_TIPO_CK,
   calcularTotais,
   fazChecklist,
+  liberacaoChecklist,
   porSecao,
   respostasIniciais,
   validarExecucao,
@@ -21,6 +22,7 @@ import {
 import { enviarExecucao, lerModelo } from '../../lib/checklistApi'
 import { useVisao } from '../../lib/visao'
 import { ScoreSelo } from './partes'
+import { useRelogioChecklist } from './useChecklist'
 
 const COR_RESULTADO: Record<Resultado, string> = {
   ok: 'border-lime-dark bg-lime/25 text-lime-dark',
@@ -61,6 +63,8 @@ export function PreencherChecklistPage() {
     }
   }, [modeloId, tique])
 
+  const agora = useRelogioChecklist()
+  const liberacao = modelo ? liberacaoChecklist(modelo, new Date(agora)) : null
   const totais = useMemo(() => calcularTotais(respostas), [respostas])
   const respondidos = respostas.filter((r) => r.resultado).length
   const grupos = useMemo(() => (modelo ? porSecao(modelo.itens) : []), [modelo])
@@ -81,7 +85,7 @@ export function PreencherChecklistPage() {
   }
 
   async function enviar() {
-    if (!user || !modelo || enviando) return
+    if (!user || !modelo || enviando || !liberacaoChecklist(modelo, new Date()).liberado) return
     setTentou(true)
     const v = validarExecucao(modelo, respostas)
     setErrosItem(v.porItem)
@@ -101,7 +105,16 @@ export function PreencherChecklistPage() {
       const id = await enviarExecucao(user, modelo, respostas, obsGeral)
       navegar(`/checklist/execucao/${id}`, { replace: true, state: { enviado: true } })
     } catch (falha) {
-      setErro(`${mensagemErro(falha)} Se o checklist foi atualizado pela franqueadora, recarregue a página.`)
+      const mensagem = falha && typeof falha === 'object' && 'message' in falha && typeof falha.message === 'string'
+        ? falha.message
+        : ''
+      if (/pode ser enviado a partir de/i.test(mensagem)) {
+        setErro(mensagem)
+      } else if (falha && typeof falha === 'object' && 'code' in falha && falha.code === '42501') {
+        setErro('O banco recusou o envio. Confira com a franqueadora se o preenchimento está liberado e tente novamente.')
+      } else {
+        setErro(`${mensagemErro(falha)} Se o checklist foi atualizado pela franqueadora, recarregue a página.`)
+      }
     } finally {
       setEnviando(false)
     }
@@ -115,7 +128,16 @@ export function PreencherChecklistPage() {
       {carregando ? <Carregando texto="Abrindo o checklist…" /> : null}
       {erroCarga ? <Aviso tom="erro"><p role="alert">{erroCarga}</p><Button type="button" variant="secondary" className="mt-2" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
       {!carregando && !erroCarga && !modelo ? <Aviso>Este checklist está indisponível. Volte para escolher outro modelo.</Aviso> : null}
-      {!carregando && !erroCarga && modelo ? (
+      {!carregando && !erroCarga && modelo && liberacao && !liberacao.liberado ? (
+        <section className="space-y-3" aria-live="polite">
+          <h1 className="text-3xl font-extrabold">{modelo.titulo}</h1>
+          <Aviso>
+            <p>Esta rotina pode ser preenchida a partir das {liberacao.horario} (horário de Brasília). Volte nesse horário.</p>
+            <Link to="/checklist" className="mt-2 inline-block font-semibold underline">Voltar às rotinas</Link>
+          </Aviso>
+        </section>
+      ) : null}
+      {!carregando && !erroCarga && modelo && liberacao?.liberado ? (
         <>
           <header>
             <div className="flex flex-wrap gap-1.5">

@@ -4,7 +4,9 @@ import {
   faixaScore,
   fazChecklist,
   filtrarExecucoes,
+  horarioValido,
   inicioPeriodo,
+  liberacaoChecklist,
   itensMudaram,
   mediaScore,
   modeloServeUnidade,
@@ -179,5 +181,31 @@ describe('papéis', () => {
     expect(podeGerirChecklist({ papel: 'franqueado', modulosLiberados: ['checklist'] }, false)).toBe(false)
     expect(fazChecklist({ papel: 'equipe_franqueado' })).toBe(true)
     expect(fazChecklist({ papel: 'admin' })).toBe(false)
+  })
+})
+
+describe('horário de liberação', () => {
+  const modelo = { horarioLiberacao: '08:30' }
+
+  it.each([
+    ['2026-11-26T11:29:59Z', false],
+    ['2026-11-26T11:30:00Z', true],
+    ['2026-11-27T10:00:00Z', false],
+    ['2026-11-27T03:00:00Z', false],
+  ])('avalia %s em Brasília', (iso, liberado) => {
+    expect(liberacaoChecklist(modelo, new Date(iso))).toEqual({ liberado, horario: '08:30' })
+  })
+
+  it.each([{}, { horarioLiberacao: null }])('libera modelo sem horário (%j)', (semHorario) => {
+    expect(liberacaoChecklist(semHorario, new Date('2026-11-26T03:00:00Z')))
+      .toEqual({ liberado: true, horario: null })
+  })
+
+  it.each(['00:00', '08:30', '23:59'])('aceita %s', (horario) => {
+    expect(horarioValido(horario)).toBe(true)
+  })
+
+  it.each(['', '8:30', '24:00', '08:60', '08:30:00', '08:30 ', '08:30\n', null])('rejeita %j', (horario) => {
+    expect(horarioValido(horario)).toBe(false)
   })
 })

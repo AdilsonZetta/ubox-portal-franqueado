@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
+import { BACKEND } from '../../lib/backend'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData } from '../../lib/format'
@@ -45,6 +46,7 @@ const formVazio: ModeloForm = {
 function paraForm(m: ModeloChecklist): ModeloForm {
   return {
     titulo: m.titulo, descricao: m.descricao, tipo: m.tipo, frequencia: m.frequencia, itens: m.itens.map((i) => ({ ...i })),
+    horarioLiberacao: m.horarioLiberacao,
     publico: m.publico, unidades: [...m.unidades], ativo: m.ativo, geradoPorIA: m.geradoPorIA, iaModelo: m.iaModelo,
   }
 }
@@ -83,6 +85,8 @@ export function GestaoChecklistPage() {
   if (!user) return null
   if (!dados.gestor) return <Navigate to="/checklist" replace />
 
+  const admin = user.papel === 'admin'
+  const podeEditarHorario = admin && BACKEND === 'supabase'
   const execucoes = filtrarExecucoes(dados.execucoes, { modeloId: f.modeloId })
   const media = mediaScore(execucoes)
   const ncs = naoConformidades(execucoes)
@@ -168,6 +172,7 @@ export function GestaoChecklistPage() {
                       <span className="text-xs text-muted">
                         {ROTULO_TIPO_CK[m.tipo]} · {ROTULO_FREQ[m.frequencia]} · {m.totalItens} itens · v{m.versao} · {m.publico ? 'rede toda' : `${m.unidades.length} unidade(s)`}{m.geradoPorIA ? ` · IA: ${m.iaModelo}` : ''}
                       </span>
+                      {m.horarioLiberacao ? <span className="block text-xs font-semibold text-ink-soft">Libera às {m.horarioLiberacao}</span> : null}
                     </span>
                     {m.ativo ? <Selo tom="lima">Ativo</Selo> : <Selo>Inativo</Selo>}
                   </button>
@@ -191,6 +196,30 @@ export function GestaoChecklistPage() {
                     {FREQUENCIAS.map((t) => <option key={t} value={t}>{ROTULO_FREQ[t]}</option>)}
                   </select>
                 </Campo>
+              </div>
+              <div className="rounded-xl border border-line bg-paper p-3">
+                <Campo label="Liberar preenchimento a partir de">
+                  <input
+                    type="time"
+                    name="horarioLiberacao"
+                    autoComplete="off"
+                    className={cx(inputClass, 'max-w-48 disabled:opacity-70')}
+                    aria-describedby="ajuda-horario-liberacao"
+                    disabled={!podeEditarHorario}
+                    value={form.horarioLiberacao ?? ''}
+                    onChange={(e) => setForm({ ...form, horarioLiberacao: e.target.value || null })}
+                  />
+                </Campo>
+                <div id="ajuda-horario-liberacao" className="mt-2 space-y-1 text-xs text-muted">
+                  <p>Horário de Brasília, vale todos os dias. Deixe em branco para liberar o dia todo.</p>
+                  {!admin ? <p>Somente o administrador da franqueadora define o horário.</p> : null}
+                  {admin && !podeEditarHorario ? <p>A configuração de horário está disponível no Supabase.</p> : null}
+                </div>
+                {podeEditarHorario ? (
+                  <Button type="button" variant="secondary" className="mt-2" disabled={!form.horarioLiberacao} onClick={() => setForm({ ...form, horarioLiberacao: null })}>
+                    Limpar horário
+                  </Button>
+                ) : null}
               </div>
 
               <fieldset className="space-y-2 rounded-2xl border border-line p-3">
