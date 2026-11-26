@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, PenLine } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
@@ -34,6 +34,8 @@ function deInputData(v: string): Date {
 
 export function AuditoriaPage() {
   const { id = '' } = useParams()
+  const [busca] = useSearchParams()
+  const alvo = busca.get('acao')
   const { user } = useAuth()
   const { comoFranqueado } = useVisao()
   const [auditoria, setAuditoria] = useState<Auditoria | null>(null)
@@ -87,6 +89,17 @@ export function AuditoriaPage() {
       ativo = false
     }
   }, [id, user, leComoGestor, tique])
+
+  useEffect(() => {
+    if (!alvo || carregando || erroCarga || auditoria?.id !== id) return
+    const registro = document.getElementById(`acao-${alvo}`)
+    if (!registro) return
+    registro.focus({ preventScroll: true })
+    registro.scrollIntoView({
+      block: 'center',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    })
+  }, [alvo, carregando, erroCarga, auditoria, id])
 
   if (!user) return null
   const a = auditoria?.id === id ? auditoria : null
@@ -328,7 +341,7 @@ export function AuditoriaPage() {
                   const f = andamento[ac.id] ?? { evidencia: ac.evidenciaUrl, comentario: ac.comentarioUnidade }
                   const proximos = acaoDaUnidade(ac.status)
                   return (
-                    <li key={ac.id} className="rounded-2xl border border-line bg-white p-4 shadow-sm">
+                    <li key={ac.id} id={`acao-${ac.id}`} tabIndex={ac.id === alvo ? -1 : undefined} className={cx('rounded-2xl border border-line bg-white p-4 shadow-sm', ac.id === alvo && 'ring-2 ring-brand')}>
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="text-xs text-ink/50">Item: {ac.itemTexto || ac.itemId}</p>

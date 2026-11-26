@@ -17,10 +17,10 @@ export function formatarData(valor: unknown): string {
   return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(ms))
 }
 
-export function formatarDia(valor: unknown): string {
+export function formatarDia(valor: unknown, dateStyle: 'long' | 'short' = 'long'): string {
   const ms = paraMillis(valor)
   if (!ms) return '—'
-  return new Intl.DateTimeFormat('pt-BR', { dateStyle: 'long' }).format(new Date(ms))
+  return new Intl.DateTimeFormat('pt-BR', { dateStyle }).format(new Date(ms))
 }
 
 export function primeiroNome(nome: string): string {

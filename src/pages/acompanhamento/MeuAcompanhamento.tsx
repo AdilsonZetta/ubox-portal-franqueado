@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { Aviso, Button, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
@@ -10,6 +11,8 @@ import { StatusPassoSelo } from './partes'
 
 /** Unidade: registros que a franqueadora compartilhou e os passos combinados. Só o franqueado marca como feito. */
 export function MeuAcompanhamentoPage() {
+  const [busca] = useSearchParams()
+  const alvo = busca.get('passo')
   const { user } = useAuth()
   const { comoFranqueado } = useVisao()
   const [registros, setRegistros] = useState<RegistroAc[]>([])
@@ -46,6 +49,17 @@ export function MeuAcompanhamentoPage() {
       ativo = false
     }
   }, [daUnidade, user?.unidadeId, tique])
+
+  useEffect(() => {
+    if (!alvo || carregando || erroCarga || !daUnidade) return
+    const registro = document.getElementById(`passo-${alvo}`)
+    if (!registro) return
+    registro.focus({ preventScroll: true })
+    registro.scrollIntoView({
+      block: 'center',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth',
+    })
+  }, [alvo, carregando, erroCarga, daUnidade])
 
   if (!user) return null
 
@@ -97,7 +111,7 @@ export function MeuAcompanhamentoPage() {
             {!passos.length ? <Vazio titulo="Nenhum passo combinado" texto="Os combinados das visitas e reuniões aparecem aqui." /> : null}
             <ul className="space-y-2">
               {passos.map((p) => (
-                <li key={p.id} className="rounded-2xl border border-line bg-white p-4 shadow-sm">
+                <li key={p.id} id={`passo-${p.id}`} tabIndex={p.id === alvo ? -1 : undefined} className={cx('rounded-2xl border border-line bg-white p-4 shadow-sm', p.id === alvo && 'ring-2 ring-brand')}>
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
                       <p className="font-semibold">{p.descricao}</p>
