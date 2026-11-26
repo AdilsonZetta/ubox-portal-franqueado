@@ -12,3 +12,15 @@ export function podeModulo(usuario: Usuario | null | undefined, slug: string, si
   if (usuario.papel === 'admin' && !simulando) return true
   return modulosEfetivos(usuario)?.includes(slug) ?? false
 }
+
+export function podeMostrarModulo(
+  usuario: Usuario | null | undefined,
+  slug: string,
+  { ehAdmin, simulando }: { ehAdmin: boolean; simulando: boolean },
+): boolean {
+  if (slug === 'nuvem') {
+    return (usuario?.papel === 'franqueado' || usuario?.papel === 'equipe_franqueado')
+      && podeModulo(usuario, slug, simulando)
+  }
+  return ehAdmin || podeModulo(usuario, slug, simulando)
+}

@@ -4,7 +4,7 @@ import { fazEstoque } from './estoque'
 import { fazTrilha } from './manuaisTrilha'
 import { fazMarketing } from './marketing'
 import { podeModulo } from './modulosAcesso'
-import { pontuarBusca } from './text'
+import { pontuarBusca, termos } from './text'
 
 export type ModoBusca = 'buscar' | 'perguntar'
 
@@ -66,8 +66,12 @@ export function acoesDoPortal(pessoa: Usuario | null | undefined, { ehAdmin, sim
   ).map(({ id, titulo, descricao, to, palavras }) => ({ id, titulo, descricao, to, palavras }))
 }
 
+const termosGenericosAcao = new Set(['abrir', 'fazer', 'ver', 'como', 'de', 'do', 'da', 'dos', 'das', 'em', 'no', 'na', 'ao', 'os', 'as', 'um', 'uma'])
+
 export function buscarAcoes(q: string, acoes: AcaoPortal[]): AcaoPortal[] {
-  return acoes.map((acao) => ({ acao, pontos: pontuarBusca(q, acao.titulo, acao.palavras.join(' ')) }))
+  const consulta = termos(q).filter((termo) => !termosGenericosAcao.has(termo)).join(' ')
+  if (!consulta) return []
+  return acoes.map((acao) => ({ acao, pontos: pontuarBusca(consulta, acao.titulo, acao.palavras.join(' ')) }))
     .filter(({ pontos }) => pontos > 0)
     .sort((a, b) => b.pontos - a.pontos)
     .map(({ acao }) => acao)

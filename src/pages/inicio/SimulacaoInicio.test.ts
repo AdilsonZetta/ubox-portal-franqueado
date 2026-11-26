@@ -50,6 +50,7 @@ it('pede uma unidade, mostra somente suas ações e volta à visão da franquead
   try {
     await act(async () => raiz.render(createElement(MemoryRouter, null, createElement(VisaoProvider, { children: createElement(Inicio) }))))
     expect(container.querySelector('a[href="/nuvem/rede"]')?.textContent).toContain('Arquivos da rede')
+    expect(container.querySelector('a[href="/nuvem"]')).toBeNull()
     cartaoUniversidade.mockClear()
     await act(async () => container.querySelector('button')?.click())
     expect(container.textContent).toContain('Escolha a unidade para ver o portal como ela vê')

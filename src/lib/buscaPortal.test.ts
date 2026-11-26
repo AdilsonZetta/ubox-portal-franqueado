@@ -15,18 +15,25 @@ describe('busca do portal', () => {
     expect(destinoDaBusca(' ', 'buscar')).toBeNull()
   })
 
-  it('oferece abertura de chamados apenas à unidade com o módulo', () => {
-    expect(buscarAcoes('abrir chamado', acoesDoPortal(unidade(['chamados']), opts))[0]?.titulo).toBe('Abrir chamado')
+  it.each(['franqueado', 'equipe_franqueado'] as const)('oferece abertura de chamados para %s com o módulo', (papel) => {
+    const pessoa = { ...unidade(['chamados']), papel }
+    expect(buscarAcoes('abrir chamado', acoesDoPortal(pessoa, opts))[0]?.titulo).toBe('Abrir chamado')
     expect(buscarAcoes('abrir chamado', acoesDoPortal(unidade([]), opts))).toEqual([])
   })
 
   it('oferece acompanhamento de chamados ao admin', () => {
     const acoes = acoesDoPortal({ ...unidade([]), papel: 'admin' }, { ...opts, ehAdmin: true })
-    expect(acoes.map((acao) => acao.titulo)).toContain('Acompanhar chamados')
+    expect(buscarAcoes('abrir chamado', acoes)[0]?.titulo).toBe('Acompanhar chamados')
     expect(acoes.map((acao) => acao.titulo)).not.toContain('Abrir chamado')
   })
 
   it('encontra o checklist pela rotina de abertura', () => {
-    expect(buscarAcoes('como abrir a loja', acoesDoPortal(unidade(['checklist']), opts))[0]?.titulo).toBe('Fazer checklist')
+    const acoes = acoesDoPortal(unidade(['checklist', 'chamados']), opts)
+    expect(buscarAcoes('como abrir a loja', acoes).map((acao) => acao.titulo)).toEqual(['Fazer checklist'])
+  })
+
+  it('ignora consultas com apenas termos genéricos na busca de ações', () => {
+    const acoes = acoesDoPortal(unidade(['checklist', 'chamados']), opts)
+    expect(buscarAcoes('COMO abrír, fazer e ver?', acoes)).toEqual([])
   })
 })

@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
 import { useAuth } from '../lib/auth'
 import { primeiroNome } from '../lib/format'
-import { podeModulo } from '../lib/modulosAcesso'
+import { podeModulo, podeMostrarModulo } from '../lib/modulosAcesso'
 import { useVisao } from '../lib/visao'
 import { CompromissosUnidade } from './CompromissosUnidade'
 import { PedidosUnidade } from '../components/PedidosUnidade'
@@ -19,7 +19,7 @@ export function ModulosPage() {
   const { ehAdmin, comoFranqueado, simulado, unidadeSimulada } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
   const precisaEscolherUnidade = comoFranqueado && !simulado
-  const modulos = MODULOS.filter((modulo) => ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado))
+  const modulos = MODULOS.filter((modulo) => podeMostrarModulo(pessoa, modulo.slug, { ehAdmin, simulando: comoFranqueado }))
   return (
     <div>
       <div className="mx-auto max-w-6xl">
