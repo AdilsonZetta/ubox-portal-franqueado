@@ -104,7 +104,7 @@ export function PainelRede({ pessoa }: { pessoa: Usuario }) {
   const itens: Indicador[] = []
   if (acompanhamento) itens.push({
     titulo: 'Unidades ativas', valor: dados?.unidades ? resumo?.ativas.length ?? 0 : null,
-    detalhe: atencao === null ? 'Atenção na rede indisponível' : `${atencao} pedem atenção${semClassificacao ? ` · ${semClassificacao} com dados insuficientes` : ''}`,
+    detalhe: atencao === null ? 'Atenção na rede indisponível' : `${atencao} ${atencao === 1 ? 'pede' : 'pedem'} atenção${semClassificacao ? ` · ${semClassificacao} com dados insuficientes` : ''}`,
     parcial: atencao === null, icone: Building2, para: '/acompanhamento',
   })
   if (chamados) itens.push({
@@ -114,7 +114,7 @@ export function PainelRede({ pessoa }: { pessoa: Usuario }) {
   if (checklist) itens.push({
     titulo: 'Conformidade em 30 dias',
     valor: fontes?.execucoes ? resumo?.conformidade == null ? '—' : `${resumo.conformidade}%` : null,
-    detalhe: [resumo?.conformidade == null && 'Sem execuções no período', rotinas === null ? 'Atrasos indisponíveis' : `${rotinas} rotinas em atraso`].filter(Boolean).join(' · '),
+    detalhe: [resumo?.conformidade == null && 'Sem execuções no período', rotinas === null ? 'Atrasos indisponíveis' : `${rotinas} ${rotinas === 1 ? 'rotina' : 'rotinas'} em atraso`].filter(Boolean).join(' · '),
     parcial: rotinas === null, icone: ClipboardCheck, para: '/checklist/gestao',
   })
   if (adesoes.length) itens.push({
@@ -125,7 +125,7 @@ export function PainelRede({ pessoa }: { pessoa: Usuario }) {
   })
   if (estoque) itens.push({
     titulo: 'Unidades com estoque em alerta', valor: saldo?.unidades ?? null,
-    detalhe: saldo ? `${saldo.zerados} sem saldo · ${saldo.baixos} abaixo do mínimo · ${saldo.abertas} contagens abertas` : '',
+    detalhe: saldo ? `${saldo.zerados} sem saldo · ${saldo.baixos} abaixo do mínimo · ${saldo.abertas} ${saldo.abertas === 1 ? 'contagem aberta' : 'contagens abertas'}` : '',
     icone: Boxes, para: '/estoque/gestao',
   })
   if (ehAdmin) itens.push({

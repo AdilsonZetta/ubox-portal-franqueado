@@ -59,15 +59,15 @@ export function PainelUnidadeInicio({ pessoa }: { pessoa: Usuario }) {
   const saldo = dados?.inventario && unidadeId && estoqueDoPainel(dados.inventario, [{ id: unidadeId, nome: pessoa.unidade }])
   const detalhesTreino = [
     manuais && (treino && treino.manuais
-      ? `${treino.manuais.concluidos} manuais concluídos · ${treino.manuais.emAndamento} em andamento` : 'Manuais indisponíveis'),
-    certificados && (treino && treino.certificados !== null ? `${treino.certificados} certificados` : 'Certificados indisponíveis'),
+      ? `${treino.manuais.concluidos} ${treino.manuais.concluidos === 1 ? 'manual concluído' : 'manuais concluídos'} · ${treino.manuais.emAndamento} em andamento` : 'Manuais indisponíveis'),
+    certificados && (treino && treino.certificados !== null ? `${treino.certificados} ${treino.certificados === 1 ? 'certificado' : 'certificados'}` : 'Certificados indisponíveis'),
   ].filter(Boolean).join(' · ')
   const followUps = dados?.followUps ?? null
   const cobrancas = dados?.cobrancas ?? null
   const itens: Indicador[] = []
   if (checklist) itens.push({
     titulo: 'Checklist de hoje', valor: rotinas ? rotinas.pendentes + rotinas.atrasadas : null,
-    detalhe: rotinas ? `${rotinas.pendentes} pendentes · ${rotinas.atrasadas} em atraso · ${rotinas.concluidas} concluídas hoje` : '',
+    detalhe: rotinas ? `${rotinas.pendentes} ${rotinas.pendentes === 1 ? 'pendente' : 'pendentes'} · ${rotinas.atrasadas} em atraso · ${rotinas.concluidas} ${rotinas.concluidas === 1 ? 'concluída' : 'concluídas'} hoje` : '',
     icone: ClipboardCheck, para: '/checklist',
   })
   if (chamados) itens.push({
@@ -81,7 +81,7 @@ export function PainelUnidadeInicio({ pessoa }: { pessoa: Usuario }) {
   })
   if (estoque) itens.push({
     titulo: 'Itens de estoque em alerta', valor: saldo ? saldo.baixos + saldo.zerados : null,
-    detalhe: saldo ? `${saldo.zerados} sem saldo · ${saldo.baixos} abaixo do mínimo · ${saldo.abertas} contagens abertas` : '',
+    detalhe: saldo ? `${saldo.zerados} sem saldo · ${saldo.baixos} abaixo do mínimo · ${saldo.abertas} ${saldo.abertas === 1 ? 'contagem aberta' : 'contagens abertas'}` : '',
     icone: Boxes, para: '/estoque',
   })
   if (crm) itens.push({ titulo: 'Retornos do CRM em atraso', valor: followUps, detalhe: 'Contatos para retomar', icone: UsersRound, para: '/crm' })
