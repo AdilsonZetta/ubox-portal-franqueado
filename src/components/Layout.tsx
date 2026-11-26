@@ -5,7 +5,7 @@ import { GRUPOS, MODULOS } from '../data/modulos'
 import { destinoDaBusca, type ModoBusca } from '../lib/buscaPortal'
 import { useAuth } from '../lib/auth'
 import { observarPendentes } from '../lib/chamados'
-import { podeModulo } from '../lib/modulosAcesso'
+import { podeModulo, podeMostrarModulo } from '../lib/modulosAcesso'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { podeGerirUniversidade } from '../lib/universidade'
 import { podeGerirMarketing } from '../lib/marketing'
@@ -194,7 +194,7 @@ export function Layout() {
       </form>
       <nav className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
         {GRUPOS.map((grupo) => {
-          const doGrupo = MODULOS.filter((modulo) => modulo.grupo === grupo && (ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado)))
+          const doGrupo = MODULOS.filter((modulo) => modulo.grupo === grupo && podeMostrarModulo(pessoa, modulo.slug, { ehAdmin, simulando: comoFranqueado }))
           if (!doGrupo.length) return null
           return (
           <div key={grupo}>

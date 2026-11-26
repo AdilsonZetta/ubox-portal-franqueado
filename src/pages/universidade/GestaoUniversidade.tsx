@@ -407,7 +407,7 @@ export function GestaoUniversidadePage() {
               <div className="border-b border-line px-5 py-4">
                 <h2 className="text-lg font-bold">{u.unidadeNome}</h2>
                 {designados !== null ? <TotaisTreinamento pessoas={u.pessoas} compacto /> : null}
-                <p className="text-xs text-muted">{u.pessoas.length} pessoa{u.pessoas.length === 1 ? '' : 's'} · {u.aprovados} aprovação{u.aprovados === 1 ? '' : 'ões'} · {u.tentativas} tentativa{u.tentativas === 1 ? '' : 's'}</p>
+                <p className="text-xs text-muted">{u.pessoas.length} pessoa{u.pessoas.length === 1 ? '' : 's'} · {u.aprovados} {u.aprovados === 1 ? 'aprovação' : 'aprovações'} · {u.tentativas} tentativa{u.tentativas === 1 ? '' : 's'}</p>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-sm">
