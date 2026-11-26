@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Aviso, Button, Campo, inputClass } from '../components/ui'
 import { atualizarMeuNome } from '../lib/api'
+import { useVisao } from '../lib/visao'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
 import type { Papel } from '../types'
@@ -17,7 +18,22 @@ export function PerfilPage() {
   const [nome, setNome] = useState(user?.nome ?? '')
   const [mensagem, setMensagem] = useState('')
   const [erro, setErro] = useState('')
+  const { comoFranqueado, simulado } = useVisao()
   if (!user) return null
+  if (comoFranqueado) {
+    if (!simulado) return <Aviso>Escolha o franqueado para consultar o perfil.</Aviso>
+    return (
+      <section className="mx-auto max-w-lg space-y-4">
+        <h1 className="text-3xl font-extrabold">Perfil do franqueado</h1>
+        <div className="space-y-2 rounded-2xl border border-line bg-white p-5">
+          <h2 className="text-xl font-bold">{simulado.nome}</h2>
+          <p>Unidade: {simulado.unidade || 'Sem unidade informada'}</p>
+          <p>Cidade: {simulado.cidade || 'Sem cidade informada'}</p>
+          <p>{rotuloPapel(simulado.papel)}</p>
+        </div>
+      </section>
+    )
+  }
 
   return (
     <div className="mx-auto max-w-lg space-y-4">

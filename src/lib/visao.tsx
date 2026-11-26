@@ -24,8 +24,8 @@ export function VisaoProvider({ children }: { children: ReactNode }) {
   const [franqueados, setFranqueados] = useState<Usuario[]>([])
 
   useEffect(() => {
-    if (user?.papel !== 'admin' && comoFranqueado) setComoFranqueado(false)
-  }, [user?.papel, comoFranqueado])
+    if (user && user.papel !== 'admin' && comoFranqueado) setComoFranqueado(false)
+  }, [user, comoFranqueado])
 
   useEffect(() => {
     if (user?.papel !== 'admin') return

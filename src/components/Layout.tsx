@@ -412,7 +412,7 @@ export function Layout() {
               <option value="">Escolha o franqueado</option>
               {franqueados.map((pessoa) => (
                 <option key={pessoa.uid} value={pessoa.uid}>
-                  {pessoa.unidade || pessoa.nome}
+                  {[pessoa.nome, pessoa.unidade].filter(Boolean).join(' · ')}
                 </option>
               ))}
             </select>
@@ -421,8 +421,8 @@ export function Layout() {
       ) : null}
       <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-surface/20 pt-3">
         <NavLink to="/perfil" className="min-w-0 flex-1" onClick={() => setMenuAberto(false)}>
-          <span className="block truncate text-sm font-semibold">{user?.nome}</span>
-          <span className="block truncate text-[11px] text-sidebar-muted">{ehAdmin ? 'Franqueadora' : user?.unidade || 'Franqueado'}</span>
+          <span className="block truncate text-sm font-semibold">{pessoa?.nome || 'Escolha o franqueado'}</span>
+          <span className="block truncate text-[11px] text-sidebar-muted">{ehAdmin ? 'Franqueadora' : pessoa?.unidade || 'Franqueado'}</span>
         </NavLink>
         <button onClick={() => void sair()} className="rounded-lg p-2 text-line-strong hover:bg-surface/10" aria-label="Sair">
           <LogOut className="h-4 w-4" />
@@ -478,14 +478,14 @@ export function Layout() {
         </div>
         {comoFranqueado ? (
           <div className="no-print flex items-center justify-between gap-3 bg-brand px-4 py-2 text-sm font-semibold text-white md:px-8">
-            <span>Visualizando como franqueado{simulado ? ` · ${simulado.unidade || simulado.nome}` : ''}</span>
+            <span>Visualizando como franqueado{simulado ? ` · ${[simulado.nome, simulado.unidade].filter(Boolean).join(' · ')}` : ' · Escolha o franqueado'}</span>
             <button type="button" onClick={alternar} className="rounded-lg bg-surface px-3 py-1 text-brand-dark">
               Voltar para franqueadora
             </button>
           </div>
         ) : null}
         <main id="conteudo" tabIndex={-1} className="portal-conteudo mx-auto min-w-0 max-w-7xl scroll-mt-16 px-4 py-5 md:px-8 md:py-6 lg:scroll-mt-0">
-          <Outlet />
+          <Outlet key={comoFranqueado ? `simulado-${simulado?.uid ?? ''}` : 'conta'} />
         </main>
       </div>
     </div>
