@@ -53,8 +53,8 @@ export interface PassoAc {
 
 // ---------- Fontes agregadas (formas mínimas) ----------
 
-export interface FonteExecucao { unidadeId: string; modeloId: string; criadoEmMs: number; respostas: Pick<Resposta, 'peso' | 'resultado'>[] }
-export interface FonteAuditoria { id: string; unidadeId: string; dataVisitaMs: number; score: number; resultado: 'aprovada' | 'reprovada'; status: string; modeloTitulo: string }
+export interface FonteExecucao { id?: string; modeloTitulo?: string; unidadeNome?: string; unidadeId: string; modeloId: string; criadoEmMs: number; respostas: Pick<Resposta, 'peso' | 'resultado'>[] }
+export interface FonteAuditoria { id: string; unidadeId: string; unidadeNome?: string; dataVisitaMs: number; assinaturaAuditorEmMs?: number; score: number; resultado: 'aprovada' | 'reprovada'; status: string; modeloTitulo: string }
 export interface FonteAcao { unidadeId: string; status: StatusAcao; prazoMs: number }
 export interface FonteChamado extends EntradaPrazo { unidadeId: string }
 export interface FonteTentativa { unidadeId: string; uid: string; cursoId: string; aprovado: boolean | null }

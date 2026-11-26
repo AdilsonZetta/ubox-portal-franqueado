@@ -5,7 +5,7 @@ import { mapChamado, type Chamado, type EventoChamado } from './chamados'
 import { requireSupabase } from './supabase'
 
 type Linha = Record<string, unknown> & { id: string }
-type FiltroChamados = { rede: boolean; unidadeId?: string | null }
+type FiltroChamados = { rede: boolean; unidadeId?: string | null; solicitanteUid?: string }
 
 function dataSb(valor: unknown): Timestamp | undefined {
   const milissegundos = typeof valor === 'string' ? Date.parse(valor) : NaN
@@ -112,6 +112,7 @@ export function observarChamadosSb(filtro: FiltroChamados, aoMudar: (lista: Cham
     const linhas = await listarLinhas((inicio, fim) => {
       const consulta = requireSupabase().from('chamados').select('*')
       if (!filtro.rede) consulta.eq('unidade_id', filtro.unidadeId)
+      if (filtro.solicitanteUid) consulta.eq('aberto_por', filtro.solicitanteUid)
       return consulta.order('criado_em', { ascending: false }).order('id').range(inicio, fim)
     })
     return linhas.map(mapChamadoSb).filter((item): item is Chamado => item !== null)

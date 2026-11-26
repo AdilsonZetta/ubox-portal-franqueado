@@ -4,10 +4,10 @@ import { useAuth } from '../../lib/auth'
 import type { Pendencia } from '../../lib/pendencias'
 import { usePendencias } from '../../lib/usePendencias'
 
-export function PendenciasInicio() {
+export function PendenciasInicio({ pessoal = false }: { pessoal?: boolean }) {
   const { user } = useAuth()
   const rede = user?.papel === 'admin' || user?.papel === 'equipe_franqueadora'
-  const pendencias = usePendencias()
+  const pendencias = usePendencias(pessoal)
   const avisos = pendencias.itens.filter(({ id }) => id === 'avisos' || id === 'leituras')
   const tarefas = pendencias.itens.filter(({ id }) => id !== 'avisos' && id !== 'leituras')
 
