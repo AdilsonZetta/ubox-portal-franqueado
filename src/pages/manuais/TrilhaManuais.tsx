@@ -87,9 +87,9 @@ export function TrilhaManuaisPage() {
             sair da tela, o cronômetro recomeça.
           </p>
         </div>
-        {gestor && !comoFranqueado ? (
+        {(gestor || user.papel === 'franqueado') && !comoFranqueado ? (
           <Link to="/manuais/gestao" className="inline-flex items-center justify-center rounded-xl border border-line bg-surface px-4 py-2.5 text-sm font-semibold text-ink hover:border-ink/30">
-            Gestão da trilha
+            {gestor ? 'Gestão da trilha' : 'Progresso da unidade'}
           </Link>
         ) : null}
       </header>

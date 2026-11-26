@@ -91,7 +91,7 @@ export interface LinhaContagem {
   itemNome: string
   unidadeMedida: string
   sistema: number
-  contado: number
+  contado: number | null
   diferenca: number
 }
 
@@ -144,7 +144,7 @@ export function saldos(movimentos: Pick<Movimento, 'itemId' | 'delta'>[]): Map<s
   return mapa
 }
 
-export type Nivel = 'ok' | 'baixo' | 'zerado'
+export type Nivel = 'ok' | 'baixo' | 'zerado' | 'sem_lancamento'
 
 export function nivelEstoque(saldo: number, minimo: number): Nivel {
   if (saldo <= 0) return 'zerado'
@@ -159,20 +159,30 @@ export interface LinhaSaldo {
 }
 
 /** Itens ativos (e inativos que ainda têm saldo), com o nível frente ao mínimo. Críticos primeiro. */
-export function tabelaSaldos(itens: ItemEstoque[], movimentos: Pick<Movimento, 'itemId' | 'delta'>[]): LinhaSaldo[] {
+export function tabelaSaldos(itens: ItemEstoque[], movimentos: Pick<Movimento, 'itemId' | 'delta'>[], confirmadas: LinhaContagem[] = []): LinhaSaldo[] {
   const s = saldos(movimentos)
-  const peso: Record<Nivel, number> = { zerado: 0, baixo: 1, ok: 2 }
+  const contados = new Set(confirmadas.filter((l) => l.contado != null).map((l) => l.itemId))
+  const peso: Record<Nivel, number> = { zerado: 0, baixo: 1, ok: 2, sem_lancamento: 3 }
   return itens
     .filter((item) => item.ativo || (s.get(item.id) ?? 0) !== 0)
     .map((item) => {
       const saldo = s.get(item.id) ?? 0
-      return { item, saldo, nivel: item.ativo ? nivelEstoque(saldo, item.estoqueMinimo) : 'ok' as Nivel }
+      const nivel = !s.has(item.id) && !contados.has(item.id)
+        ? 'sem_lancamento'
+        : item.ativo ? nivelEstoque(saldo, item.estoqueMinimo) : 'ok'
+      return { item, saldo, nivel }
     })
     .sort((a, b) => peso[a.nivel] - peso[b.nivel] || a.item.nome.localeCompare(b.item.nome, 'pt-BR'))
 }
 
+export function situacaoSaldo({ nivel, saldo }: LinhaSaldo): string {
+  if (nivel === 'sem_lancamento') return 'Sem lançamento'
+  if (nivel === 'zerado') return saldo === 0 ? 'Saldo zero' : 'Zerado'
+  return nivel === 'baixo' ? 'Abaixo do mínimo' : 'OK'
+}
+
 export function alertas(linhas: LinhaSaldo[]): LinhaSaldo[] {
-  return linhas.filter((l) => l.item.ativo && l.nivel !== 'ok')
+  return linhas.filter((l) => l.item.ativo && (l.nivel === 'baixo' || l.nivel === 'zerado'))
 }
 
 /** Delta com sinal a partir do tipo (ajuste já vem com sinal). */
@@ -201,11 +211,25 @@ export function linhasContagem(itens: ItemEstoque[], saldoAtual: Map<string, num
     })
 }
 
+export function linhasDigitadas(itens: ItemEstoque[], saldoAtual: Map<string, number>, campos: Record<string, string>): LinhaContagem[] {
+  return itens.map((item) => {
+    const texto = campos[item.id]?.trim() ?? ''
+    const contado = texto === '' ? null : /^\d+$/.test(texto) ? Number(texto) : NaN
+    const sistema = saldoAtual.get(item.id) ?? 0
+    return { itemId: item.id, itemNome: item.nome, unidadeMedida: item.unidadeMedida, sistema, contado, diferenca: contado === null ? 0 : contado - sistema }
+  })
+}
+
+export function camposContagem(linhas: LinhaContagem[]): Record<string, string> {
+  return Object.fromEntries(linhas.map((l) => [l.itemId, l.contado === null ? '' : String(l.contado)]))
+}
+
 /** Ao confirmar, o "sistema" é recalculado com o saldo do momento (movimentos podem ter entrado depois do início). */
 export function recalcularContagem(linhas: LinhaContagem[], saldoAtual: Map<string, number>): LinhaContagem[] {
-  return linhas.map((l) => {
+  return linhas.flatMap((l) => {
+    if (l.contado === null) return []
     const sistema = saldoAtual.get(l.itemId) ?? 0
-    return { ...l, sistema, diferenca: l.contado - sistema }
+    return [{ ...l, sistema, diferenca: l.contado - sistema }]
   })
 }
 
@@ -213,13 +237,13 @@ export function divergencias(linhas: LinhaContagem[]): number {
   return linhas.filter((l) => l.diferenca !== 0).length
 }
 
-export function validarContagem(linhas: LinhaContagem[]): string[] {
+export function validarContagem(linhas: LinhaContagem[], rascunho = false): string[] {
   const erros: string[] = []
-  if (!linhas.length) erros.push('Conte pelo menos um item.')
+  if (!rascunho && !linhas.some((l) => l.contado !== null)) erros.push('Conte pelo menos um item antes de confirmar.')
   if (linhas.length > MAX_ITENS_CONTAGEM) erros.push(`No máximo ${MAX_ITENS_CONTAGEM} itens por contagem.`)
-  if (linhas.some((l) => !Number.isInteger(l.contado) || l.contado < 0 || l.contado > QTD_MAX)) erros.push('As quantidades contadas precisam ser inteiras, de 0 a 100.000.')
-  if (linhas.some((l) => Math.abs(l.diferenca) > QTD_MAX)) erros.push('Uma diferença passa do limite de 100.000.')
-  if (linhas.some((l) => !Number.isInteger(l.sistema) || l.sistema < 0 || l.sistema > QTD_MAX)) erros.push('Há item com saldo do sistema negativo ou acima de 100.000; fale com a franqueadora antes de confirmar.')
+  if (linhas.some((l) => l.contado !== null && (!Number.isInteger(l.contado) || l.contado < 0 || l.contado > QTD_MAX))) erros.push('As quantidades contadas precisam ser inteiras, de 0 a 100.000.')
+  if (!rascunho && linhas.some((l) => Math.abs(l.diferenca) > QTD_MAX)) erros.push('Uma diferença passa do limite de 100.000.')
+  if (!rascunho && linhas.some((l) => !Number.isInteger(l.sistema) || l.sistema < 0 || l.sistema > QTD_MAX)) erros.push('Há item com saldo do sistema negativo ou acima de 100.000; fale com a franqueadora antes de confirmar.')
   return erros
 }
 
@@ -233,7 +257,8 @@ export function validarPedido(linhas: Pick<LinhaPedido, 'quantidade'>[]): string
 
 /** Sugestão de reposição: o que falta para chegar ao dobro do mínimo. */
 export function sugestaoReposicao(linhas: LinhaSaldo[]): { itemId: string; quantidade: number }[] {
-  return alertas(linhas)
+  return linhas.filter((l) => l.item.ativo && l.nivel !== 'ok')
+    .sort((a, b) => Number(b.saldo <= 0) - Number(a.saldo <= 0) || a.item.nome.localeCompare(b.item.nome, 'pt-BR'))
     .map((l) => ({ itemId: l.item.id, quantidade: Math.max(1, l.item.estoqueMinimo * 2 - Math.max(0, l.saldo)) }))
     .slice(0, MAX_ITENS_PEDIDO)
 }
@@ -276,6 +301,7 @@ export function acoesPedido(status: StatusPedido, lado: 'unidade' | 'rede'): Sta
 export interface ResumoUnidadeEstoque {
   unidadeId: string
   unidadeNome: string
+  situacao: 'Sem lançamento' | 'Com lançamentos'
   itensBaixos: number
   itensZerados: number
   pedidosAbertos: number
@@ -283,23 +309,29 @@ export interface ResumoUnidadeEstoque {
   ultimaContagemMs: number
 }
 
-/** Visão da rede: uma linha por unidade que já movimentou, contou ou pediu. */
-export function resumoRede(itens: ItemEstoque[], movimentos: Movimento[], pedidos: Pedido[], contagens: Contagem[]): ResumoUnidadeEstoque[] {
-  const nomes = new Map<string, string>()
-  for (const x of [...movimentos, ...pedidos, ...contagens]) if (x.unidadeId && !nomes.has(x.unidadeId)) nomes.set(x.unidadeId, x.unidadeNome || x.unidadeId)
+/** Usa o cadastro de unidades habilitadas, com fallback para as unidades do histórico. */
+export function resumoRede(itens: ItemEstoque[], movimentos: Movimento[], pedidos: Pedido[], contagens: Contagem[], unidades?: { id: string; nome: string }[]): ResumoUnidadeEstoque[] {
+  const confirmadas = contagens.filter((c) => c.status === 'confirmada')
+  const nomes = new Map(unidades?.map((u) => [u.id, u.nome]))
+  if (!unidades) {
+    for (const x of [...movimentos, ...pedidos, ...contagens]) if (x.unidadeId && !nomes.has(x.unidadeId)) nomes.set(x.unidadeId, x.unidadeNome || x.unidadeId)
+  }
   const ativos = itens.filter((i) => i.ativo)
   return [...nomes.entries()]
     .map(([unidadeId, unidadeNome]) => {
       const movs = movimentos.filter((m) => m.unidadeId === unidadeId)
-      const linhas = tabelaSaldos(ativos, movs)
+      const contadas = confirmadas.filter((c) => c.unidadeId === unidadeId)
+      const pedidosUnidade = pedidos.filter((p) => p.unidadeId === unidadeId)
+      const linhas = tabelaSaldos(ativos, movs, contadas.flatMap((c) => c.itens))
       return {
         unidadeId,
         unidadeNome,
-        itensBaixos: linhas.filter((l) => l.nivel === 'baixo').length,
-        itensZerados: linhas.filter((l) => l.nivel === 'zerado').length,
-        pedidosAbertos: pedidos.filter((p) => p.unidadeId === unidadeId && (p.status === 'aberto' || p.status === 'aprovado' || p.status === 'enviado')).length,
+        situacao: movs.length || contadas.length || pedidosUnidade.length ? 'Com lançamentos' as const : 'Sem lançamento' as const,
+        itensBaixos: linhas.filter((l) => l.nivel === 'baixo' || (l.nivel === 'zerado' && l.saldo < 0)).length,
+        itensZerados: linhas.filter((l) => l.nivel === 'zerado' && l.saldo === 0).length,
+        pedidosAbertos: pedidosUnidade.filter((p) => p.status === 'aberto' || p.status === 'aprovado' || p.status === 'enviado').length,
         ultimoMovimentoMs: movs.reduce((max, m) => Math.max(max, m.criadoEmMs), 0),
-        ultimaContagemMs: contagens.filter((c) => c.unidadeId === unidadeId && c.status === 'confirmada').reduce((max, c) => Math.max(max, c.confirmadoEmMs), 0),
+        ultimaContagemMs: contadas.reduce((max, c) => Math.max(max, c.confirmadoEmMs), 0),
       }
     })
     .sort((a, b) => b.itensZerados + b.itensBaixos - (a.itensZerados + a.itensBaixos) || a.unidadeNome.localeCompare(b.unidadeNome, 'pt-BR'))
@@ -316,4 +348,30 @@ export function podeGerirEstoque(
 
 export function fazEstoque(usuario: { papel: string } | null | undefined): boolean {
   return usuario?.papel === 'franqueado' || usuario?.papel === 'equipe_franqueado'
+}
+
+export interface RascunhoContagem {
+  itens: LinhaContagem[]
+  obs: string
+}
+
+/** Uma fila por formulário, com o mesmo ID para todas as gravações após a abertura. */
+export function criarFilaContagem(
+  idAberto: string | null,
+  gravar: (id: string | null, rascunho: RascunhoContagem) => Promise<string>,
+) {
+  let id = idAberto
+  let fila = Promise.resolve()
+  return {
+    get id() { return id },
+    salvar(rascunho: RascunhoContagem) {
+      const resultado = fila.then(async () => {
+        if (!id && !rascunho.itens.some((l) => l.contado !== null)) return null
+        id = await gravar(id, rascunho)
+        return id
+      })
+      fila = resultado.then(() => {}, () => {})
+      return resultado
+    },
+  }
 }

@@ -1,3 +1,6 @@
+import { listarDesignados } from '../../lib/adesaoApi'
+import type { Designado } from '../../lib/adesao'
+import { TotaisTreinamento } from '../../components/TotaisTreinamento'
 import { BotaoCsv } from '../../components/BotaoCsv'
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
@@ -49,6 +52,7 @@ export function GestaoUniversidadePage() {
   const [provas, setProvas] = useState<Map<string, Prova>>(new Map())
   const [gabaritos, setGabaritos] = useState<Map<string, number[]>>(new Map())
   const [trilha, setTrilha] = useState<ItemTrilhaManual[]>([])
+  const [designados, setDesignados] = useState<Designado[] | null>(null)
   const [tentativas, setTentativas] = useState<TentativaProva[]>([])
   const [folhas, setFolhas] = useState<Map<string, number[]>>(new Map())
   const [carregando, setCarregando] = useState(true)
@@ -67,14 +71,15 @@ export function GestaoUniversidadePage() {
     let ativo = true
     setCarregando(true)
     setErroCarga('')
-    void Promise.all([listarCursos(true), listarProvas(), listarGabaritos(), listarTrilhaManuais(), listarResultados(user, true)])
-      .then(([c, p, g, t, r]) => {
+    void Promise.all([listarCursos(true), listarProvas(), listarGabaritos(), listarTrilhaManuais(), listarResultados(user, true), listarDesignados('universidade', user)])
+      .then(([c, p, g, t, r, pessoas]) => {
         if (!ativo) return
         setCursos(ordenarCursos(c))
         setProvas(new Map(p.map((item) => [item.cursoId, item])))
         setGabaritos(g)
         setTrilha(ordenarTrilha(t.filter((i) => i.ativo)))
         setTentativas(r)
+        setDesignados(pessoas)
         return listarFolhas(r).then((f) => ativo && setFolhas(f))
       })
       .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
@@ -85,7 +90,10 @@ export function GestaoUniversidadePage() {
   }, [user, permitido, tique])
 
   const titulosTrilha = useMemo(() => new Map(trilha.map((i) => [i.documentoId, i.titulo])), [trilha])
-  const resultados = useMemo(() => resumirResultados(tentativas, gabaritos, folhas), [tentativas, gabaritos, folhas])
+  const resultados = useMemo(
+    () => resumirResultados(tentativas, gabaritos, folhas, designados ?? undefined, new Set(cursos.filter((c) => c.publicado).map((c) => c.id))),
+    [tentativas, gabaritos, folhas, designados, cursos],
+  )
   const pendentes = tentativas.filter((t) => t.aprovado === null)
   const titulosCurso = new Map(cursos.map((c) => [c.id, c.titulo]))
 
@@ -361,17 +369,23 @@ export function GestaoUniversidadePage() {
 
       {aba === 'resultados' && !carregando && !erroCarga ? (
         <section className="space-y-4">
+          {designados === null
+            ? <Aviso>
+                <p>Não foi possível consultar as pessoas designadas. O relatório mostra apenas quem tem tentativas registradas.</p>
+                <Button type="button" variant="secondary" className="mt-2" onClick={() => setTique((n) => n + 1)}>Tentar novamente</Button>
+              </Aviso>
+            : <TotaisTreinamento pessoas={unidades.flatMap((u) => u.pessoas)} />}
           <div className="flex flex-wrap items-center gap-3">
             <select className={cx(inputClass, 'w-auto')} value={unidadeFiltro} onChange={(e) => setUnidadeFiltro(e.target.value)} aria-label="Filtrar por unidade">
               <option value="">Todas as unidades</option>
               {resultados.map((u) => <option key={u.unidadeId} value={u.unidadeId}>{u.unidadeNome}</option>)}
             </select>
-            <BotaoCsv arquivo="resultados-universidade" cabecalhos={['Unidade', 'Pessoa', 'Curso', 'Situação', 'Melhor nota (%)', 'Tentativas', 'Ciclos']}
-              linhas={unidades.flatMap((u) => u.pessoas.flatMap((p) => p.cursos.map((c) => [
-                u.unidadeNome, p.nome, titulosCurso.get(c.cursoId) ?? c.cursoId,
+            <BotaoCsv arquivo="resultados-universidade" cabecalhos={['Unidade', 'Pessoa', 'Progresso', 'Curso', 'Situação no curso', 'Melhor nota (%)', 'Tentativas', 'Ciclos']}
+              linhas={unidades.flatMap((u) => u.pessoas.flatMap((p) => p.cursos.length ? p.cursos.map((c) => [
+                u.unidadeNome, p.nome, p.situacao, titulosCurso.get(c.cursoId) ?? c.cursoId,
                 c.aprovado ? 'Aprovado' : c.aguardandoReestudo ? 'Em reestudo' : 'Reprovado', c.melhorNota, c.tentativas, c.ciclos,
-              ])))} />
-            <span className="text-sm text-muted">{tentativas.length} tentativa{tentativas.length === 1 ? '' : 's'} na rede</span>
+              ]) : [[u.unidadeNome, p.nome, p.situacao, null, null, null, 0, 0]]))} />
+            <span className="text-sm text-muted">{unidades.reduce((total, u) => total + u.tentativas, 0)} tentativa(s) no relatório</span>
           </div>
           {pendentes.length ? (
             <Aviso>
@@ -392,6 +406,7 @@ export function GestaoUniversidadePage() {
             <article key={u.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
               <div className="border-b border-line px-5 py-4">
                 <h2 className="text-lg font-bold">{u.unidadeNome}</h2>
+                {designados !== null ? <TotaisTreinamento pessoas={u.pessoas} compacto /> : null}
                 <p className="text-xs text-muted">{u.pessoas.length} pessoa{u.pessoas.length === 1 ? '' : 's'} · {u.aprovados} aprovação{u.aprovados === 1 ? '' : 'ões'} · {u.tentativas} tentativa{u.tentativas === 1 ? '' : 's'}</p>
               </div>
               <div className="overflow-x-auto">
@@ -407,9 +422,14 @@ export function GestaoUniversidadePage() {
                   </thead>
                   <tbody>
                     {u.pessoas.flatMap((p) =>
-                      p.cursos.map((c, i) => (
+                      p.cursos.length === 0 ? (
+                        <tr key={p.uid} className="border-b border-line last:border-0">
+                          <td className="px-5 py-3 font-medium">{p.nome}</td>
+                          <td className="px-4 py-3" colSpan={4}><Selo>{p.situacao}</Selo></td>
+                        </tr>
+                      ) : p.cursos.map((c, i) => (
                         <tr key={`${p.uid}-${c.cursoId}`} className="border-b border-line last:border-0">
-                          <td className="px-5 py-3 font-medium">{i === 0 ? p.nome : ''}</td>
+                          <td className="px-5 py-3 font-medium">{i === 0 ? <div className="flex flex-wrap items-center gap-2">{p.nome}<Selo tom={p.situacao === 'Concluiu' ? 'lima' : 'marca'}>{p.situacao}</Selo></div> : null}</td>
                           <td className="px-4 py-3">{titulosCurso.get(c.cursoId) ?? c.cursoId}</td>
                           <td className="px-4 py-3">
                             {c.aprovado ? <Selo tom="lima">Aprovado</Selo> : c.aguardandoReestudo ? <Selo tom="alerta">Em reestudo</Selo> : <Selo>Reprovado</Selo>}

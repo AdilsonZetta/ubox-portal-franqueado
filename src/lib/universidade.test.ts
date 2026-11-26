@@ -124,3 +124,11 @@ describe('resultados e acesso', () => {
     expect(fazUniversidade({ papel: 'admin' })).toBe(false)
   })
 })
+
+it('conta quem não tentou e exige aprovação em todo curso publicado', () => {
+  const lista = [t(1, 1, true), t(1, 1, null, { uid: 'u2', nome: 'Bia' })]
+  const designados = [...lista, { uid: 'u3', nome: 'Caio', unidadeId: 'un-1', unidadeNome: 'Centro' }]
+  const pessoas = resumirResultados(lista, null, null, designados, new Set(['c1', 'c2']))[0].pessoas
+  expect(pessoas.map((p) => p.situacao)).toEqual(['Em andamento', 'Em andamento', 'Não iniciou'])
+  expect(resumirResultados(lista, null, null, designados, new Set(['c1']))[0].pessoas[0].situacao).toBe('Concluiu')
+})

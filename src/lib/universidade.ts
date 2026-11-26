@@ -1,3 +1,4 @@
+import { situacaoTreinamento, type Designado, type SituacaoTreinamento } from './adesao'
 /**
  * Lógica pura da Universidade UBOX (módulo 5).
  * Sem Firebase aqui: sequência de tentativas, ciclos de reestudo, notas e resumos são testáveis no Vitest.
@@ -204,6 +205,7 @@ export interface ResultadoPessoa {
   unidadeNome: string
   cursos: ResultadoPessoaCurso[]
   aprovados: number
+  situacao: SituacaoTreinamento
 }
 
 export interface ResultadoUnidade {
@@ -222,11 +224,17 @@ export function resumirResultados(
   tentativas: TentativaProva[],
   gabaritos: Map<string, number[]> | null,
   folhas: Map<string, number[]> | null = null,
+  designados?: Designado[],
+  publicados?: ReadonlySet<string>,
 ): ResultadoUnidade[] {
   const pessoas = new Map<string, ResultadoPessoa>()
   const porPessoaCurso = new Map<string, TentativaProva[]>()
+  const pessoaInicial = ({ uid, nome, unidadeId, unidadeNome }: Designado): ResultadoPessoa =>
+    ({ uid, nome, unidadeId, unidadeNome, cursos: [], aprovados: 0, situacao: 'Não iniciou' })
+  for (const d of designados ?? []) pessoas.set(d.uid, pessoaInicial(d))
   for (const t of tentativas) {
-    if (!pessoas.has(t.uid)) pessoas.set(t.uid, { uid: t.uid, nome: t.nome, unidadeId: t.unidadeId, unidadeNome: t.unidadeNome, cursos: [], aprovados: 0 })
+    if (designados && !pessoas.has(t.uid)) continue
+    if (!pessoas.has(t.uid)) pessoas.set(t.uid, pessoaInicial(t))
     const chave = `${t.uid}|${t.cursoId}`
     porPessoaCurso.set(chave, [...(porPessoaCurso.get(chave) ?? []), t])
   }
@@ -257,6 +265,8 @@ export function resumirResultados(
       u = { unidadeId: pessoa.unidadeId, unidadeNome: pessoa.unidadeNome || 'Unidade sem nome', pessoas: [], aprovados: 0, tentativas: 0 }
       unidades.set(pessoa.unidadeId, u)
     }
+    const aprovadosPublicados = pessoa.cursos.filter((c) => c.aprovado && (!publicados || publicados.has(c.cursoId))).length
+    pessoa.situacao = situacaoTreinamento(pessoa.cursos.length > 0, aprovadosPublicados, publicados?.size ?? pessoa.cursos.length)
     pessoa.cursos.sort((a, b) => a.cursoId.localeCompare(b.cursoId))
     u.pessoas.push(pessoa)
     u.aprovados += pessoa.aprovados

@@ -17,6 +17,7 @@ import {
   collection,
   doc,
   getDocs,
+  getDocsFromServer,
   query,
   serverTimestamp,
   setDoc,
@@ -97,7 +98,7 @@ export function mapMovimento(id: string, d: DocumentData): Movimento {
 
 function mapLinhaContagem(v: unknown): LinhaContagem {
   const d = objeto(v)
-  return { itemId: texto(d.itemId), itemNome: texto(d.itemNome), unidadeMedida: texto(d.unidadeMedida, 'un'), sistema: numero(d.sistema), contado: numero(d.contado), diferenca: numero(d.diferenca) }
+  return { itemId: texto(d.itemId), itemNome: texto(d.itemNome), unidadeMedida: texto(d.unidadeMedida, 'un'), sistema: numero(d.sistema), contado: d.contado == null ? null : numero(d.contado), diferenca: numero(d.diferenca) }
 }
 
 export function mapContagem(id: string, d: DocumentData): Contagem {
@@ -223,7 +224,7 @@ export async function registrarMovimento(autor: Usuario, item: ItemEstoque, tipo
   })
 }
 
-export async function salvarContagem(autor: Usuario, existente: Contagem | null, linhas: LinhaContagem[], obs: string): Promise<string> {
+export async function salvarContagem(autor: Usuario, existente: Pick<Contagem, 'id'> | null, linhas: LinhaContagem[], obs: string): Promise<string> {
   if (BACKEND === 'supabase') return salvarContagemSb(autor, existente, linhas, obs)
   const banco = requireDb()
   const dados = {
@@ -237,24 +238,51 @@ export async function salvarContagem(autor: Usuario, existente: Contagem | null,
     await updateDoc(doc(banco, 'estoqueContagens', existente.id), dados)
     return existente.id
   }
-  const ref = doc(collection(banco, 'estoqueContagens'))
-  await setDoc(ref, {
-    ...dados,
-    unidadeId: autor.unidadeId ?? '',
-    unidadeNome: autor.unidade ?? '',
-    status: 'aberta',
-    criadoPor: autor.uid,
-    criadoPorNome: autor.nome,
-    criadoEm: serverTimestamp(),
-    confirmadoPor: '',
-    confirmadoNome: '',
-    confirmadoEm: null,
-  })
-  return ref.id
+  const unidadeId = autor.unidadeId ?? ''
+  const colecao = collection(banco, 'estoqueContagens')
+  const registrosDaUnidade = query(colecao, where('unidadeId', '==', unidadeId))
+  const consultar = async () => {
+    const snap = await getDocsFromServer(registrosDaUnidade)
+    return snap.docs.map((d) => mapContagem(d.id, d.data()))
+      .sort((a, b) => b.criadoEmMs - a.criadoEmMs || a.id.localeCompare(b.id))
+  }
+  const contagens = await consultar()
+  const aberta = contagens.filter((c) => c.status === 'aberta')
+    .sort((a, b) => b.atualizadoEmMs - a.atualizadoEmMs || a.id.localeCompare(b.id))[0]
+  if (aberta) {
+    await updateDoc(doc(colecao, aberta.id), dados)
+    return aberta.id
+  }
+
+  // Duas sessões partindo da mesma contagem encerrada usam o mesmo ID.
+  const chave = new TextEncoder().encode(JSON.stringify([unidadeId, contagens[0]?.id ?? null]))
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', chave))
+  const id = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  const ref = doc(colecao, id)
+  try {
+    await setDoc(ref, {
+      ...dados,
+      unidadeId,
+      unidadeNome: autor.unidade ?? '',
+      status: 'aberta',
+      criadoPor: autor.uid,
+      criadoPorNome: autor.nome,
+      criadoEm: serverTimestamp(),
+      confirmadoPor: '',
+      confirmadoNome: '',
+      confirmadoEm: null,
+    })
+  } catch (falha) {
+    // Se a outra sessão abriu a contagem antes, só os campos do rascunho podem mudar.
+    const concorrente = (await consultar()).find((c) => c.id === id && c.status === 'aberta')
+    if (!concorrente) throw falha
+    await updateDoc(ref, dados)
+  }
+  return id
 }
 
 /** Confirma a contagem e grava um ajuste por linha divergente, tudo no mesmo lote (id = contagem_indice). */
-export async function confirmarContagem(autor: Usuario, contagem: Contagem, saldoAtual: Map<string, number>, obs: string): Promise<number> {
+export async function confirmarContagem(autor: Usuario, contagem: Pick<Contagem, 'id' | 'itens' | 'criadoEmMs'>, saldoAtual: Map<string, number>, obs: string): Promise<number> {
   if (BACKEND === 'supabase') return confirmarContagemSb(contagem, saldoAtual, obs)
   const banco = requireDb()
   const linhas = recalcularContagem(contagem.itens, saldoAtual)
@@ -289,7 +317,7 @@ export async function confirmarContagem(autor: Usuario, contagem: Contagem, sald
   return ajustes
 }
 
-export async function cancelarContagem(autor: Usuario, contagem: Contagem): Promise<void> {
+export async function cancelarContagem(autor: Usuario, contagem: Pick<Contagem, 'id'>): Promise<void> {
   if (BACKEND === 'supabase') return cancelarContagemSb(contagem)
   await updateDoc(doc(requireDb(), 'estoqueContagens', contagem.id), { status: 'cancelada', ...autoria(autor) })
 }
