@@ -23,7 +23,7 @@ import { requireDb } from './firebase'
 import { paraMillis } from './format'
 import { mapExecucao, mapModelo } from './checklistApi'
 import { mapAcao, mapAuditoria } from './auditoriaApi'
-import { mapChamado } from './chamados'
+import { entradaPrazoChamado, mapChamado } from './chamados'
 import { mapPedido } from './marketingApi'
 import { mapProgresso } from './manuaisApi'
 import { mapTentativa } from './universidadeApi'
@@ -128,7 +128,7 @@ export async function carregarAcompanhamento(unidadeId?: string): Promise<DadosA
       execucoes,
       auditorias,
       acoes,
-      chamados: chamados ? chamados.map((c) => ({ unidadeId: c.unidadeId, status: c.status, criadoEmMs: paraMillis(c.criadoEm), slaHoras: c.slaHoras })) : null,
+      chamados: chamados ? chamados.map((c) => ({ unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })) : null,
       tentativas,
       cursosPublicados: cursos,
       progresso,

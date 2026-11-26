@@ -17,7 +17,10 @@ import {
   SLA_HORAS,
   STATUS_CHAMADO,
   STATUS_PENDENTES,
+  calcularPrazoChamado,
   slaHoras,
+  type EntradaPrazo,
+  type PrazoChamado,
   type CategoriaChamado,
   type PrioridadeChamado,
   type StatusChamado,
@@ -62,6 +65,28 @@ export interface Chamado {
   resolvidoEm?: Timestamp | null
   fechadoEm?: Timestamp | null
   reabertoEm?: Timestamp | null
+  pausadoEm?: Timestamp | null
+  pausaAcumuladaSeg?: number
+}
+
+type ChamadoComPrazo = Pick<Chamado, 'slaHoras' | 'criadoEm' | 'reabertoEm' | 'pausadoEm' | 'pausaAcumuladaSeg'>
+  & Pick<EntradaPrazo, 'status' | 'responsavelNome' | 'unidadeNome'>
+
+export function entradaPrazoChamado(chamado: ChamadoComPrazo): EntradaPrazo {
+  return {
+    status: chamado.status,
+    criadoEmMs: paraMillis(chamado.criadoEm),
+    reabertoEmMs: paraMillis(chamado.reabertoEm),
+    slaHoras: chamado.slaHoras,
+    pausadoEmMs: paraMillis(chamado.pausadoEm),
+    pausaAcumuladaMs: (chamado.pausaAcumuladaSeg ?? 0) * 1000,
+    responsavelNome: chamado.responsavelNome,
+    unidadeNome: chamado.unidadeNome,
+  }
+}
+
+export function prazoDoChamado(chamado: ChamadoComPrazo, agoraMs = Date.now()): PrazoChamado {
+  return calcularPrazoChamado(entradaPrazoChamado(chamado), agoraMs)
 }
 
 export interface EventoChamado {
@@ -114,6 +139,8 @@ export function mapChamado(id: string, data: Record<string, unknown>): Chamado |
     resolvidoEm: (data.resolvidoEm ?? null) as Timestamp | null,
     fechadoEm: (data.fechadoEm ?? null) as Timestamp | null,
     reabertoEm: (data.reabertoEm ?? null) as Timestamp | null,
+    pausadoEm: (data.pausadoEm ?? null) as Timestamp | null,
+    pausaAcumuladaSeg: typeof data.pausaAcumuladaSeg === 'number' ? data.pausaAcumuladaSeg : 0,
   }
 }
 

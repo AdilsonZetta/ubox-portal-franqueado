@@ -1,19 +1,17 @@
 import { useEffect, useState } from 'react'
-import { chamadoAtrasado } from '../data/chamados'
 import type { Usuario } from '../types'
 import { listarCompartilhados } from './acompanhamentoApi'
 import { passoAtrasado } from './acompanhamento'
 import { acaoAtrasada, daUnidade, podeGerirAuditoria } from './auditoria'
 import { listarAcoes } from './auditoriaApi'
 import { useAuth } from './auth'
-import { observarChamados } from './chamados'
+import { observarChamados, prazoDoChamado } from './chamados'
 import { fazChecklist, inicioPeriodo, situacaoModelo } from './checklist'
 import { listarExecucoes, listarModelos } from './checklistApi'
 import { fazCliente, hojeISO, situacao } from './cliente'
 import { carregarClientes, carregarCobrancasDaUnidade } from './clienteApi'
 import { fazCrm, followUps } from './crm'
 import { carregarUnidade } from './crmApi'
-import { paraMillis } from './format'
 import { podeModulo } from './modulosAcesso'
 import { montarPendencias, type FontesPendencias } from './pendencias'
 import { usePortal } from './portal'
@@ -54,7 +52,7 @@ export function usePendencias() {
       buscar('chamados', () => new Promise<number>((resolve, reject) => {
         concluirChamados = () => resolve(0)
         cancelarChamados = observarChamados({ rede, unidadeId: unidade }, (chamados) => {
-          resolve(chamados.filter((c) => chamadoAtrasado(c.status, paraMillis(c.criadoEm), c.slaHoras, agora, paraMillis(c.reabertoEm))).length)
+          resolve(chamados.filter((c) => prazoDoChamado(c, agora).atrasado).length)
         }, reject)
       }).finally(() => cancelarChamados?.()))
     }
