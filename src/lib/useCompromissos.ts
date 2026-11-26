@@ -4,12 +4,11 @@ import { listarCompartilhados } from './acompanhamentoApi'
 import { daUnidade } from './auditoria'
 import { listarAcoes } from './auditoriaApi'
 import { montarCompromissos } from './compromissos'
-import { podeModulo } from './modulosAcesso'
 
-async function carregarCompromissos(unidadeId: string, papel: string, auditoria: boolean, acompanhamento: boolean) {
+async function carregarCompromissos(unidadeId: string, papel: string) {
   const [acoes, compartilhados] = await Promise.allSettled([
-    auditoria ? listarAcoes(false, unidadeId) : Promise.resolve([]),
-    acompanhamento ? listarCompartilhados(unidadeId) : Promise.resolve({ passos: [] }),
+    listarAcoes(false, unidadeId),
+    listarCompartilhados(unidadeId),
   ])
   return {
     itens: montarCompromissos({
@@ -33,21 +32,19 @@ export function useCompromissos(pessoa: Usuario | null | undefined) {
     tentativa: number
     dados: Awaited<ReturnType<typeof carregarCompromissos>>
   }>()
-  const auditoria = podeModulo(pessoa, 'auditoria', false)
-  const acompanhamento = podeModulo(pessoa, 'acompanhamento', false)
   const unidadeId = daUnidade(pessoa) ? pessoa?.unidadeId : undefined
-  const habilitado = Boolean(unidadeId && (auditoria || acompanhamento))
+  const habilitado = Boolean(unidadeId)
 
   useEffect(() => {
-    if (!habilitado || !pessoa || !unidadeId) return
+    if (!pessoa || !unidadeId) return
     let ativo = true
-    void carregarCompromissos(unidadeId, pessoa.papel, auditoria, acompanhamento).then((dados) => {
+    void carregarCompromissos(unidadeId, pessoa.papel).then((dados) => {
       if (ativo) setCarga({ pessoa, tentativa, dados })
     })
     return () => {
       ativo = false
     }
-  }, [habilitado, pessoa, unidadeId, auditoria, acompanhamento, tentativa])
+  }, [pessoa, unidadeId, tentativa])
 
   const atual = habilitado && carga?.pessoa === pessoa ? carga : undefined
   return {
