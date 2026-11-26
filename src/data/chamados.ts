@@ -66,10 +66,62 @@ export function chamadoPendente(status: string): boolean {
   return (STATUS_PENDENTES as string[]).includes(status)
 }
 
-export function chamadoAtrasado(status: string, criadoEm: number, horas: number, agora = Date.now(), reabertoEm = 0): boolean {
-  if (!chamadoPendente(status)) return false
-  const prazo = prazoMillis(inicioDoPrazo(criadoEm, reabertoEm), horas)
-  return prazo > 0 && agora > prazo
+export interface EntradaPrazo {
+  status: string
+  criadoEmMs: number
+  reabertoEmMs?: number
+  slaHoras: number
+  pausadoEmMs?: number
+  pausaAcumuladaMs?: number
+  responsavelNome?: string | null
+  unidadeNome?: string
+}
+
+export interface PrazoChamado {
+  inicioMs: number
+  venceEmMs: number
+  pausado: boolean
+  pausaMs: number
+  atrasado: boolean
+  pendente: boolean
+  quemResponde: 'franqueadora' | 'unidade' | 'ninguem'
+  rotuloQuemResponde: string
+  restanteMs: number
+}
+
+export function calcularPrazoChamado(c: EntradaPrazo, agoraMs = Date.now()): PrazoChamado {
+  const inicioMs = inicioDoPrazo(c.criadoEmMs, c.reabertoEmMs ?? 0)
+  const pendente = chamadoPendente(c.status)
+  const pausado = c.status === 'aguardando_franqueado'
+  const pausadoEmMs = c.pausadoEmMs ?? 0
+  const pausaAtualMs = pausado && pausadoEmMs > 0 ? Math.max(0, agoraMs - pausadoEmMs) : 0
+  const pausaMs = Math.max(0, c.pausaAcumuladaMs ?? 0) + pausaAtualMs
+  const prazoBase = prazoMillis(inicioMs, c.slaHoras)
+  const venceEmMs = prazoBase ? prazoBase + pausaMs : 0
+  const atrasado = pendente && !pausado && venceEmMs > 0 && agoraMs > venceEmMs
+
+  let quemResponde: PrazoChamado['quemResponde'] = 'ninguem'
+  let rotuloQuemResponde = 'Encerrado'
+  if (pausado) {
+    quemResponde = 'unidade'
+    rotuloQuemResponde = c.unidadeNome ? `Unidade · ${c.unidadeNome}` : 'Unidade'
+  } else if (pendente) {
+    quemResponde = 'franqueadora'
+    rotuloQuemResponde = c.responsavelNome ? `Franqueadora · ${c.responsavelNome}` : 'Franqueadora'
+  } else if (c.status === 'resolvido') {
+    quemResponde = 'unidade'
+    rotuloQuemResponde = 'Unidade confirma a solução'
+  }
+
+  return { inicioMs, venceEmMs, pausado, pausaMs, atrasado, pendente, quemResponde, rotuloQuemResponde, restanteMs: venceEmMs - agoraMs }
+}
+
+export function chamadoAtrasado(
+  status: string, criadoEm: number, horas: number, agora = Date.now(), reabertoEm = 0, pausadoEm = 0, pausaAcumuladaMs = 0,
+): boolean {
+  return calcularPrazoChamado({
+    status, criadoEmMs: criadoEm, reabertoEmMs: reabertoEm, slaHoras: horas, pausadoEmMs: pausadoEm, pausaAcumuladaMs,
+  }, agora).atrasado
 }
 
 export function tempoMedioResolucaoHoras(itens: { status: string; criadoEm: number; resolvidoEm: number; fechadoEm: number }[]): number | null {

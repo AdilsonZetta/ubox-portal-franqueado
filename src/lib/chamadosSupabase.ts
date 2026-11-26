@@ -33,6 +33,8 @@ export function mapChamadoSb(linha: Linha): Chamado | null {
     resolvidoEm: dataSb(linha.resolvido_em),
     fechadoEm: dataSb(linha.fechado_em),
     reabertoEm: dataSb(linha.reaberto_em),
+    pausadoEm: dataSb(linha.pausado_em),
+    pausaAcumuladaSeg: linha.pausa_acumulada_seg,
   })
 }
 

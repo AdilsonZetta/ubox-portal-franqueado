@@ -5,7 +5,7 @@ import { mapPasso, mapRegistro, type DadosAcompanhamento } from './acompanhament
 import { mapAcaoSb, mapAuditoriaSb } from './auditoriaSupabase'
 import { mapChamadoSb } from './chamadosSupabase'
 import { mapExecucaoSb, mapModeloSb } from './checklistSupabase'
-import { paraMillis } from './format'
+import { entradaPrazoChamado } from './chamados'
 import { mapProgressoSb } from './manuaisSupabase'
 import { mapPedidoSb } from './marketingSupabase'
 import { requireSupabase } from './supabase'
@@ -100,7 +100,7 @@ export async function carregarAcompanhamentoSb(unidadeId?: string): Promise<Dado
     seguro(listarLinhas('auditoria_acoes', unidade).then((linhas) => linhas.map(mapAcaoSb))),
     seguro(listarLinhas('chamados', (q) => unidadeId ? unidade(q) : q.in('status', STATUS_PENDENTES))
       .then((linhas) => linhas.map(mapChamadoSb).filter((c) => c !== null)
-        .map((c) => ({ unidadeId: c.unidadeId, status: c.status, criadoEmMs: paraMillis(c.criadoEm), slaHoras: c.slaHoras })))),
+        .map((c) => ({ unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })))),
     seguro(listarLinhas<Parameters<typeof mapTentativaSb>[0]>('tentativas_prova', unidade)
       .then((linhas) => linhas.map(mapTentativaSb))),
     seguro(contar('cursos', 'publicado')),

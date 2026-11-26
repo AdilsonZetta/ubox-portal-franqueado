@@ -7,14 +7,11 @@ import {
   PRIORIDADES_CHAMADO,
   STATUS_CHAMADO,
   STATUS_FRANQUEADORA,
-  chamadoAtrasado,
-  chamadoPendente,
   nomeCategoria,
   nomePrioridade,
   nomeStatus,
-  inicioDoPrazo,
-  prazoMillis,
   tempoMedioResolucaoHoras,
+  type PrazoChamado,
   type CategoriaChamado,
   type PrioridadeChamado,
   type StatusChamado,
@@ -26,6 +23,7 @@ import {
   mudarStatus,
   observarChamados,
   observarEventos,
+  prazoDoChamado,
   type Chamado,
   type EventoChamado,
 } from '../lib/chamados'
@@ -70,21 +68,24 @@ export function ChamadosPage() {
     })
   }, [user, rede, unidadeId, tique])
 
-  const visiveis = useMemo(() => {
+  const comPrazo = useMemo(() => {
     const agora = Date.now()
+    return chamados.map((chamado) => ({ chamado, prazo: prazoDoChamado(chamado, agora) }))
+  }, [chamados])
+
+  const visiveis = useMemo(() => {
     const consulta = normalizar(busca.trim())
-    return chamados.filter((chamado) => {
+    return comPrazo.filter(({ chamado, prazo }) => {
       if (filtros.unidade && chamado.unidadeId !== filtros.unidade) return false
       if (filtros.status && chamado.status !== filtros.status) return false
       if (filtros.categoria && chamado.categoria !== filtros.categoria) return false
       if (filtros.prioridade && chamado.prioridade !== filtros.prioridade) return false
-      if (soAtrasados && !chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, agora, paraMillis(chamado.reabertoEm))) return false
+      if (soAtrasados && !prazo.atrasado) return false
       return normalizar(`${chamado.titulo} ${chamado.unidadeNome}`).includes(consulta)
     }).sort((a, b) => ordem === 'prazo'
-      ? prazoMillis(inicioDoPrazo(paraMillis(a.criadoEm), paraMillis(a.reabertoEm)), a.slaHoras)
-        - prazoMillis(inicioDoPrazo(paraMillis(b.criadoEm), paraMillis(b.reabertoEm)), b.slaHoras)
-      : paraMillis(b.criadoEm) - paraMillis(a.criadoEm))
-  }, [chamados, filtros, busca, soAtrasados, ordem])
+      ? a.prazo.venceEmMs - b.prazo.venceEmMs
+      : paraMillis(b.chamado.criadoEm) - paraMillis(a.chamado.criadoEm))
+  }, [comPrazo, filtros, busca, soAtrasados, ordem])
 
   const unidades = useMemo(() => {
     const mapa = new Map<string, string>()
@@ -93,9 +94,8 @@ export function ChamadosPage() {
   }, [chamados])
 
   const painel = useMemo(() => {
-    const agora = Date.now()
-    const abertos = chamados.filter((chamado) => chamadoPendente(chamado.status)).length
-    const atrasados = chamados.filter((chamado) => chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, agora, paraMillis(chamado.reabertoEm))).length
+    const abertos = comPrazo.filter(({ prazo }) => prazo.pendente).length
+    const atrasados = comPrazo.filter(({ prazo }) => prazo.atrasado).length
     const media = tempoMedioResolucaoHoras(
       chamados.map((chamado) => ({
         status: chamado.status,
@@ -105,9 +105,9 @@ export function ChamadosPage() {
       })),
     )
     return { abertos, atrasados, media }
-  }, [chamados])
+  }, [chamados, comPrazo])
 
-  const atual = visiveis.find((chamado) => chamado.id === selecionado) ?? visiveis[0] ?? null
+  const atual = visiveis.find(({ chamado }) => chamado.id === selecionado) ?? visiveis[0] ?? null
 
   if (!user) return null
   if (comoFranqueado && !simulado) return <Aviso>Escolha qual franqueado simular para ver os chamados dessa unidade.</Aviso>
@@ -156,7 +156,7 @@ export function ChamadosPage() {
         </Campo>
         <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={soAtrasados} onChange={(e) => setSoAtrasados(e.target.checked)} /> Somente atrasados</label>
         {!carregando && !erroCarga ? <BotaoCsv arquivo="chamados" cabecalhos={['Título', 'Unidade', 'Status', 'Categoria', 'Prioridade', 'Abertura']}
-          linhas={visiveis.map((c) => [c.titulo, c.unidadeNome, nomeStatus(c.status), nomeCategoria(c.categoria), nomePrioridade(c.prioridade), formatarData(c.criadoEm)])} /> : null}
+          linhas={visiveis.map(({ chamado: c }) => [c.titulo, c.unidadeNome, nomeStatus(c.status), nomeCategoria(c.categoria), nomePrioridade(c.prioridade), formatarData(c.criadoEm)])} /> : null}
       </div>
       {rede ? (
         <div className="grid gap-2 sm:grid-cols-4">
@@ -226,29 +226,37 @@ export function ChamadosPage() {
         <div className="space-y-2">
           {carregando ? <Carregando texto="Carregando chamados…" /> : null}
           {!carregando && !erroCarga && !visiveis.length ? <Vazio titulo={chamados.length ? 'Nenhum resultado para este filtro' : 'Nenhum chamado'} texto={chamados.length ? 'Ajuste a busca ou os filtros.' : 'Quando um pedido for aberto, ele aparece aqui.'} /> : null}
-          {visiveis.map((chamado) => {
-            const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, Date.now(), paraMillis(chamado.reabertoEm))
-            return (
-              <button key={chamado.id} type="button" onClick={() => setSelecionado(chamado.id)} className={`w-full rounded-2xl border bg-white px-4 py-3 text-left ${atual?.id === chamado.id ? 'border-brand' : 'border-line'}`}>
-                <span className="flex flex-wrap items-center gap-2">
-                  <span className="font-semibold">{chamado.titulo}</span>
-                  <Selo tom={atrasado ? 'alerta' : 'neutro'}>{atrasado ? 'Atrasado' : nomeStatus(chamado.status)}</Selo>
-                  <Selo tom="marca">{nomePrioridade(chamado.prioridade)}</Selo>
-                </span>
-                <span className="mt-1 block text-xs text-ink/50">
-                  {rede ? `${chamado.unidadeNome} · ` : ''}{nomeCategoria(chamado.categoria)} · prazo {formatarData(prazoMillis(inicioDoPrazo(paraMillis(chamado.criadoEm), paraMillis(chamado.reabertoEm)), chamado.slaHoras))}
-                </span>
-              </button>
-            )
-          })}
+          {visiveis.map(({ chamado, prazo }) => (
+            <button key={chamado.id} type="button" onClick={() => setSelecionado(chamado.id)} className={`w-full rounded-2xl border bg-white px-4 py-3 text-left ${atual?.chamado.id === chamado.id ? 'border-brand' : 'border-line'}`}>
+              <span className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">{chamado.titulo}</span>
+                <Selo tom={prazo.atrasado ? 'alerta' : 'neutro'}>{prazo.atrasado ? 'Atrasado' : nomeStatus(chamado.status)}</Selo>
+                <Selo tom="marca">{nomePrioridade(chamado.prioridade)}</Selo>
+              </span>
+              <span className="mt-1 block text-xs text-ink/50">
+                {rede ? `${chamado.unidadeNome} · ` : ''}{nomeCategoria(chamado.categoria)}
+              </span>
+              <InfoPrazo prazo={prazo} />
+            </button>
+          ))}
         </div>
-        {atual && !erroCarga ? <Detalhe chamado={atual} rede={rede} leitura={comoFranqueado} admin={ehAdmin} /> : null}
+        {atual && !erroCarga ? <Detalhe chamado={atual.chamado} prazo={atual.prazo} rede={rede} leitura={comoFranqueado} admin={ehAdmin} /> : null}
       </div>
     </div>
   )
 }
 
-function Detalhe({ chamado, rede, leitura, admin }: { chamado: Chamado; rede: boolean; leitura: boolean; admin: boolean }) {
+function InfoPrazo({ prazo }: { prazo: PrazoChamado }) {
+  return (
+    <span className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/70">
+      <span>Responde agora: {prazo.rotuloQuemResponde}</span>
+      <span>Prazo: {formatarData(prazo.venceEmMs)}</span>
+      {prazo.pausado ? <Selo>Prazo pausado · aguardando a unidade</Selo> : null}
+    </span>
+  )
+}
+
+function Detalhe({ chamado, prazo, rede, leitura, admin }: { chamado: Chamado; prazo: PrazoChamado; rede: boolean; leitura: boolean; admin: boolean }) {
   const { user } = useAuth()
   const [eventos, setEventos] = useState<EventoChamado[]>([])
   const [texto, setTexto] = useState('')
@@ -279,7 +287,6 @@ function Detalhe({ chamado, rede, leitura, admin }: { chamado: Chamado; rede: bo
   }, [admin])
 
   if (!user) return null
-  const atrasado = chamadoAtrasado(chamado.status, paraMillis(chamado.criadoEm), chamado.slaHoras, Date.now(), paraMillis(chamado.reabertoEm))
   const podeEncerrar = Boolean(user && (user.papel === 'franqueado' || user.uid === chamado.abertoPor))
 
   async function agir(promessa: Promise<unknown>) {
@@ -301,10 +308,11 @@ function Detalhe({ chamado, rede, leitura, admin }: { chamado: Chamado; rede: bo
         <p className="mt-1 text-sm text-ink/60">{chamado.unidadeNome} · {nomeCategoria(chamado.categoria)} · {nomePrioridade(chamado.prioridade)} · SLA {chamado.slaHoras} h</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <Selo>{nomeStatus(chamado.status)}</Selo>
-          {atrasado ? <Selo tom="alerta">Atrasado</Selo> : null}
+          {prazo.atrasado ? <Selo tom="alerta">Atrasado</Selo> : null}
           {chamado.responsavelNome ? <Selo tom="lima">{chamado.responsavelNome}</Selo> : <Selo>Sem responsável</Selo>}
           {chamado.avaliacao ? <Selo tom="marca">Nota {chamado.avaliacao}</Selo> : null}
         </div>
+        <InfoPrazo prazo={prazo} />
       </header>
       <p className="whitespace-pre-wrap text-sm">{chamado.descricao}</p>
       {chamado.anexos.length ? (

@@ -1,9 +1,9 @@
 // Módulo 9: Acompanhamento do Franqueado. Lógica pura (sem Firebase), testada no Vitest.
 import { calcularTotais, modeloServeUnidade, situacaoModelo, type ModeloChecklist, type Resposta } from './checklist'
 import { acaoAtrasada, type StatusAcao } from './auditoria'
+import { calcularPrazoChamado, type EntradaPrazo } from '../data/chamados'
 
 const DIA = 86_400_000
-const HORA = 3_600_000
 
 export const TIPOS_REGISTRO = ['visita', 'reuniao', 'call'] as const
 export type TipoRegistro = (typeof TIPOS_REGISTRO)[number]
@@ -56,7 +56,7 @@ export interface PassoAc {
 export interface FonteExecucao { unidadeId: string; modeloId: string; criadoEmMs: number; respostas: Pick<Resposta, 'peso' | 'resultado'>[] }
 export interface FonteAuditoria { id: string; unidadeId: string; dataVisitaMs: number; score: number; resultado: 'aprovada' | 'reprovada'; status: string; modeloTitulo: string }
 export interface FonteAcao { unidadeId: string; status: StatusAcao; prazoMs: number }
-export interface FonteChamado { unidadeId: string; status: string; criadoEmMs: number; slaHoras: number }
+export interface FonteChamado extends EntradaPrazo { unidadeId: string }
 export interface FonteTentativa { unidadeId: string; uid: string; cursoId: string; aprovado: boolean | null }
 export interface FonteProgresso { unidadeId: string; uid: string; documentoId: string; status: 'concluido' | 'em_andamento' }
 export interface FontePedido { unidadeId: string; status: string }
@@ -90,7 +90,7 @@ export interface ResumoUnidade {
 const STATUS_CHAMADO_ABERTO = ['aberto', 'em_andamento', 'aguardando_franqueado']
 
 export function slaEstourado(c: FonteChamado, agoraMs: number): boolean {
-  return (c.status === 'aberto' || c.status === 'em_andamento') && c.criadoEmMs > 0 && agoraMs > c.criadoEmMs + c.slaHoras * HORA
+  return calcularPrazoChamado(c, agoraMs).atrasado
 }
 
 export function passoAtrasado(p: Pick<PassoAc, 'status' | 'prazoMs'>, agoraMs: number): boolean {

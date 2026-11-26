@@ -1,3 +1,6 @@
+import { Timestamp } from 'firebase/firestore'
+import { chamadoAtrasado } from '../data/chamados'
+import { prazoDoChamado } from './chamados'
 import { describe, expect, it } from 'vitest'
 import {
   passoAtrasado,
@@ -56,6 +59,25 @@ describe('Acompanhamento: agregação por unidade', () => {
     expect(slaEstourado({ unidadeId: 'un-1', status: 'aberto', criadoEmMs: agora - 30 * 3_600_000, slaHoras: 24 }, agora)).toBe(true)
     expect(slaEstourado({ unidadeId: 'un-1', status: 'aguardando_franqueado', criadoEmMs: agora - 30 * 3_600_000, slaHoras: 24 }, agora)).toBe(false)
     expect(slaEstourado({ unidadeId: 'un-1', status: 'em_andamento', criadoEmMs: agora - 2 * 3_600_000, slaHoras: 4 }, agora)).toBe(false)
+  })
+  it.each([[2, false], [25, true]])('alinha fila, acompanhamento e home %i h após a reabertura', (horas, atrasado) => {
+    const hora = 3_600_000
+    const reabertoEmMs = agora - 2 * hora
+    const criadoEmMs = agora - 5 * DIA
+    const instante = reabertoEmMs + horas * hora
+    const fonte = { unidadeId: un.id, status: 'aberto', criadoEmMs, reabertoEmMs, slaHoras: 24 } as const
+    const chamado = { ...fonte, criadoEm: Timestamp.fromMillis(criadoEmMs), reabertoEm: Timestamp.fromMillis(reabertoEmMs) }
+    expect(chamadoAtrasado(fonte.status, criadoEmMs, 24, instante, reabertoEmMs)).toBe(atrasado)
+    expect(slaEstourado(fonte, instante)).toBe(atrasado)
+    expect(prazoDoChamado(chamado, instante).atrasado).toBe(atrasado)
+    expect(resumirUnidade(un, { ...vazio(), chamados: [fonte] }, instante).chamados?.slaEstourado).toBe(Number(atrasado))
+  })
+  it('considera pausas acumuladas no SLA da rede', () => {
+    const hora = 3_600_000
+    const fonte = { unidadeId: un.id, status: 'aberto', criadoEmMs: agora - 25 * hora, slaHoras: 24, pausaAcumuladaMs: 2 * hora }
+    expect(slaEstourado(fonte, agora)).toBe(false)
+    expect(slaEstourado({ ...fonte, status: 'aguardando_franqueado', pausadoEmMs: agora - hora }, agora + DIA)).toBe(false)
+    expect(slaEstourado(fonte, agora + 2 * hora)).toBe(true)
   })
   it('Universidade: aprovações distintas e pendências sem aprovação', () => {
     const f = vazio()
