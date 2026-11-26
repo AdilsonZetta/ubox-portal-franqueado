@@ -10,13 +10,17 @@ import {
   resumirProgresso,
   saiuDaTela,
   segundosRestantes,
+  segundosAtivosAgora,
+  restanteAtivo,
+  proximoPassoDaTrilha,
+  alteracoesNaTrilha,
   tempoSugeridoSeg,
   type ItemTrilhaManual,
 } from './manuaisTrilha'
 import { rotuloExibicao, seloExibicao, tipoExibicao, tiposPresentes } from './format'
 
 function item(id: string, ordem: number, anteriorId: string, extra: Partial<ItemTrilhaManual> = {}): ItemTrilhaManual {
-  return { documentoId: id, titulo: `Manual ${id}`, etapa: 'Etapa 1', ordem, tempoMinimoSeg: 60, videoMinutos: 0, anteriorId, ativo: true, ...extra }
+  return { documentoId: id, titulo: `Manual ${id}`, etapa: 'Etapa 1', ordem, tempoMinimoSeg: 60, videoMinutos: 0, anteriorId, ativo: true, consultaLivre: false, ...extra }
 }
 
 describe('Trilha sequencial de manuais', () => {
@@ -127,5 +131,29 @@ describe('Biblioteca: tipos por pasta e checklist interativo', () => {
         { tipo: 'pop' },
       ]),
     ).toEqual(['pop', 'politica', 'checklist_interativo'])
+  })
+})
+
+describe('Consulta e tempo ativo', () => {
+  it('soma os segundos inteiros da sessão em andamento', () => {
+    expect(segundosAtivosAgora(20, 0, 2500)).toBe(22)
+    expect(segundosAtivosAgora(20, null, 2500)).toBe(20)
+    expect(segundosAtivosAgora(20, 3000, 2500)).toBe(20)
+    expect(restanteAtivo(30, 20, 0, 2500)).toBe(8)
+    expect(restanteAtivo(30, 31, null, 2500)).toBe(0)
+  })
+
+  it('identifica o primeiro manual pendente na cadeia', () => {
+    const itens = [item('a', 1, ''), item('b', 2, 'a'), item('c', 3, 'b')]
+    expect(proximoPassoDaTrilha('c', itens, [])).toBe(itens[0])
+    expect(proximoPassoDaTrilha('c', itens, [{ documentoId: 'a', status: 'concluido' }])).toBe(itens[1])
+    expect(proximoPassoDaTrilha('a', itens, [])).toBeNull()
+    expect(proximoPassoDaTrilha('c', [{ ...itens[0], anteriorId: 'c' }, ...itens.slice(1)], [])).toBeNull()
+  })
+
+  it('salva uma alteração apenas na consulta livre', () => {
+    const antes = item('a', 1, '')
+    const depois = { ...antes, consultaLivre: true }
+    expect(alteracoesNaTrilha([depois], [antes])).toEqual([depois])
   })
 })

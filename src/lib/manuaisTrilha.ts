@@ -16,6 +16,7 @@ export interface ItemTrilhaManual {
   videoMinutos: number
   anteriorId: string
   ativo: boolean
+  consultaLivre: boolean
   atualizadoPor?: string
   atualizadoPorNome?: string
   atualizadoEm?: unknown
@@ -32,6 +33,8 @@ export interface ProgressoManual {
   unidadeNome: string
   status: StatusProgressoManual
   iniciadoEm?: unknown
+  segundosAtivos: number
+  pausadoEm?: unknown
   reinicios: number
   tempoMinimoSeg: number
   concluidoEm?: unknown
@@ -105,7 +108,8 @@ export function alteracoesNaTrilha<T extends ItemTrilhaManual>(depois: T[], ante
     const anterior = porDocumento.get(item.documentoId)
     return !anterior || item.ordem !== anterior.ordem || item.anteriorId !== anterior.anteriorId ||
       item.titulo !== anterior.titulo || item.etapa !== anterior.etapa || item.ativo !== anterior.ativo ||
-      item.tempoMinimoSeg !== anterior.tempoMinimoSeg || item.videoMinutos !== anterior.videoMinutos
+      item.tempoMinimoSeg !== anterior.tempoMinimoSeg || item.videoMinutos !== anterior.videoMinutos ||
+      item.consultaLivre !== anterior.consultaLivre
   })
 }
 
@@ -239,16 +243,15 @@ export function fazTrilha(usuario: { papel: string } | null | undefined): boolea
 }
 
 export type AcessoManual =
-  | { liberado: true; naTrilha: boolean; estado: EstadoManual | null }
+  | { liberado: true; naTrilha: boolean; estado: EstadoManual | null; consulta?: boolean }
   | { liberado: false; naTrilha: true; estado: 'bloqueado' }
 
 /**
- * A trilha é a única porta dos manuais que estão nela: biblioteca, busca e /documento usam o mesmo
- * estadoDoManual. Fora da trilha (ou item inativo) abre normalmente; a franqueadora vê tudo.
+ * Biblioteca, busca e documento compartilham as condições de acesso e consulta da trilha.
  */
 export function acessoAoManual(
   documentoId: string,
-  itens: Pick<ItemTrilhaManual, 'documentoId' | 'anteriorId' | 'ativo'>[],
+  itens: Pick<ItemTrilhaManual, 'documentoId' | 'anteriorId' | 'ativo' | 'consultaLivre'>[],
   progressos: Pick<ProgressoManual, 'documentoId' | 'status'>[],
   veTudo: boolean,
 ): AcessoManual {
@@ -256,10 +259,43 @@ export function acessoAoManual(
   if (!item) return { liberado: true, naTrilha: false, estado: null }
   if (veTudo) return { liberado: true, naTrilha: true, estado: null }
   const estado = estadoDoManual(item, new Map(progressos.map((p) => [p.documentoId, p])))
+  if (estado === 'bloqueado' && item.consultaLivre) {
+    return { liberado: true, naTrilha: true, estado, consulta: true }
+  }
   return estado === 'bloqueado' ? { liberado: false, naTrilha: true, estado } : { liberado: true, naTrilha: true, estado }
 }
 
 /** Admin e equipe da franqueadora (fora da simulação) veem todos os manuais. */
 export function veTodosOsManuais(usuario: { papel: string } | null | undefined, simulando: boolean): boolean {
   return !simulando && (usuario?.papel === 'admin' || usuario?.papel === 'equipe_franqueadora')
+}
+
+export function segundosAtivosAgora(acumulado: number, inicioLocalMs: number | null, agoraMs: number): number {
+  const sessao = inicioLocalMs === null ? 0 : Math.max(0, Math.floor((agoraMs - inicioLocalMs) / 1000))
+  return Math.max(0, acumulado + sessao)
+}
+
+export function restanteAtivo(tempoMinimoSeg: number, acumulado: number, inicioLocalMs: number | null, agoraMs: number): number {
+  return Math.max(0, tempoMinimoSeg - segundosAtivosAgora(acumulado, inicioLocalMs, agoraMs))
+}
+
+export function proximoPassoDaTrilha(
+  documentoId: string,
+  itens: ItemTrilhaManual[],
+  progressos: Pick<ProgressoManual, 'documentoId' | 'status'>[],
+): ItemTrilhaManual | null {
+  const ativos = new Map(itens.filter((item) => item.ativo).map((item) => [item.documentoId, item]))
+  const progresso = new Map(progressos.map((item) => [item.documentoId, item]))
+  const alvo = ativos.get(documentoId)
+  if (!alvo || estadoDoManual(alvo, progresso) !== 'bloqueado') return null
+
+  const visitados = new Set([documentoId])
+  let anterior = ativos.get(alvo.anteriorId)
+  while (anterior && !visitados.has(anterior.documentoId)) {
+    const estado = estadoDoManual(anterior, progresso)
+    if (estado === 'disponivel' || estado === 'em_andamento') return anterior
+    visitados.add(anterior.documentoId)
+    anterior = ativos.get(anterior.anteriorId)
+  }
+  return null
 }

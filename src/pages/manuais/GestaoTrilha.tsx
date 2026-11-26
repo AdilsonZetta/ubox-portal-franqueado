@@ -5,7 +5,7 @@ import { Aviso, Button, Carregando, Selo, Vazio, cx, inputClass } from '../../co
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { paraMillis, rotuloExibicao, tipoExibicao } from '../../lib/format'
-import { listarProgressoVisivel, listarTrilhaManuais, salvarTrilhaManuais, type ItemTrilhaEdicao } from '../../lib/manuaisApi'
+import { listarProgressoVisivel, listarTrilhaManuais, salvarTrilhaManuais, TEMPO_ACUMULADO, type ItemTrilhaEdicao } from '../../lib/manuaisApi'
 import {
   formatarDuracao,
   limitarTempo,
@@ -51,6 +51,7 @@ export function GestaoTrilhaPage() {
             tempoMinimoSeg: i.tempoMinimoSeg,
             videoMinutos: i.videoMinutos,
             ativo: i.ativo,
+            consultaLivre: i.consultaLivre,
           })),
         )
         setProgressos(lista)
@@ -115,6 +116,7 @@ export function GestaoTrilhaPage() {
         videoMinutos: 0,
         tempoMinimoSeg: tempoSugeridoSeg(documento.conteudoTexto, 0),
         ativo: true,
+        consultaLivre: false,
       },
     ])
     setNovoId('')
@@ -285,6 +287,20 @@ export function GestaoTrilhaPage() {
                     <label className="inline-flex items-center gap-2 text-xs font-medium text-ink/70">
                       <input type="checkbox" className="h-4 w-4 accent-brand" checked={item.ativo} onChange={(e) => mudar(indice, { ativo: e.target.checked })} />
                       Ativo
+                    </label>
+                    <label className="col-span-full flex items-start gap-2 text-xs text-muted">
+                      <input
+                        type="checkbox"
+                        className="mt-0.5 h-4 w-4 shrink-0 accent-brand disabled:opacity-60"
+                        checked={item.consultaLivre}
+                        disabled={!TEMPO_ACUMULADO}
+                        onChange={(e) => mudar(indice, { consultaLivre: e.target.checked })}
+                      />
+                      <span>
+                        <span className="block font-semibold text-ink">Consulta livre</span>
+                        <span className="block">A unidade pode consultar a qualquer momento, fora da sequência da trilha. Concluir continua exigindo a trilha.</span>
+                        {!TEMPO_ACUMULADO ? <span className="block font-medium">Disponível com o Supabase</span> : null}
+                      </span>
                     </label>
                   </li>
                 )

@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from './auth'
 import { listarMeuProgresso, listarTrilhaManuais } from './manuaisApi'
-import { acessoAoManual, fazTrilha, veTodosOsManuais, type AcessoManual, type ItemTrilhaManual, type ProgressoManual } from './manuaisTrilha'
+import { acessoAoManual, proximoPassoDaTrilha, fazTrilha, veTodosOsManuais, type AcessoManual, type ItemTrilhaManual, type ProgressoManual } from './manuaisTrilha'
 import { useVisao } from './visao'
 
 /** Carrega a trilha e o progresso da pessoa (ou da simulada) para decidir se um manual abre. */
-export function useAcessoTrilha(): { carregando: boolean; acesso: (documentoId: string) => AcessoManual } {
+export function useAcessoTrilha(): { carregando: boolean; acesso: (documentoId: string) => AcessoManual; proximoPasso: (documentoId: string) => ItemTrilhaManual | null } {
   const { user } = useAuth()
   const { comoFranqueado, simulado } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
@@ -39,5 +39,6 @@ export function useAcessoTrilha(): { carregando: boolean; acesso: (documentoId: 
   }, [user, uid, participa, veTudo])
 
   const acesso = useCallback((documentoId: string) => acessoAoManual(documentoId, itens, progressos, veTudo), [itens, progressos, veTudo])
-  return { carregando, acesso }
+  const proximoPasso = useCallback((documentoId: string) => veTudo ? null : proximoPassoDaTrilha(documentoId, itens, progressos), [veTudo, itens, progressos])
+  return { carregando, acesso, proximoPasso }
 }

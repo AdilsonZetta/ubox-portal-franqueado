@@ -22,6 +22,7 @@ import {
   salvarTrilhaManuaisSb,
   iniciarOuReiniciarSb,
   concluirManualSb,
+  cronometroManualSb,
 } from './manuaisSupabase'
 
 function texto(valor: unknown, padrao = ''): string {
@@ -42,6 +43,7 @@ export function mapItemTrilha(id: string, data: DocumentData): ItemTrilhaManual 
     videoMinutos: inteiro(data.videoMinutos),
     anteriorId: texto(data.anteriorId),
     ativo: data.ativo === true,
+    consultaLivre: data.consultaLivre === true,
     atualizadoPor: texto(data.atualizadoPor),
     atualizadoPorNome: texto(data.atualizadoPorNome),
     atualizadoEm: data.atualizadoEm,
@@ -58,6 +60,7 @@ export function mapProgresso(id: string, data: DocumentData): ProgressoManual {
     unidadeNome: texto(data.unidadeNome),
     status: data.status === 'concluido' ? 'concluido' : 'em_andamento',
     iniciadoEm: data.iniciadoEm,
+    segundosAtivos: 0,
     reinicios: inteiro(data.reinicios),
     tempoMinimoSeg: inteiro(data.tempoMinimoSeg, 60),
     concluidoEm: data.concluidoEm ?? null,
@@ -94,6 +97,7 @@ export interface ItemTrilhaEdicao {
   tempoMinimoSeg: number
   videoMinutos: number
   ativo: boolean
+  consultaLivre: boolean
 }
 
 /** Recalcula ordem e anterior a partir da trilha inteira e grava as mudanças num só lote. */
@@ -169,4 +173,18 @@ export async function concluirManual(usuario: Usuario, documentoId: string): Pro
     concluidoEm: serverTimestamp(),
     atualizadoEm: serverTimestamp(),
   })
+}
+
+export const TEMPO_ACUMULADO = BACKEND === 'supabase'
+
+export async function pausarManual(documentoId: string): Promise<ProgressoManual | null> {
+  return TEMPO_ACUMULADO ? cronometroManualSb(documentoId, 'pausar') : null
+}
+
+export async function registrarManual(documentoId: string): Promise<ProgressoManual | null> {
+  return TEMPO_ACUMULADO ? cronometroManualSb(documentoId, 'registrar') : null
+}
+
+export async function retomarManual(documentoId: string): Promise<ProgressoManual | null> {
+  return TEMPO_ACUMULADO ? cronometroManualSb(documentoId, 'retomar') : null
 }
