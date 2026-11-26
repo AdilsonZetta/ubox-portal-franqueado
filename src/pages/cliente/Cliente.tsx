@@ -8,7 +8,10 @@ import {
   ITENS_VAZIOS,
   RECADOS_NO_LINK,
   ROTULO_VISITA,
+  ROTULO_RESUMO,
+  ativarECopiar,
   centavos,
+  estadoResumo,
   formatarCompetencia,
   formatarDiaISO,
   formatarReais,
@@ -117,8 +120,20 @@ export function ClientePage() {
           </>}
         </div>
         <div className="space-y-5">
-          <LinkCard key={token} painel={painel} cliente={cliente} salvando={salvando}
-            ativar={(ativo) => void mudar({ ativo }, ativo ? 'Link ativado: o cliente já pode abrir.' : 'Link desativado: quem tiver o endereço não vê mais nada.')}
+          <LinkCard key={token} painel={painel} cliente={cliente} salvando={salvando || dados.carregando}
+            ativarECopiarLink={async (copiar) => {
+              setSalvando(true)
+              setErro('')
+              setOk('')
+              try {
+                const resultado = await ativarECopiar({ ativar: () => atualizarPainel(painel, { ativo: true }), copiar })
+                if (resultado !== 'falha_ativacao') dados.recarregar()
+                return resultado
+              } finally {
+                setSalvando(false)
+              }
+            }}
+            desativar={() => void mudar({ ativo: false }, 'Link desativado: quem tiver o endereço não vê mais nada.')}
             contato={(contatoUnidade) => void mudar({ contatoUnidade: contatoUnidade.trim().slice(0, 120) }, 'Contato da unidade atualizado no link.')}
             podeTrocar={!!itensAtuais && !itensAtuais.erro && !atualizandoItens}
             trocar={() => pessoa && window.confirm('Gerar um link novo? O endereço anterior deixará de funcionar.') && void acao(() => trocarLink(pessoa, cliente, painel, itens), 'Link trocado. O endereço antigo deixou de funcionar.')} />
@@ -165,30 +180,72 @@ export function ClientePage() {
 
 type Item = (fn: () => Promise<unknown>, msg: string) => Promise<boolean>
 
-function LinkCard({ painel, cliente, salvando, ativar, contato, trocar, podeTrocar }: { painel: Painel; cliente: Cliente; salvando: boolean; ativar: (a: boolean) => void; contato: (c: string) => void; trocar: () => void; podeTrocar: boolean }) {
+type ResultadoAtivacao = Awaited<ReturnType<typeof ativarECopiar>>
+
+const feedbackLink = {
+  copiado: { tom: 'ok', texto: 'Link copiado.' },
+  erro_copia: { tom: 'erro', texto: 'Não foi possível copiar. Selecione o endereço acima para copiar manualmente.' },
+  ativado_e_copiado: { tom: 'ok', texto: 'Link ativado e copiado. Já pode enviar ao cliente.' },
+  ativado_sem_copia: { tom: 'erro', texto: 'Link ativado, mas o navegador não deixou copiar. Selecione o endereço acima ou toque em “Copiar link”.' },
+  falha_ativacao: { tom: 'erro', texto: 'Não foi possível ativar o link, então nada foi copiado. Confira a conexão e toque em “Ativar e copiar link” de novo. Se continuar, use “Gerar link novo”.' },
+} as const
+
+function LinkCard({ painel, cliente, salvando, ativarECopiarLink, desativar, contato, trocar, podeTrocar }: {
+  painel: Painel
+  cliente: Cliente
+  salvando: boolean
+  ativarECopiarLink: (copiar: () => Promise<void>) => Promise<ResultadoAtivacao>
+  desativar: () => void
+  contato: (c: string) => void
+  trocar: () => void
+  podeTrocar: boolean
+}) {
   const url = linkPainel(painel.token)
-  const [copia, setCopia] = useState<'copiado' | 'erro' | null>(null)
-  async function copiar() {
-    try { await navigator.clipboard.writeText(url); setCopia('copiado') }
-    catch { setCopia('erro') }
-  }
+  const [feedback, setFeedback] = useState<keyof typeof feedbackLink | null>(null)
   const [c, setC] = useState(painel.contatoUnidade)
+  const copiarEndereco = () => navigator.clipboard.writeText(url)
+
+  async function copiar() {
+    try {
+      await copiarEndereco()
+      setFeedback('copiado')
+    } catch {
+      setFeedback('erro_copia')
+    }
+  }
+
+  async function ativarLink() {
+    setFeedback(null)
+    const resultado = await ativarECopiarLink(copiarEndereco)
+    setFeedback(resultado === 'copiado' ? 'ativado_e_copiado' : resultado)
+  }
   return (
     <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
       <div className="flex items-center justify-between"><h2 className="text-lg font-bold">Link do cliente</h2>{painel.ativo ? <span className="rounded-full bg-lime-100 px-2 py-0.5 text-[11px] font-semibold uppercase text-lime-800">Ativo</span> : <span className="rounded-full bg-paper px-2 py-0.5 text-[11px] font-semibold uppercase text-ink/50">Desativado</span>}</div>
       <p className="text-xs text-ink/55">Sem senha: quem tiver o endereço vê o primeiro nome, o box, o contrato, as cobranças, as visitas e os recados. Envie só para o cliente.</p>
       <p className="break-all rounded-xl bg-paper px-3 py-2 font-mono text-[11px] text-ink/70" data-link-painel>{url}</p>
       <div className="flex flex-wrap gap-2">
-        <Button type="button" variant="secondary" onClick={() => void copiar()}><Copy className="h-4 w-4" aria-hidden="true" /> {copia === 'copiado' ? 'Copiado' : 'Copiar'}</Button>
-        <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-xl border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-paper"><ExternalLink className="h-4 w-4" aria-hidden="true" /> Ver como o cliente</a>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {painel.ativo
-          ? <Button type="button" variant="ghost" disabled={salvando} onClick={() => ativar(false)}>Desativar link</Button>
-          : <Button type="button" disabled={salvando || cliente.status === 'encerrado'} onClick={() => ativar(true)}>Ativar link</Button>}
+        {painel.ativo ? (
+          <>
+            <Button type="button" variant="secondary" disabled={salvando} onClick={() => void copiar()}>
+              <Copy className="h-4 w-4" aria-hidden="true" /> Copiar link
+            </Button>
+            <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-xl border border-line px-3 py-2 text-sm font-semibold text-ink hover:bg-paper">
+              <ExternalLink className="h-4 w-4" aria-hidden="true" /> Ver como o cliente
+            </a>
+            <Button type="button" variant="ghost" disabled={salvando} onClick={() => { setFeedback(null); desativar() }}>Desativar link</Button>
+          </>
+        ) : cliente.status === 'ativo' ? (
+          <Button type="button" disabled={salvando} onClick={() => void ativarLink()}>Ativar e copiar link</Button>
+        ) : null}
         <Button type="button" variant="ghost" disabled={salvando || !podeTrocar} onClick={trocar}>Gerar link novo</Button>
       </div>
-      {copia === 'erro' ? <Aviso tom="erro">Não foi possível copiar. Selecione o endereço acima para copiar manualmente.</Aviso> : null}
+      {!painel.ativo && cliente.status === 'encerrado' ? (
+        <p className="text-sm text-ink-soft">Contrato encerrado: reative o contrato para ativar o link.</p>
+      ) : null}
+      {feedback ? (
+        <Aviso tom={feedbackLink[feedback].tom}><p role={feedbackLink[feedback].tom === 'erro' ? 'alert' : 'status'}>{feedbackLink[feedback].texto}</p></Aviso>
+      ) : null}
       <Campo label="Contato da unidade (aparece no link)">
         <div className="flex gap-2"><input className={inputClass} maxLength={120} value={c} onChange={(e) => setC(e.target.value)} /><Button type="button" variant="secondary" disabled={salvando || c === painel.contatoUnidade} onClick={() => contato(c)}>Salvar</Button></div>
       </Campo>
@@ -202,6 +259,7 @@ function Cobrancas({ painel, cliente, itens, salvando, item }: { painel: Painel;
   const [n, setN] = useState({ competencia: comp, valor: (cliente.valorMensalCentavos / 100).toFixed(2).replace('.', ','), vencimento: vencimentoDe(comp, cliente.diaVencimento) })
   const [erro, setErro] = useState('')
   const r = resumoCobrancas(itens.cobrancas, hoje)
+  const estado = estadoResumo(itens.cobrancas, hoje)
   useEffect(() => { setN((x) => ({ ...x, competencia: comp, vencimento: vencimentoDe(comp, cliente.diaVencimento) })) }, [comp, cliente.diaVencimento])
 
   function incluir() {
@@ -216,7 +274,12 @@ function Cobrancas({ painel, cliente, itens, salvando, item }: { painel: Painel;
     <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-lg font-bold">Cobranças</h2>
-        <p className="text-sm text-ink/60">Em aberto: <b className="tabular-nums">{formatarReais(r.emAbertoCentavos)}</b>{r.atrasadas ? <span className="text-red-700"> · {r.atrasadas} atrasada(s)</span> : null}</p>
+        <div className="text-sm text-ink-soft">
+          <span className="font-semibold">{ROTULO_RESUMO[estado]}</span>
+          {estado === 'em_atraso' || estado === 'pendente' ? (
+            <span> · Em aberto <b className="tabular-nums">{formatarReais(r.emAbertoCentavos)}</b>{r.atrasadas ? <span className="text-red-700"> · {r.atrasadas} atrasada(s)</span> : null}</span>
+          ) : null}
+        </div>
       </div>
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       <div className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto] sm:items-end">

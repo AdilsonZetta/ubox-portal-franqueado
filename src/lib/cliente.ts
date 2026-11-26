@@ -274,3 +274,38 @@ export function kpisClientes(clientes: Cliente[], paineis: Map<string, Painel>, 
 export function fazCliente(usuario: { papel: string; modulosLiberados?: string[] } | null | undefined): boolean {
   return (usuario?.papel === 'franqueado' || usuario?.papel === 'equipe_franqueado') && (usuario.modulosLiberados ?? []).includes('cliente')
 }
+
+export const ROTULO_RESUMO = {
+  aguardando_primeira: 'Aguardando primeira cobrança',
+  em_atraso: 'Em atraso',
+  pendente: 'Pendente',
+  em_dia: 'Em dia',
+}
+
+export function estadoResumo(lista: Cobranca[], hoje: string): keyof typeof ROTULO_RESUMO {
+  if (!lista.length) return 'aguardando_primeira'
+  let pendente = false
+  for (const cobranca of lista) {
+    const estado = situacao(cobranca, hoje)
+    if (estado === 'atrasado') return 'em_atraso'
+    if (estado === 'pendente') pendente = true
+  }
+  return pendente ? 'pendente' : 'em_dia'
+}
+
+export async function ativarECopiar({ ativar, copiar }: {
+  ativar: () => Promise<void>
+  copiar: () => Promise<void>
+}): Promise<'copiado' | 'ativado_sem_copia' | 'falha_ativacao'> {
+  try {
+    await ativar()
+  } catch {
+    return 'falha_ativacao'
+  }
+  try {
+    await copiar()
+    return 'copiado'
+  } catch {
+    return 'ativado_sem_copia'
+  }
+}

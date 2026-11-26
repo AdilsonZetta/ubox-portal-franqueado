@@ -1,6 +1,9 @@
 import { normalizar } from '../lib/text'
 import { BotaoCsv } from '../components/BotaoCsv'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { ConfirmacaoPedido, focarPedido } from '../components/ConfirmacaoPedido'
+import { protocoloDe } from '../lib/pedidosUnidade'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, inputClass } from '../components/ui'
 import {
   CATEGORIAS_CHAMADO,
@@ -33,6 +36,7 @@ import { mensagemErro } from '../lib/errors'
 import { formatarData, paraMillis } from '../lib/format'
 import { useVisao } from '../lib/visao'
 
+const filtrosVazios = { unidade: '', status: '', categoria: '', prioridade: '' }
 const vazio = { titulo: '', categoria: 'operacao' as CategoriaChamado, prioridade: 'media' as PrioridadeChamado, descricao: '', links: '' }
 
 export function ChamadosPage() {
@@ -45,14 +49,32 @@ export function ChamadosPage() {
   const [erro, setErro] = useState('')
   const [erroCarga, setErroCarga] = useState('')
   const [tique, setTique] = useState(0)
-  const [selecionado, setSelecionado] = useState<string | null>(null)
-  const [filtros, setFiltros] = useState({ unidade: '', status: '', categoria: '', prioridade: '' })
+  const [params, setParams] = useSearchParams()
+  const alvo = params.get('id')
+  const novo = params.get('novo') === '1'
+  const [selecionado, setSelecionado] = useState(alvo)
+  const [filtros, setFiltros] = useState(filtrosVazios)
   const [busca, setBusca] = useState('')
   const [soAtrasados, setSoAtrasados] = useState(false)
   const [ordem, setOrdem] = useState('recentes')
   const [carregando, setCarregando] = useState(true)
   const [form, setForm] = useState(vazio)
   const [abrindo, setAbrindo] = useState(false)
+  const [confirmado, setConfirmado] = useState<string | null>(null)
+  const tituloRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (alvo) {
+      setSelecionado(alvo)
+      setFiltros(filtrosVazios)
+      setBusca('')
+      setSoAtrasados(false)
+    }
+  }, [alvo])
+
+  useEffect(() => {
+    if (novo && !alvo && !confirmado) tituloRef.current?.focus()
+  }, [novo, alvo, confirmado, unidadeId])
 
   useEffect(() => {
     if (!user || (!rede && !unidadeId)) return
@@ -81,7 +103,7 @@ export function ChamadosPage() {
       if (filtros.categoria && chamado.categoria !== filtros.categoria) return false
       if (filtros.prioridade && chamado.prioridade !== filtros.prioridade) return false
       if (soAtrasados && !prazo.atrasado) return false
-      return normalizar(`${chamado.titulo} ${chamado.unidadeNome}`).includes(consulta)
+      return normalizar(`${chamado.titulo} ${chamado.unidadeNome} ${protocoloDe('chamado', chamado.id)}`).includes(consulta)
     }).sort((a, b) => ordem === 'prazo'
       ? a.prazo.venceEmMs - b.prazo.venceEmMs
       : paraMillis(b.chamado.criadoEm) - paraMillis(a.chamado.criadoEm))
@@ -108,6 +130,20 @@ export function ChamadosPage() {
   }, [chamados, comPrazo])
 
   const atual = visiveis.find(({ chamado }) => chamado.id === selecionado) ?? visiveis[0] ?? null
+
+  const detalhePronto = Boolean(alvo && selecionado === alvo && atual?.chamado.id === alvo && !carregando && !erroCarga)
+  useEffect(() => {
+    if (detalhePronto) focarPedido(`chamado-${alvo}`)
+  }, [alvo, detalhePronto])
+
+  function acompanhar(id: string) {
+    setSelecionado(id)
+    setFiltros(filtrosVazios)
+    setBusca('')
+    setSoAtrasados(false)
+    setParams({ id })
+    if (alvo === id && detalhePronto) focarPedido(`chamado-${id}`)
+  }
 
   if (!user) return null
   if (comoFranqueado && !simulado) return <Aviso>Escolha qual franqueado simular para ver os chamados dessa unidade.</Aviso>
@@ -141,7 +177,7 @@ export function ChamadosPage() {
         </div>
       ) : null}
       <div className="flex flex-wrap items-end gap-3">
-        <Campo label="Buscar chamados"><input className={inputClass} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Título ou unidade" /></Campo>
+        <Campo label="Buscar chamados"><input className={inputClass} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Título, unidade ou protocolo" /></Campo>
         <Campo label="Ordenar por">
           <select className={inputClass} value={ordem} onChange={(e) => setOrdem(e.target.value)}>
             <option value="recentes">Mais recentes</option>
@@ -155,8 +191,8 @@ export function ChamadosPage() {
           </select>
         </Campo>
         <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={soAtrasados} onChange={(e) => setSoAtrasados(e.target.checked)} /> Somente atrasados</label>
-        {!carregando && !erroCarga ? <BotaoCsv arquivo="chamados" cabecalhos={['Título', 'Unidade', 'Status', 'Categoria', 'Prioridade', 'Abertura']}
-          linhas={visiveis.map(({ chamado: c }) => [c.titulo, c.unidadeNome, nomeStatus(c.status), nomeCategoria(c.categoria), nomePrioridade(c.prioridade), formatarData(c.criadoEm)])} /> : null}
+        {!carregando && !erroCarga ? <BotaoCsv arquivo="chamados" cabecalhos={['Protocolo', 'Título', 'Unidade', 'Status', 'Categoria', 'Prioridade', 'Abertura']}
+          linhas={visiveis.map(({ chamado: c }) => [protocoloDe('chamado', c.id), c.titulo, c.unidadeNome, nomeStatus(c.status), nomeCategoria(c.categoria), nomePrioridade(c.prioridade), formatarData(c.criadoEm)])} /> : null}
       </div>
       {rede ? (
         <div className="grid gap-2 sm:grid-cols-4">
@@ -173,6 +209,14 @@ export function ChamadosPage() {
             {PRIORIDADES_CHAMADO.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
           </select>
         </div>
+      ) : confirmado ? (
+        <ConfirmacaoPedido titulo="Chamado aberto" protocolo={protocoloDe('chamado', confirmado)}
+          situacao={nomeStatus('aberto')} acompanhar={() => acompanhar(confirmado)}>
+          <Button type="button" variant="secondary" onClick={() => {
+            setConfirmado(null)
+            setParams({ novo: '1' }, { replace: true })
+          }}>Abrir outro chamado</Button>
+        </ConfirmacaoPedido>
       ) : (
         <form
           className="space-y-3 rounded-2xl border border-line bg-white p-4"
@@ -195,14 +239,17 @@ export function ChamadosPage() {
             setErro('')
             setAbrindo(true)
             void abrirChamado(user, { ...form, anexos })
-              .then(() => setForm(vazio))
+              .then((id) => {
+                setForm(vazio)
+                setConfirmado(id)
+              })
               .catch((falha: unknown) => setErro(mensagemErro(falha)))
               .finally(() => setAbrindo(false))
           }}
         >
           <h2 className="font-bold">Abrir chamado</h2>
           <div className="grid gap-3 md:grid-cols-2">
-            <Campo label="Título"><input className={inputClass} required minLength={2} value={form.titulo} onChange={(evento) => setForm({ ...form, titulo: evento.target.value })} /></Campo>
+            <Campo label="Título"><input ref={tituloRef} className={inputClass} required minLength={2} value={form.titulo} onChange={(evento) => setForm({ ...form, titulo: evento.target.value })} /></Campo>
             <Campo label="Categoria">
               <select className={inputClass} value={form.categoria} onChange={(evento) => setForm({ ...form, categoria: evento.target.value as CategoriaChamado })}>
                 {CATEGORIAS_CHAMADO.map((item) => <option key={item.id} value={item.id}>{item.nome}</option>)}
@@ -236,6 +283,7 @@ export function ChamadosPage() {
               <span className="mt-1 block text-xs text-ink/50">
                 {rede ? `${chamado.unidadeNome} · ` : ''}{nomeCategoria(chamado.categoria)}
               </span>
+              <span className="mt-1 block text-xs text-ink-soft" translate="no">Protocolo {protocoloDe('chamado', chamado.id)}</span>
               <InfoPrazo prazo={prazo} />
             </button>
           ))}
@@ -302,9 +350,10 @@ function Detalhe({ chamado, prazo, rede, leitura, admin }: { chamado: Chamado; p
   }
 
   return (
-    <article className="space-y-4 rounded-2xl border border-line bg-white p-4">
+    <article id={`chamado-${chamado.id}`} tabIndex={-1} className="space-y-4 rounded-2xl border border-line bg-white p-4 focus-visible:outline-2 focus-visible:outline-brand-dark">
       <header>
         <h2 className="text-xl font-extrabold">{chamado.titulo}</h2>
+        <p className="mt-1 text-xs text-ink-soft" translate="no">Protocolo {protocoloDe('chamado', chamado.id)}</p>
         <p className="mt-1 text-sm text-ink/60">{chamado.unidadeNome} · {nomeCategoria(chamado.categoria)} · {nomePrioridade(chamado.prioridade)} · SLA {chamado.slaHoras} h</p>
         <div className="mt-2 flex flex-wrap gap-2">
           <Selo>{nomeStatus(chamado.status)}</Selo>

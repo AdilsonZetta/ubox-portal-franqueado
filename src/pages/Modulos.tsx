@@ -8,6 +8,7 @@ import { primeiroNome } from '../lib/format'
 import { podeModulo } from '../lib/modulosAcesso'
 import { useVisao } from '../lib/visao'
 import { CompromissosUnidade } from './CompromissosUnidade'
+import { PedidosUnidade } from '../components/PedidosUnidade'
 import { CartaoUniversidade } from './universidade/Universidade'
 
 export function ModulosPage() {
@@ -57,6 +58,7 @@ export function ModulosPage() {
             </ul>
           </section>
         )}
+        <PedidosUnidade />
         {!comoFranqueado ? <CompromissosUnidade pessoa={pessoa} /> : null}
         {podeModulo(pessoa, 'universidade', comoFranqueado) ? (
           <div className="mt-6 max-w-2xl">

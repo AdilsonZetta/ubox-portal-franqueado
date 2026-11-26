@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Logo } from '../../components/Logo'
 import { Aviso, Button, Carregando } from '../../components/ui'
 import { formatarData } from '../../lib/format'
-import { ITENS_VAZIOS, RECADOS_NO_LINK, ROTULO_VISITA, formatarCompetencia, formatarDiaISO, formatarReais, hojeISO, resumoCobrancas, situacao, type ItensPainel, type Painel } from '../../lib/cliente'
+import { ITENS_VAZIOS, RECADOS_NO_LINK, ROTULO_RESUMO, ROTULO_VISITA, estadoResumo, formatarCompetencia, formatarDiaISO, formatarReais, hojeISO, resumoCobrancas, situacao, type ItensPainel, type Painel } from '../../lib/cliente'
 import { BACKEND } from '../../lib/backend'
 import { carregarPainelPublicoSb } from '../../lib/clienteSupabase'
 import { carregarItens, lerPainelPublico } from '../../lib/clienteApi'
@@ -66,6 +66,7 @@ function PainelPorToken({ token }: { token: string }) {
   }
 
   const r = resumoCobrancas(itens.cobrancas, hoje)
+  const estado = estadoResumo(itens.cobrancas, hoje)
   const proximasVisitas = itens.visitas.filter((v) => v.status === 'agendada' && v.data >= hoje).sort((a, b) => `${a.data}${a.hora}`.localeCompare(`${b.data}${b.hora}`))
 
   return (
@@ -85,9 +86,20 @@ function PainelPorToken({ token }: { token: string }) {
         <section className="grid gap-3 sm:grid-cols-3">
           <div className="rounded-2xl border border-line bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-ink/45">Seu box</p><p className="mt-1 text-xl font-black">{painel.box}</p><p className="text-xs text-ink/50">desde {formatarDiaISO(diaDe(painel.contratoInicioMs))}{painel.contratoFimMs ? ` até ${formatarDiaISO(diaDe(painel.contratoFimMs))}` : ''}</p></div>
           <div className="rounded-2xl border border-line bg-white p-4 shadow-sm"><p className="text-xs font-semibold uppercase tracking-wide text-ink/45">Mensalidade</p><p className="mt-1 text-xl font-black tabular-nums">{formatarReais(painel.valorMensalCentavos)}</p><p className="text-xs text-ink/50">vence todo dia {painel.diaVencimento}</p></div>
-          <div className={`rounded-2xl border bg-white p-4 shadow-sm ${r.atrasadas ? 'border-red-300' : 'border-line'}`}><p className="text-xs font-semibold uppercase tracking-wide text-ink/45">{r.atrasadas ? 'Em atraso' : 'Próxima cobrança'}</p>
-            {r.atrasadas ? <p className="mt-1 text-xl font-black text-red-700 tabular-nums">{formatarReais(r.atrasadoCentavos)}</p> : r.proxima ? <p className="mt-1 text-xl font-black tabular-nums">{formatarReais(r.proxima.valorCentavos)}</p> : <p className="mt-1 text-xl font-black text-lime-700">Em dia</p>}
-            <p className="text-xs text-ink/50">{r.atrasadas ? `${r.atrasadas} mensalidade(s) vencida(s)` : r.proxima ? `vence ${formatarDiaISO(r.proxima.vencimento)}` : 'nenhuma cobrança em aberto'}</p></div>
+          <div className={`rounded-2xl border bg-white p-4 shadow-sm ${estado === 'em_atraso' ? 'border-red-300' : 'border-line'}`}>
+            {estado === 'aguardando_primeira' ? (
+              <>
+                <p className="font-bold text-ink">{ROTULO_RESUMO[estado]}</p>
+                <p className="mt-1 text-sm text-ink-soft">A primeira cobrança ainda não foi lançada.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink/45">{estado === 'em_atraso' ? ROTULO_RESUMO[estado] : 'Próxima cobrança'}</p>
+                {estado === 'em_atraso' ? <p className="mt-1 text-xl font-black text-red-700 tabular-nums">{formatarReais(r.atrasadoCentavos)}</p> : r.proxima ? <p className="mt-1 text-xl font-black tabular-nums">{formatarReais(r.proxima.valorCentavos)}</p> : <p className="mt-1 text-xl font-black text-lime-700">{ROTULO_RESUMO.em_dia}</p>}
+                <p className="text-xs text-ink/50">{estado === 'em_atraso' ? `${r.atrasadas} mensalidade(s) vencida(s)` : r.proxima ? `vence ${formatarDiaISO(r.proxima.vencimento)}` : 'nenhuma cobrança em aberto'}</p>
+              </>
+            )}
+          </div>
         </section>
 
         {itens.recados.length ? (

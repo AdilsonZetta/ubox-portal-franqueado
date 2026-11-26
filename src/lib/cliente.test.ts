@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import {
   centavos,
+  ativarECopiar,
+  estadoResumo,
   gerarToken,
   kpisClientes,
   linkPainel,
@@ -114,4 +116,49 @@ it('valida o mês e o dia de vencimento da cobrança', () => {
   expect(validarCobranca({ competencia: '2026-13', vencimento: '2026-12-10', valor: '10' })).toContain('Informe o mês de referência.')
   expect(validarCobranca({ competencia: '2026-02', vencimento: '2026-02-30', valor: '10' })).toContain('Informe o vencimento.')
   expect(validarCobranca({ competencia: '2028-02', vencimento: '2028-02-29', valor: '10' })).toEqual([])
+})
+
+describe('ativarECopiar', () => {
+  it('não copia quando a ativação falha', async () => {
+    const copiar = vi.fn()
+    const ativar = vi.fn().mockRejectedValue(new Error('offline'))
+    expect(await ativarECopiar({ ativar, copiar })).toBe('falha_ativacao')
+    expect(copiar).not.toHaveBeenCalled()
+  })
+
+  it('preserva a ativação quando copiar falha', async () => {
+    const ativar = vi.fn().mockResolvedValue(undefined)
+    const copiar = vi.fn().mockRejectedValue(new Error('bloqueado'))
+    expect(await ativarECopiar({ ativar, copiar })).toBe('ativado_sem_copia')
+  })
+
+  it('copia somente depois de a ativação resolver', async () => {
+    let confirmar!: () => void
+    const ativar = () => new Promise<void>((resolve) => { confirmar = resolve })
+    const copiar = vi.fn().mockResolvedValue(undefined)
+    const resultado = ativarECopiar({ ativar, copiar })
+    expect(copiar).not.toHaveBeenCalled()
+    confirmar()
+    expect(await resultado).toBe('copiado')
+    expect(copiar).toHaveBeenCalledOnce()
+  })
+})
+
+describe('estadoResumo', () => {
+  const hoje = '2026-11-10'
+  it('aguarda a primeira cobrança quando o histórico está vazio', () => {
+    expect(estadoResumo([], hoje)).toBe('aguardando_primeira')
+  })
+
+  it('prioriza atraso mesmo com uma cobrança pendente', () => {
+    expect(estadoResumo([cob('2026-11'), cob('2026-10')], hoje)).toBe('em_atraso')
+  })
+
+  it('indica pendência quando a cobrança em aberto vence hoje', () => {
+    expect(estadoResumo([cob('2026-11'), cob('2026-10', 'pago')], hoje)).toBe('pendente')
+  })
+
+  it('indica em dia quando todas as cobranças do histórico foram pagas', () => {
+    expect(estadoResumo([cob('2026-10', 'pago')], hoje)).toBe('em_dia')
+  })
 })

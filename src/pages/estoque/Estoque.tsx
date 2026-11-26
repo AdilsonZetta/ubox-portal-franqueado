@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { Plus, Trash2 } from 'lucide-react'
+import { ConfirmacaoPedido, focarPedido } from '../../components/ConfirmacaoPedido'
+import { protocoloDe } from '../../lib/pedidosUnidade'
 import { BotaoCsv } from '../../components/BotaoCsv'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { mensagemErro } from '../../lib/errors'
@@ -9,6 +11,7 @@ import {
   MAX_ITENS_CONTAGEM,
   MAX_ITENS_PEDIDO,
   ROTULO_CATEGORIA,
+  ROTULO_STATUS_PEDIDO,
   ROTULO_TIPO_MOV,
   TIPOS_MANUAIS,
   alertas,
@@ -44,17 +47,28 @@ const ROTULO_ABA: Record<Aba, string> = { saldo: 'Saldo', movimentar: 'Movimenta
 export function EstoquePage() {
   const dados = useEstoque()
   const [params, setParams] = useSearchParams()
-  const aba = (Object.keys(ROTULO_ABA).includes(params.get('aba') ?? '') ? params.get('aba') : 'saldo') as Aba
+  const alvo = params.get('pedido')
+  const aba = (Object.keys(ROTULO_ABA).includes(params.get('aba') ?? '') ? params.get('aba') : alvo ? 'pedidos' : 'saldo') as Aba
   const [ok, setOk] = useState('')
+  const [confirmado, setConfirmado] = useState<string | null>(null)
   const [rascunhoPedido, setRascunhoPedido] = useState<{ itemId: string; quantidade: number }[] | null>(null)
 
   const linhas = useMemo(() => tabelaSaldos(dados.itens, dados.movimentos), [dados.itens, dados.movimentos])
   const criticos = alertas(linhas)
 
+  const alvoPronto = Boolean(alvo && aba === 'pedidos' && !dados.carregando && !dados.erro && dados.pedidos.some((p) => p.id === alvo))
+  useEffect(() => {
+    if (alvoPronto) focarPedido(`reposicao-${alvo}`)
+  }, [alvo, alvoPronto])
+
   if (dados.gestor) return <Navigate to="/estoque/gestao" replace />
   if (!dados.carregando && !dados.participa) return <Navigate to="/" replace />
 
-  const irPara = (item: Aba) => { setParams({ aba: item }); setOk('') }
+  const irPara = (item: Aba) => {
+    setParams({ aba: item })
+    setOk('')
+    setConfirmado(null)
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-6">
@@ -76,6 +90,13 @@ export function EstoquePage() {
 
       {dados.simulando ? <Aviso>Você está vendo como a unidade simulada. Nada é gravado nesta visão.</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
+      {aba === 'pedidos' && confirmado ? (
+        <ConfirmacaoPedido titulo="Pedido de reposição aberto" protocolo={protocoloDe('reposicao', confirmado)}
+          situacao={ROTULO_STATUS_PEDIDO.aberto} acompanhar={() => {
+            setParams({ aba: 'pedidos', pedido: confirmado })
+            if (alvo === confirmado && alvoPronto) focarPedido(`reposicao-${confirmado}`)
+          }} />
+      ) : null}
       {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando o estoque…" /> : null}
 
@@ -97,7 +118,11 @@ export function EstoquePage() {
       {!dados.carregando && !dados.erro && aba === 'historico' ? <Historico movimentos={dados.movimentos} itens={dados.itens} /> : null}
       {!dados.carregando && !dados.erro && aba === 'contagem' ? <Contagens dados={dados} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
       {!dados.carregando && !dados.erro && aba === 'pedidos' ? (
-        <Pedidos dados={dados} rascunho={rascunhoPedido} onRascunhoUsado={() => setRascunhoPedido(null)} onFeito={(m) => { setOk(m); dados.recarregar() }} />
+        <Pedidos dados={dados} alvo={alvo} rascunho={rascunhoPedido} onRascunhoUsado={() => setRascunhoPedido(null)} onFeito={(m, id) => {
+          setOk(m)
+          setConfirmado(id ?? null)
+          dados.recarregar()
+        }} />
       ) : null}
     </div>
   )
@@ -384,7 +409,13 @@ function Contagens({ dados, onFeito }: { dados: UsoEstoque; onFeito: (msg: strin
   )
 }
 
-function Pedidos({ dados, rascunho, onRascunhoUsado, onFeito }: { dados: UsoEstoque; rascunho: { itemId: string; quantidade: number }[] | null; onRascunhoUsado: () => void; onFeito: (msg: string) => void }) {
+function Pedidos({ dados, alvo, rascunho, onRascunhoUsado, onFeito }: {
+  dados: UsoEstoque
+  alvo: string | null
+  rascunho: { itemId: string; quantidade: number }[] | null
+  onRascunhoUsado: () => void
+  onFeito: (msg: string, id?: string) => void
+}) {
   const ativos = dados.itens.filter((i) => i.ativo)
   const [linhas, setLinhas] = useState<{ itemId: string; quantidade: string }[]>([])
   const [obs, setObs] = useState('')
@@ -411,10 +442,10 @@ function Pedidos({ dados, rascunho, onRascunhoUsado, onFeito }: { dados: UsoEsto
     setSalvando(true)
     setErro('')
     try {
-      await criarPedido(dados.pessoa, prontas, obs)
+      const id = await criarPedido(dados.pessoa, prontas, obs)
       setLinhas([])
       setObs('')
-      onFeito('Pedido de reposição enviado para a franqueadora.')
+      onFeito('Pedido de reposição enviado para a franqueadora.', id)
     } catch (falha) {
       setErro(mensagemErro(falha))
     } finally {
@@ -449,11 +480,13 @@ function Pedidos({ dados, rascunho, onRascunhoUsado, onFeito }: { dados: UsoEsto
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
         {!dados.pedidos.length ? <Vazio titulo="Nenhum pedido ainda" texto="Pedidos de reposição enviados à franqueadora aparecem aqui com o andamento." /> : null}
         {dados.pedidos.map((p) => (
-          <article key={p.id} className="space-y-2 rounded-2xl border border-line bg-white p-4 shadow-sm">
+          <article key={p.id} id={`reposicao-${p.id}`} tabIndex={-1}
+            className={cx('space-y-2 rounded-2xl border bg-white p-4 shadow-sm focus-visible:outline-2 focus-visible:outline-brand-dark', alvo === p.id ? 'border-brand' : 'border-line')}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-semibold">Pedido de {formatarData(p.criadoEmMs)} · {p.solicitanteNome}</p>
               <StatusPedidoSelo status={p.status} />
             </div>
+            <p className="text-xs text-ink-soft" translate="no">Protocolo {protocoloDe('reposicao', p.id)}</p>
             <ul className="text-sm text-ink/75">
               {p.itens.map((l, i) => <li key={i}>{l.itemNome}: {l.quantidade} {l.unidadeMedida}{p.status === 'enviado' || p.status === 'recebido' ? ` · enviado ${l.quantidadeEnviada}` : ''}</li>)}
             </ul>
