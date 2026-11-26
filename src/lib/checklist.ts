@@ -477,3 +477,69 @@ export function podeGerirChecklist(
 export function fazChecklist(usuario: { papel: string } | null | undefined): boolean {
   return usuario?.papel === 'franqueado' || usuario?.papel === 'equipe_franqueado'
 }
+
+export interface ChaveRascunho {
+  modeloId: string
+  versao: number
+  periodo: string
+}
+
+export interface RascunhoChecklist extends ChaveRascunho {
+  respostas: Resposta[]
+  obsGeral: string
+  atualizadoEmMs: number
+}
+
+/** Preserva o mapeamento dos registros de execução que precedem os rascunhos. */
+export function mapResposta(v: unknown, i: number): Resposta {
+  const d = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  const texto = (valor: unknown, padrao = '') => typeof valor === 'string' ? valor : padrao
+  const resultado = d.resultado as Resultado
+  return {
+    itemId: texto(d.itemId, `i${i + 1}`),
+    texto: texto(d.texto),
+    secao: texto(d.secao),
+    peso: pesoValido(d.peso),
+    resultado: RESULTADOS.includes(resultado) ? resultado : '',
+    obs: texto(d.obs),
+    evidenciaUrl: texto(d.evidenciaUrl),
+  }
+}
+
+export function mapRespostasRascunho(valor: unknown): Resposta[] {
+  if (!Array.isArray(valor)) return []
+  return valor.slice(0, MAX_ITENS).flatMap((r: unknown, i) => {
+    if (!r || typeof r !== 'object' || !('itemId' in r) || typeof r.itemId !== 'string' || !r.itemId) return []
+    const resposta = mapResposta(r, i)
+    return [{
+      ...resposta,
+      obs: resposta.resultado === 'na' ? '' : resposta.obs.slice(0, 500),
+      evidenciaUrl: resposta.resultado === 'na' ? '' : resposta.evidenciaUrl.slice(0, 600),
+    }]
+  })
+}
+
+export function mesclarRespostasRascunho(modelo: Pick<ModeloChecklist, 'itens'>, valor: unknown): Resposta[] {
+  const porId = new Map(mapRespostasRascunho(valor).map((r) => [r.itemId, r]))
+  return respostasIniciais(modelo).map((inicial) => {
+    const r = porId.get(inicial.itemId)
+    return r ? { ...inicial, resultado: r.resultado, obs: r.obs, evidenciaUrl: r.evidenciaUrl } : inicial
+  })
+}
+
+const DATA_BRASILIA = new Intl.DateTimeFormat('sv-SE', {
+  timeZone: 'America/Sao_Paulo',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+
+export function periodoRascunho(frequencia: Frequencia, agoraMs: number): string {
+  if (frequencia === 'avulsa') return 'avulsa'
+  const dia = dataLocalMs(DATA_BRASILIA.format(agoraMs))
+  return dataISOlocal(new Date(inicioPeriodo(frequencia, dia)))
+}
+
+export function horaRascunho(ms: number): string {
+  return HORA_BRASILIA.format(ms)
+}

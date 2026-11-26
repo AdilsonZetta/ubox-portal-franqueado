@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { ClipboardCheck, History, ShieldAlert } from 'lucide-react'
 import { Aviso, Button, Carregando, Selo, Vazio, cx } from '../../components/ui'
@@ -7,14 +8,19 @@ import {
   ROTULO_PERIODO,
   ROTULO_TIPO_CK,
   dataLocalMs,
+  horaRascunho,
   inicioPeriodo,
   liberacaoChecklist,
   mediaScore,
+  mesclarRespostasRascunho,
   naoConformidades,
+  periodoRascunho,
   situacaoModelo,
   vigenciaDe,
+  type RascunhoChecklist,
   type Situacao,
 } from '../../lib/checklist'
+import { listarRascunhos, RASCUNHO_NO_APARELHO } from '../../lib/checklistApi'
 import { useVisao } from '../../lib/visao'
 import { ListaExecucoes, ScoreSelo, SituacaoSelo } from './partes'
 import { useChecklist, useRelogioChecklist } from './useChecklist'
@@ -29,15 +35,40 @@ export function ChecklistPage() {
   // Início do dia (estável entre renderizações) menos ~2 meses: cobre o período anterior do mensal.
   const dados = useChecklist({ deMs: inicioPeriodo('diaria', agora) - 62 * DIA }, true)
 
+  const uid = dados.pessoa?.uid
+  const unidadeId = dados.pessoa?.unidadeId
+  const titular = !comoFranqueado && !dados.gestor && dados.participa && uid && unidadeId
+    ? JSON.stringify([uid, unidadeId])
+    : null
+  const [rascunhos, setRascunhos] = useState<{ titular: string; lista: RascunhoChecklist[] } | null>(null)
+  useEffect(() => {
+    if (!titular || !uid || !unidadeId) return
+    let ativo = true
+    listarRascunhos({ uid, unidadeId })
+      .then((lista) => ativo && setRascunhos({ titular, lista }))
+      .catch(() => ativo && setRascunhos(null))
+    return () => { ativo = false }
+  }, [titular, uid, unidadeId])
+
   if (dados.gestor) return <Navigate to="/checklist/gestao" replace />
   if (comoFranqueado && !simulado) return <Aviso>Escolha qual franqueado simular para ver o checklist dessa unidade.</Aviso>
   if (!dados.carregando && !dados.participa) return <Aviso>O Checklist Operacional é preenchido pelas unidades.</Aviso>
 
+  const rascunhosPorModelo = new Map<string, RascunhoChecklist>()
+  if (rascunhos && rascunhos.titular === titular) {
+    for (const r of rascunhos.lista) {
+      const chave = JSON.stringify([r.modeloId, r.versao, r.periodo])
+      rascunhosPorModelo.set(chave, r)
+    }
+  }
   const cartoes = dados.modelos
     .filter((m) => m.ativo)
     .map((m) => {
       const vigencia = vigenciaDe(dados.vigencias, m.id, dados.pessoa?.unidadeId ?? '')
-      return { modelo: m, vigencia, ...situacaoModelo(m, dados.execucoes, agora, vigencia), ...liberacaoChecklist(m, instante) }
+      const chave = JSON.stringify([m.id, m.versao, periodoRascunho(m.frequencia, agora)])
+      const rascunho = rascunhosPorModelo.get(chave)
+      const respondidos = rascunho ? mesclarRespostasRascunho(m, rascunho.respostas).filter((r) => r.resultado).length : 0
+      return { modelo: m, vigencia, rascunho, respondidos, ...situacaoModelo(m, dados.execucoes, agora, vigencia), ...liberacaoChecklist(m, instante) }
     })
     .sort((a, b) => ORDEM[a.situacao] - ORDEM[b.situacao] || a.modelo.titulo.localeCompare(b.modelo.titulo, 'pt-BR'))
   const atrasados = cartoes.filter((c) => c.situacao === 'atrasado').length
@@ -84,7 +115,7 @@ export function ChecklistPage() {
             <h2 className="text-lg font-bold">Checklists da unidade</h2>
             {!cartoes.length ? <Vazio titulo="Nenhum checklist liberado" texto="A franqueadora ainda não publicou checklists para a sua unidade." /> : null}
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cartoes.map(({ modelo, situacao, ultimaMs, liberado, horario, vigencia, aguardandoInicio, primeiroVencimentoMs, venceEmMs }) => (
+              {cartoes.map(({ modelo, situacao, ultimaMs, liberado, horario, vigencia, aguardandoInicio, primeiroVencimentoMs, venceEmMs, rascunho, respondidos }) => (
                 <li key={modelo.id} className={cx('flex flex-col rounded-2xl border bg-surface p-4 shadow-sm', situacao === 'atrasado' ? 'border-red-300' : 'border-line')}>
                   <div className="flex flex-wrap gap-1.5">
                     {!liberado ? <Selo tom="alerta">Abre às {horario}</Selo> : null}
@@ -106,15 +137,20 @@ export function ChecklistPage() {
                     <p className="mt-2 text-sm text-ink-soft">Vence: {formatarData(venceEmMs - 1)}</p>
                   ) : null}
                   {horario ? <p className="mt-2 text-sm text-ink-soft">Disponível a partir das {horario} (Brasília)</p> : null}
+                  {rascunho?.atualizadoEmMs ? (
+                    <p className="mt-2 text-sm text-ink-soft">
+                      {respondidos} de {modelo.itens.length} itens · salvo{RASCUNHO_NO_APARELHO ? ' neste aparelho' : ''} às {horaRascunho(rascunho.atualizadoEmMs)}
+                    </p>
+                  ) : null}
                   <div className="mt-auto pt-3">
                     {dados.simulando ? null : !liberado ? (
-                      <Button type="button" className="w-full" disabled>Preencher checklist</Button>
+                      <Button type="button" className="w-full" disabled>{rascunho ? 'Retomar checklist' : 'Preencher checklist'}</Button>
                     ) : (
                       <Link
                         to={`/checklist/preencher/${modelo.id}`}
                         className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-semibold text-white hover:bg-brand-dark"
                       >
-                        <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> {situacao === 'em_dia' ? 'Preencher de novo' : 'Preencher agora'}
+                        <ClipboardCheck className="h-4 w-4" aria-hidden="true" /> {rascunho ? 'Retomar checklist' : situacao === 'em_dia' ? 'Preencher de novo' : 'Preencher agora'}
                       </Link>
                     )}
                   </div>

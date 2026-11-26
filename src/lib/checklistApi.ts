@@ -3,6 +3,10 @@ import {
   enviarExecucaoSb,
   lerExecucaoSb,
   lerModeloSb,
+  lerRascunhoSb,
+  listarRascunhosSb,
+  salvarRascunhoSb,
+  removerRascunhoSb,
   listarExecucoesSb,
   listarModelosSb,
   listarVigenciasSb,
@@ -30,10 +34,13 @@ import { requireDb } from './firebase'
 import { paraMillis } from './format'
 import {
   FREQUENCIAS,
-  RESULTADOS,
   TIPOS_CHECKLIST,
   calcularTotais,
   horarioValido,
+  mapResposta,
+  mapRespostasRascunho,
+  type ChaveRascunho,
+  type RascunhoChecklist,
   normalizarItem,
   pesoTotalDe,
   pesoValido,
@@ -61,19 +68,6 @@ function mapItem(v: unknown, i: number): ItemModelo {
     peso: pesoValido(d.peso),
     exigeEvidencia: d.exigeEvidencia === true,
     exigeObs: d.exigeObs === true,
-  }
-}
-
-function mapResposta(v: unknown, i: number): Resposta {
-  const d = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
-  return {
-    itemId: texto(d.itemId, `i${i + 1}`),
-    texto: texto(d.texto),
-    secao: texto(d.secao),
-    peso: pesoValido(d.peso),
-    resultado: umDe([...RESULTADOS, ''] as const, d.resultado, ''),
-    obs: texto(d.obs),
-    evidenciaUrl: texto(d.evidenciaUrl),
   }
 }
 
@@ -277,4 +271,88 @@ export async function salvarVigencias(...args: Parameters<typeof salvarVigencias
 export async function removerVigencia(id: string): Promise<void> {
   if (!VIGENCIA_DISPONIVEL) throw new Error('Disponível apenas no backend Supabase.')
   await removerVigenciaSb(id)
+}
+
+type TitularRascunho = Pick<Usuario, 'uid' | 'unidadeId'>
+
+export const RASCUNHO_NO_APARELHO = BACKEND !== 'supabase'
+
+export function rascunhoIndisponivel(erro: unknown): boolean {
+  return erro instanceof ArmazenamentoRascunhoIndisponivel ||
+    (!!erro && typeof erro === 'object' && 'code' in erro && ['42P01', 'PGRST205'].includes(String(erro.code)))
+}
+
+class ArmazenamentoRascunhoIndisponivel extends Error {}
+
+function noArmazenamento<T>(operacao: (storage: Storage) => T): T {
+  try {
+    return operacao(window.localStorage)
+  } catch (erro) {
+    if (erro instanceof DOMException && erro.name === 'SecurityError') {
+      throw new ArmazenamentoRascunhoIndisponivel('Armazenamento indisponível.', { cause: erro })
+    }
+    throw erro
+  }
+}
+
+function prefixoRascunhos({ uid, unidadeId }: TitularRascunho) {
+  return `ubox:checklist-rascunho:${uid}:${unidadeId ?? ''}:`
+}
+
+function chaveLocal(autor: TitularRascunho, chave: ChaveRascunho) {
+  return `${prefixoRascunhos(autor)}${chave.modeloId}:${chave.versao}:${chave.periodo}`
+}
+
+function lerRascunhoLocal(valor: string | null): RascunhoChecklist | null {
+  if (!valor) return null
+  try {
+    const r = JSON.parse(valor) as Partial<RascunhoChecklist> | null
+    if (!r || typeof r.modeloId !== 'string' || !numero(r.versao) ||
+      typeof r.periodo !== 'string' || !numero(r.atualizadoEmMs)) return null
+    return {
+      modeloId: r.modeloId,
+      versao: numero(r.versao),
+      periodo: r.periodo,
+      respostas: mapRespostasRascunho(r.respostas),
+      obsGeral: texto(r.obsGeral).slice(0, 2000),
+      atualizadoEmMs: numero(r.atualizadoEmMs),
+    }
+  } catch {
+    return null
+  }
+}
+
+export async function lerRascunho(autor: TitularRascunho, chave: ChaveRascunho) {
+  if (!RASCUNHO_NO_APARELHO) return lerRascunhoSb(chave.modeloId, chave.versao, chave.periodo)
+  const r = noArmazenamento((storage) => lerRascunhoLocal(storage.getItem(chaveLocal(autor, chave))))
+  return r && chaveLocal(autor, r) === chaveLocal(autor, chave) ? r : null
+}
+
+export async function listarRascunhos(autor: TitularRascunho) {
+  if (!RASCUNHO_NO_APARELHO) return listarRascunhosSb()
+  return noArmazenamento((storage) => {
+    const prefixo = prefixoRascunhos(autor)
+    const rascunhos: RascunhoChecklist[] = []
+    for (let i = 0; i < storage.length; i++) {
+      const chave = storage.key(i)
+      if (!chave?.startsWith(prefixo)) continue
+      const rascunho = lerRascunhoLocal(storage.getItem(chave))
+      if (rascunho && chave === chaveLocal(autor, rascunho)) rascunhos.push(rascunho)
+    }
+    return rascunhos
+  })
+}
+
+export async function salvarRascunho(autor: TitularRascunho, rascunho: Omit<RascunhoChecklist, 'atualizadoEmMs'>) {
+  if (!RASCUNHO_NO_APARELHO) return salvarRascunhoSb(autor, rascunho)
+  return noArmazenamento((storage) => {
+    const atualizadoEmMs = Date.now()
+    storage.setItem(chaveLocal(autor, rascunho), JSON.stringify({ ...rascunho, atualizadoEmMs }))
+    return atualizadoEmMs
+  })
+}
+
+export async function removerRascunho(autor: TitularRascunho, chave: ChaveRascunho) {
+  if (!RASCUNHO_NO_APARELHO) return removerRascunhoSb(chave)
+  noArmazenamento((storage) => storage.removeItem(chaveLocal(autor, chave)))
 }

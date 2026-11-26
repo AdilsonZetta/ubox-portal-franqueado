@@ -14,6 +14,8 @@ import {
   naoConformidades,
   novoItemId,
   periodoAnterior,
+  periodoRascunho,
+  mesclarRespostasRascunho,
   pesoTotalDe,
   pesoValido,
   podeGerirChecklist,
@@ -269,5 +271,32 @@ describe('datas e transição da vigência', () => {
     expect(primeiroVencimentoPadrao('diaria', '2026-12-31')).toBe('2026-12-31')
     expect(primeiroVencimentoPadrao('semanal', '2026-12-31')).toBe('2027-01-03')
     expect(primeiroVencimentoPadrao('mensal', '2028-02-12')).toBe('2028-02-29')
+  })
+})
+
+describe('rascunhos', () => {
+  it('usa o dia de Brasília, a segunda-feira e o primeiro dia do mês', () => {
+    const agora = Date.parse('2026-12-01T01:00:00Z')
+    expect(periodoRascunho('diaria', agora)).toBe('2026-11-30')
+    expect(periodoRascunho('semanal', agora)).toBe('2026-11-30')
+    expect(periodoRascunho('mensal', agora)).toBe('2026-11-01')
+    expect(periodoRascunho('avulsa', agora)).toBe('avulsa')
+    expect(periodoRascunho('semanal', Date.parse('2026-11-30T01:00:00Z'))).toBe('2026-11-23')
+  })
+
+  it('recupera por ID, preserva o modelo e limpa valores dispensados', () => {
+    const iniciais = respostasIniciais({ itens })
+    expect(mesclarRespostasRascunho({ itens }, [
+      { itemId: 'i3', resultado: 'na', obs: 'antiga', evidenciaUrl: 'https://example.com' },
+      { itemId: 'removido', resultado: 'ok' },
+      { resultado: 'ok' },
+      { itemId: 'i2', resultado: 'inválido', obs: 15, peso: 99 },
+    ])).toEqual([iniciais[0], iniciais[1], { ...iniciais[2], resultado: 'na' }])
+  })
+
+  it('dispensa foto e observação de item N/A com ambas obrigatórias', () => {
+    const modelo = { itens: [{ ...itens[0], exigeEvidencia: true, exigeObs: true }] }
+    const respostas = respostasIniciais(modelo).map((r): Resposta => ({ ...r, resultado: 'na' }))
+    expect(validarExecucao(modelo, respostas)).toEqual({ gerais: [], porItem: {} })
   })
 })

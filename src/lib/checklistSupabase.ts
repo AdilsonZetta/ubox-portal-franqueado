@@ -3,6 +3,9 @@ import type { Usuario } from '../types'
 import {
   calcularTotais,
   normalizarItem,
+  mapRespostasRascunho,
+  type ChaveRascunho,
+  type RascunhoChecklist,
   pesoTotalDe,
   pesoValido,
   versaoMuda,
@@ -15,7 +18,7 @@ import { mapExecucao, mapModelo, type ConsultaExecucoes } from './checklistApi'
 import { requireSupabase } from './supabase'
 
 type Linha = Record<string, unknown> & { id: string }
-type Tabela = 'checklist_modelos' | 'checklist_execucoes' | 'checklist_vigencias'
+type Tabela = 'checklist_modelos' | 'checklist_execucoes' | 'checklist_vigencias' | 'checklist_rascunhos'
 type Consulta = ReturnType<ReturnType<ReturnType<typeof requireSupabase>['from']>['select']>
 type Unidade = Pick<Usuario, 'unidadeId'>
 
@@ -237,4 +240,51 @@ export async function listarUnidadesChecklistSb(): Promise<{ id: string; nome: s
     unidades.push(...pagina)
     if (pagina.length < 500) return unidades
   }
+}
+
+const TABELA_RASCUNHOS = 'checklist_rascunhos'
+type TitularRascunho = Pick<Usuario, 'uid' | 'unidadeId'>
+
+function mapRascunhoSb(linha: Linha): RascunhoChecklist {
+  return {
+    modeloId: String(linha.modelo_id),
+    versao: Number(linha.modelo_versao),
+    periodo: String(linha.periodo),
+    respostas: mapRespostasRascunho(linha.respostas),
+    obsGeral: typeof linha.obs_geral === 'string' ? linha.obs_geral.slice(0, 2000) : '',
+    atualizadoEmMs: dataSb(linha.atualizado_em),
+  }
+}
+
+export async function listarRascunhosSb() {
+  return (await listarLinhas(TABELA_RASCUNHOS, (q) => q.order('id'))).map(mapRascunhoSb)
+}
+
+export async function lerRascunhoSb(modeloId: string, versao: number, periodo: string) {
+  const { data, error } = await requireSupabase().from(TABELA_RASCUNHOS).select('*')
+    .eq('modelo_id', modeloId).eq('modelo_versao', versao).eq('periodo', periodo).maybeSingle<Linha>()
+  if (error) throw error
+  return data ? mapRascunhoSb(data) : null
+}
+
+export async function salvarRascunhoSb(autor: TitularRascunho, rascunho: Omit<RascunhoChecklist, 'atualizadoEmMs'>) {
+  const { data, error } = await requireSupabase().from(TABELA_RASCUNHOS).upsert({
+    uid: autor.uid,
+    unidade_id: autor.unidadeId,
+    modelo_id: rascunho.modeloId,
+    modelo_versao: rascunho.versao,
+    periodo: rascunho.periodo,
+    respostas: rascunho.respostas,
+    obs_geral: rascunho.obsGeral,
+  }, { onConflict: 'uid,unidade_id,modelo_id,modelo_versao,periodo' }).select('atualizado_em').single()
+  if (error) throw error
+  const atualizadoEmMs = dataSb(data.atualizado_em)
+  if (!atualizadoEmMs) throw new Error('Horário do salvamento indisponível.')
+  return atualizadoEmMs
+}
+
+export async function removerRascunhoSb({ modeloId, versao, periodo }: ChaveRascunho) {
+  const { error } = await requireSupabase().from(TABELA_RASCUNHOS).delete()
+    .eq('modelo_id', modeloId).eq('modelo_versao', versao).eq('periodo', periodo)
+  if (error) throw error
 }
