@@ -1,3 +1,6 @@
+-- Independente de 20261126180700_checklist_rascunhos.sql, já aplicada em produção.
+-- A versão é posterior para o supabase db push aplicar este arquivo sem --include-all.
+
 -- A lista de designados usa o mesmo acesso à trilha e aos resultados das provas.
 create function public.designados_manuais()
 returns table (uid uuid, nome text, unidade_id text, unidade_nome text)
