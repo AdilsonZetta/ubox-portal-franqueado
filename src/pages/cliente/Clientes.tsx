@@ -6,7 +6,7 @@ import { Plus } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Vazio, cx, inputClass } from '../../components/ui'
 import { mensagemErro } from '../../lib/errors'
 import { formatarDia } from '../../lib/format'
-import { formatarReais, hojeISO, kpisClientes, resumoCobrancas, validarCliente, type ClienteForm } from '../../lib/cliente'
+import { ROTULO_RESUMO, estadoResumo, formatarReais, hojeISO, kpisClientes, resumoCobrancas, validarCliente, type ClienteForm } from '../../lib/cliente'
 import { criarCliente } from '../../lib/clienteApi'
 import { Numero, SituacaoSelo, useClientes, type UsoClientes } from './partes'
 
@@ -22,7 +22,11 @@ export function ClientesPage() {
   const consulta = normalizar(busca.trim())
   const lista = dados.clientes
     .filter((c) => (encerrados || c.status === 'ativo') && normalizar(`${c.nome} ${c.box} ${c.telefone}`).includes(consulta))
-    .map((c) => ({ c, cobranca: c.status === 'ativo' ? resumoCobrancas(dados.cobrancas.get(c.id) ?? [], hoje) : null }))
+    .map((c) => {
+      const historico = dados.cobrancas.get(c.id) ?? []
+      const ativo = c.status === 'ativo'
+      return { c, cobranca: ativo ? resumoCobrancas(historico, hoje) : null, estado: ativo ? estadoResumo(historico, hoje) : null }
+    })
     .filter(({ cobranca }) => !soAtrasados || Boolean(cobranca?.atrasadas))
     .sort((a, b) => (ordem === 'atraso' ? (b.cobranca?.atrasadas ?? 0) - (a.cobranca?.atrasadas ?? 0) : 0)
       || a.c.nome.localeCompare(b.c.nome, 'pt-BR'))
@@ -71,8 +75,8 @@ export function ClientesPage() {
                 </select>
               </Campo>
               {dados.participa ? <BotaoCsv arquivo="clientes" cabecalhos={['Cliente', 'Telefone', 'Box', 'Contrato', 'Cobrança']}
-                linhas={lista.map(({ c, cobranca }) => [c.nome, c.telefone, c.box, c.status === 'ativo' ? 'Ativo' : 'Encerrado',
-                  cobranca ? (cobranca.atrasadas ? 'Em atraso' : cobranca.proxima ? 'Pendente' : 'Em dia') : null])} /> : null}
+                linhas={lista.map(({ c, estado }) => [c.nome, c.telefone, c.box, c.status === 'ativo' ? 'Ativo' : 'Encerrado',
+                  estado ? ROTULO_RESUMO[estado] : null])} /> : null}
             </div>
             {lista.length === 0 ? <Vazio titulo={dados.clientes.length ? 'Nenhum resultado para este filtro' : 'Nenhum cliente aqui'} texto={dados.clientes.length ? 'Ajuste a busca ou os filtros.' : 'Cadastre o primeiro locatário em “Novo cliente”.'} /> : (
               <div className="overflow-x-auto rounded-2xl border border-line bg-white shadow-sm">
@@ -81,7 +85,7 @@ export function ClientesPage() {
                     <tr><th className="px-4 py-2">Cliente</th><th className="px-4 py-2">Box</th><th className="px-4 py-2">Contrato</th><th className="px-4 py-2 text-right">Mensalidade</th><th className="px-4 py-2">Cobrança</th><th className="px-4 py-2">Link</th></tr>
                   </thead>
                   <tbody>
-                    {lista.map(({ c, cobranca: r }) => {
+                    {lista.map(({ c, estado }) => {
                       const p = dados.paineis.get(c.id)
                       return (
                         <tr key={c.id} className={cx('border-t border-line', c.status === 'encerrado' && 'opacity-60')}>
@@ -89,7 +93,7 @@ export function ClientesPage() {
                           <td className="px-4 py-2">{c.box}</td>
                           <td className="px-4 py-2 text-xs">{formatarDia(c.contratoInicioMs)}{c.contratoFimMs ? ` a ${formatarDia(c.contratoFimMs)}` : ' · sem prazo'}{c.status === 'encerrado' ? ' · encerrado' : ''}</td>
                           <td className="px-4 py-2 text-right tabular-nums">{formatarReais(c.valorMensalCentavos)}</td>
-                          <td className="px-4 py-2">{r ? (r.atrasadas ? <SituacaoSelo s="atrasado" /> : r.proxima ? <SituacaoSelo s="pendente" /> : <span className="text-xs text-ink/50">em dia</span>) : null}</td>
+                          <td className="px-4 py-2">{estado === 'em_atraso' ? <SituacaoSelo s="atrasado" /> : estado === 'pendente' ? <SituacaoSelo s="pendente" /> : estado ? <span className="text-xs text-ink-soft">{ROTULO_RESUMO[estado]}</span> : null}</td>
                           <td className="px-4 py-2 text-xs">{p?.ativo ? <span className="font-semibold text-lime-700">ativo</span> : <span className="text-ink/45">desativado</span>}</td>
                         </tr>
                       )

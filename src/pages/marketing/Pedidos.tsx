@@ -1,7 +1,9 @@
-import { useState, type FormEvent } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { useEffect, useState, type FormEvent } from 'react'
+import { Link, Navigate, useSearchParams } from 'react-router-dom'
 import { ExternalLink, Sparkles } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, inputClass } from '../../components/ui'
+import { ConfirmacaoPedido, focarPedido } from '../../components/ConfirmacaoPedido'
+import { protocoloDe } from '../../lib/pedidosUnidade'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData, formatarDia } from '../../lib/format'
@@ -39,6 +41,7 @@ export function DetalhePedido({ pedido, campanha }: { pedido: PedidoMkt; campanh
         {pedido.medidas ? <Selo>{pedido.medidas}</Selo> : null}
       </div>
       <h3 className="font-bold">{pedido.titulo}</h3>
+      <p className="text-xs text-ink-soft" translate="no">Protocolo {protocoloDe('arte', pedido.id)}</p>
       <p className="text-xs text-ink/50">
         {pedido.nome} · {pedido.unidadeNome || 'Unidade'} · pedido em {formatarData(pedido.criadoEmMs)}
         {pedido.prazoDesejadoMs ? ` · para ${formatarDia(pedido.prazoDesejadoMs)}` : ''}
@@ -70,12 +73,34 @@ export function PedidosMarketingPage() {
   const { comoFranqueado } = useVisao()
   const dados = useMarketing({ pedidos: true })
   const [form, setForm] = useState<PedidoForm>(vazio)
-  const [abrindo, setAbrindo] = useState(false)
+  const [params, setParams] = useSearchParams()
+  const alvo = params.get('id')
+  const novo = params.get('novo') === '1'
+  const [abrindo, setAbrindo] = useState(novo)
+  const [confirmado, setConfirmado] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   const [erro, setErro] = useState('')
   const [ok, setOk] = useState('')
   const [respostas, setRespostas] = useState<Record<string, string>>({})
   const campanhas = new Map(dados.campanhas.map((c) => [c.id, c.titulo]))
+
+  useEffect(() => {
+    if (novo) setAbrindo(true)
+  }, [novo])
+
+  const alvoPronto = Boolean(alvo && !dados.carregando && dados.pedidos.some((p) => p.id === alvo))
+  useEffect(() => {
+    if (alvoPronto) focarPedido(`pedido-${alvo}`)
+  }, [alvo, alvoPronto])
+
+  function fecharFormulario() {
+    setAbrindo(false)
+    if (novo) {
+      const proximos = new URLSearchParams(params)
+      proximos.delete('novo')
+      setParams(proximos, { replace: true })
+    }
+  }
 
   if (!user) return null
   if (dados.gestor) return <Navigate to="/marketing/gestao?aba=pedidos" replace />
@@ -93,10 +118,11 @@ export function PedidosMarketingPage() {
     setSalvando(true)
     setErro('')
     try {
-      await criarPedido(user, form)
+      const id = await criarPedido(user, form)
       setForm(vazio)
-      setAbrindo(false)
-      setOk('Pedido enviado. A franqueadora acompanha por aqui e você vê cada mudança de status.')
+      fecharFormulario()
+      setOk('')
+      setConfirmado(id)
       dados.recarregar()
     } catch (falha) {
       setErro(mensagemErro(falha))
@@ -148,11 +174,19 @@ export function PedidosMarketingPage() {
             Precisa de uma arte personalizada para a unidade? Peça aqui e acompanhe o andamento. {user.papel === 'franqueado' ? 'Você vê os pedidos de toda a unidade.' : 'Você vê os seus pedidos.'}
           </p>
         </div>
-        {!abrindo ? <Button type="button" onClick={() => setAbrindo(true)}>Novo pedido</Button> : null}
+        {!abrindo ? <Button type="button" onClick={() => { setConfirmado(null); setAbrindo(true) }}>Novo pedido</Button> : null}
       </header>
       {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {erro ? <Aviso tom="erro"><p role="alert">{erro}</p></Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
+
+      {confirmado && !abrindo ? (
+        <ConfirmacaoPedido titulo="Pedido de arte enviado" protocolo={protocoloDe('arte', confirmado)}
+          situacao={ROTULO_STATUS.aberta} acompanhar={() => {
+            setParams({ id: confirmado })
+            if (alvo === confirmado && alvoPronto) focarPedido(`pedido-${confirmado}`)
+          }} />
+      ) : null}
 
       {abrindo ? (
         <form onSubmit={(e) => void enviar(e)} className="space-y-4 rounded-3xl border border-line bg-white p-5 shadow-sm">
@@ -189,7 +223,7 @@ export function PedidosMarketingPage() {
           </div>
           <div className="flex gap-2">
             <Button type="submit" disabled={salvando}>{salvando ? 'Enviando…' : erro ? 'Tentar enviar novamente' : 'Enviar pedido'}</Button>
-            <Button type="button" variant="secondary" onClick={() => setAbrindo(false)}>Cancelar</Button>
+            <Button type="button" variant="secondary" onClick={fecharFormulario}>Cancelar</Button>
           </div>
         </form>
       ) : null}
@@ -201,7 +235,8 @@ export function PedidosMarketingPage() {
           const acao = acaoDaUnidade(p.status)
           const podeAgir = acao && (p.uid === user.uid || user.papel === 'franqueado')
           return (
-            <li key={p.id} className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+            <li key={p.id} id={`pedido-${p.id}`} tabIndex={-1}
+              className={`rounded-2xl border bg-white p-5 shadow-sm focus-visible:outline-2 focus-visible:outline-brand-dark ${alvo === p.id ? 'border-brand' : 'border-line'}`}>
               <DetalhePedido pedido={p} campanha={campanhas.get(p.campanhaId)} />
               {podeAgir && acao === 'responder' ? (
                 <div className="mt-3 space-y-2">
