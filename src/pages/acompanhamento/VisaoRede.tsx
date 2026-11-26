@@ -6,7 +6,10 @@ import { Aviso, Button, Carregando, Vazio, cx, inputClass } from '../../componen
 import { mensagemErro } from '../../lib/errors'
 import { formatarDia } from '../../lib/format'
 import { listarUnidades } from '../../lib/gestao'
-import { ROTULO_NIVEL, resumirUnidade, saudeDe, sinaisSaude, type Nivel } from '../../lib/acompanhamento'
+import {
+  ORDEM_CLASSIFICACAO, ROTULO_CLASSIFICACAO, ROTULO_FONTE, contarClassificacoes,
+  estadoDasFontes, fontesIndisponiveis, motivoSaude, resumirUnidade, saudeDe, sinaisSaude, type Classificacao,
+} from '../../lib/acompanhamento'
 import { carregarAcompanhamento, type DadosAcompanhamento } from '../../lib/acompanhamentoApi'
 import type { Unidade } from '../../types'
 import { ScoreSelo } from '../checklist/partes'
@@ -21,7 +24,7 @@ export function VisaoRedePage() {
   const [tique, setTique] = useState(0)
   const [busca, setBusca] = useState('')
   const [cidade, setCidade] = useState('')
-  const [nivel, setNivel] = useState<Nivel | ''>('')
+  const [nivel, setNivel] = useState<Classificacao | ''>('')
 
   useEffect(() => {
     if (!gestor) return
@@ -47,19 +50,17 @@ export function VisaoRedePage() {
     return unidades.map((u) => {
       const resumo = resumirUnidade(u, dados.fontes, agora)
       const sinais = sinaisSaude(resumo, agora)
-      return { u, resumo, sinais, saude: saudeDe(sinais) }
+      return { u, resumo, sinais, saude: saudeDe(sinais), motivo: motivoSaude(sinais) }
     })
   }, [unidades, dados])
 
   if (!gestor) return <Navigate to="/" replace />
   const cidades = [...new Set(unidades.map((u) => u.cidade).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
-  const contagem = { verde: 0, amarelo: 0, vermelho: 0 }
-  for (const l of linhas) contagem[l.saude] += 1
-  const ordem: Record<Nivel, number> = { vermelho: 0, amarelo: 1, verde: 2 }
+  const contagem = contarClassificacoes(linhas.map((l) => l.saude))
   const filtradas = linhas
     .filter((l) => (!nivel || l.saude === nivel) && (!cidade || l.u.cidade === cidade) && (!busca.trim() || l.u.nome.toLowerCase().includes(busca.trim().toLowerCase())))
-    .sort((a, b) => ordem[a.saude] - ordem[b.saude] || a.u.nome.localeCompare(b.u.nome, 'pt-BR'))
-  const indisponiveis = dados ? Object.entries(dados.fontes).filter(([, v]) => v === null).map(([k]) => k) : []
+    .sort((a, b) => ORDEM_CLASSIFICACAO.indexOf(a.saude) - ORDEM_CLASSIFICACAO.indexOf(b.saude) || a.u.nome.localeCompare(b.u.nome, 'pt-BR'))
+  const indisponiveis = dados ? fontesIndisponiveis(estadoDasFontes(dados.fontes)).map((fonte) => ROTULO_FONTE[fonte]) : []
 
   return (
     <div className="space-y-5">
@@ -69,20 +70,20 @@ export function VisaoRedePage() {
         <p className="mt-0.5 max-w-3xl text-sm text-ink/65">Saúde de cada unidade a partir do checklist, das auditorias, dos chamados e dos combinados com a franqueadora. Clique em uma unidade para ver o painel completo e registrar visitas e reuniões.</p>
       </header>
       {erro ? <Aviso tom="erro"><span role="alert">{erro}</span> <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
-      {!carregando && !erro && indisponiveis.length ? <Aviso tom="info">Algumas fontes não puderam ser lidas e aparecem como indisponíveis: {indisponiveis.join(', ')}. <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
+      {!carregando && !erro && indisponiveis.length ? <Aviso tom="info"><span role="status">Fontes indisponíveis: {indisponiveis.join(', ')}.</span> <Button variant="ghost" onClick={() => setTique((t) => t + 1)}>Tentar novamente</Button></Aviso> : null}
       {carregando ? <Carregando texto="Reunindo os dados da rede…" /> : null}
       {!carregando && !erro ? (
         <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            {(['vermelho', 'amarelo', 'verde'] as Nivel[]).map((n) => (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {ORDEM_CLASSIFICACAO.map((n) => (
               <button
                 key={n}
                 type="button"
                 aria-pressed={nivel === n}
                 onClick={() => setNivel(nivel === n ? '' : n)}
-                className={cx('flex items-center justify-between rounded-2xl border bg-white p-4 text-left shadow-sm', nivel === n ? 'border-ink' : 'border-line hover:border-ink/30')}
+                className={cx('flex items-center justify-between gap-2 rounded-2xl border bg-white p-4 text-left shadow-sm', nivel === n ? 'border-ink' : 'border-line hover:border-ink/30')}
               >
-                <span className="flex items-center gap-2 text-sm font-semibold"><span className={cx('h-3 w-3 rounded-full', COR_NIVEL[n])} aria-hidden="true" />{ROTULO_NIVEL[n]}</span>
+                <span className="flex items-center gap-2 text-sm font-semibold"><span className={cx('h-3 w-3 shrink-0 rounded-full', COR_NIVEL[n])} aria-hidden="true" />{ROTULO_CLASSIFICACAO[n]}</span>
                 <span className="text-2xl font-black tabular-nums">{contagem[n]}</span>
               </button>
             ))}
@@ -102,33 +103,39 @@ export function VisaoRedePage() {
             </label>
             <label className="block space-y-1 text-sm">
               <span className="font-medium">Saúde</span>
-              <select className={inputClass} value={nivel} onChange={(e) => setNivel(e.target.value as Nivel | '')}>
+              <select className={inputClass} value={nivel} onChange={(e) => setNivel(e.target.value as Classificacao | '')}>
                 <option value="">Todas</option>
-                {(['vermelho', 'amarelo', 'verde'] as Nivel[]).map((n) => <option key={n} value={n}>{ROTULO_NIVEL[n]}</option>)}
+                {ORDEM_CLASSIFICACAO.map((n) => <option key={n} value={n}>{ROTULO_CLASSIFICACAO[n]}</option>)}
               </select>
             </label>
           </div>
           <BotaoCsv arquivo="acompanhamento-rede" cabecalhos={['Unidade', 'Cidade', 'Saúde', 'Média checklist', 'Score auditoria', 'Chamados abertos']}
-            linhas={filtradas.map(({ u, saude, resumo }) => [u.nome, u.cidade, ROTULO_NIVEL[saude], resumo.checklist?.aplica ? resumo.checklist.media : null,
-              resumo.auditoria?.ultima?.score, resumo.chamados?.abertos])} />
+            linhas={filtradas.map(({ u, saude, resumo }) => [u.nome, u.cidade, ROTULO_CLASSIFICACAO[saude], resumo.checklist.aplica ? resumo.checklist.media : null,
+              resumo.auditoria.ultima?.score, resumo.chamados?.abertos])} />
           <CriteriosSaude />
           {!filtradas.length ? <Vazio titulo={linhas.length ? 'Nenhum resultado para este filtro' : 'Nenhuma unidade'} texto="Ajuste os filtros ou cadastre unidades na gestão da franqueadora." /> : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filtradas.map(({ u, resumo, sinais, saude }) => (
-              <Link key={u.id} to={`/acompanhamento/unidade/${u.id}`} className="block rounded-2xl border border-line bg-white p-4 shadow-sm transition hover:border-brand/50">
+            {filtradas.map(({ u, resumo, sinais, saude, motivo }) => (
+              <Link key={u.id} to={`/acompanhamento/unidade/${u.id}`} className="block rounded-2xl border border-line bg-white p-4 shadow-sm transition-colors hover:border-brand/50 motion-reduce:transition-none">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-bold">{u.nome}</p>
-                    <p className="text-xs text-ink/50">{u.cidade || '—'} · último contato {resumo.ultimoContatoMs ? formatarDia(resumo.ultimoContatoMs) : 'nunca'}</p>
+                    <p className="text-xs text-ink/50">{u.cidade || '—'} · último contato {!resumo.contatoDisponivel ? 'indisponível' : resumo.ultimoContatoMs === null ? 'sem registro' : formatarDia(resumo.ultimoContatoMs)}</p>
                   </div>
                   <SaudeSelo nivel={saude} />
                 </div>
                 <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
-                  <div><dt className="text-ink/50">Checklist</dt><dd className="mt-0.5">{resumo.checklist?.aplica && resumo.checklist.media !== null ? <ScoreSelo score={resumo.checklist.media} /> : <span className="text-ink/40">—</span>}</dd></div>
-                  <div><dt className="text-ink/50">Auditoria</dt><dd className="mt-0.5 font-semibold">{resumo.auditoria?.ultima ? `${resumo.auditoria.ultima.score}% ${resumo.auditoria.ultima.resultado === 'aprovada' ? '✓' : '✗'}` : '—'}</dd></div>
+                  <div><dt className="text-ink/50">Checklist</dt><dd className="mt-0.5">{resumo.checklist.aplica && resumo.checklist.media !== null ? <ScoreSelo score={resumo.checklist.media} /> : <span className="text-ink/40">—</span>}</dd></div>
+                  <div><dt className="text-ink/50">Auditoria</dt><dd className="mt-0.5 font-semibold">{resumo.auditoria.ultima ? `${resumo.auditoria.ultima.score}% ${resumo.auditoria.ultima.resultado === 'aprovada' ? '✓' : '✗'}` : '—'}</dd></div>
                   <div><dt className="text-ink/50">Chamados</dt><dd className="mt-0.5 font-semibold">{resumo.chamados ? `${resumo.chamados.abertos} abertos` : '—'}</dd></div>
                 </dl>
-                <div className="mt-3 flex gap-1" aria-label="Sinais da saúde">
+                {motivo.sinaisIndisponiveis.length ? (
+                  <p className="mt-3 text-xs text-ink-soft"><span className="font-semibold">Sinais indisponíveis:</span> {motivo.sinaisIndisponiveis.join(', ')}.</p>
+                ) : null}
+                {motivo.riscosConfirmados.length ? (
+                  <p className="mt-2 text-xs text-ink-soft"><span className="font-semibold">Sinais de risco:</span> {motivo.riscosConfirmados.map((s) => s.rotulo).join(', ')}.</p>
+                ) : null}
+                <div className="mt-3 flex gap-1" aria-hidden="true">
                   {sinais.map((s) => <span key={s.chave} title={`${s.rotulo}: ${s.detalhe}`} className={cx('h-1.5 flex-1 rounded-full', COR_NIVEL[s.nivel])} />)}
                 </div>
               </Link>

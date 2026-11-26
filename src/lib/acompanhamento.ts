@@ -76,14 +76,52 @@ export interface Fontes {
   passos: Pick<PassoAc, 'unidadeId' | 'status' | 'prazoMs'>[] | null
 }
 
+export type EstadoFonte = 'com_dados' | 'vazia' | 'falhou'
+
+export const ROTULO_FONTE: Record<keyof Fontes, string> = {
+  modelosChecklist: 'Modelos de checklist',
+  execucoes: 'Execuções de checklist',
+  auditorias: 'Auditorias',
+  acoes: 'Ações de auditoria',
+  chamados: 'Chamados',
+  tentativas: 'Provas da Universidade',
+  cursosPublicados: 'Cursos publicados',
+  progresso: 'Progresso nos manuais',
+  trilhaManuais: 'Trilha de manuais',
+  pedidos: 'Pedidos de marketing',
+  registros: 'Visitas e reuniões',
+  passos: 'Passos combinados',
+}
+
+const CHAVES_FONTES = Object.keys(ROTULO_FONTE) as (keyof Fontes)[]
+
+export function estadoDasFontes(fontes: Fontes, unidadeId?: string): Record<keyof Fontes, EstadoFonte> {
+  const estado = (chave: keyof Fontes): EstadoFonte => {
+    const fonte = fontes[chave]
+    if (fonte === null) return 'falhou'
+    if (typeof fonte === 'number') return fonte > 0 ? 'com_dados' : 'vazia'
+    const temDados = unidadeId === undefined
+      ? fonte.length > 0
+      : fonte.some((item) => 'unidadeId' in item ? item.unidadeId === unidadeId : modeloServeUnidade(item, unidadeId))
+    return temDados ? 'com_dados' : 'vazia'
+  }
+  return Object.fromEntries(CHAVES_FONTES.map((chave) => [chave, estado(chave)])) as Record<keyof Fontes, EstadoFonte>
+}
+
+export function fontesIndisponiveis(estados: ReturnType<typeof estadoDasFontes>): (keyof Fontes)[] {
+  return CHAVES_FONTES.filter((chave) => estados[chave] === 'falhou')
+}
+
 export interface ResumoUnidade {
-  checklist: { aplica: boolean; media: number | null; execucoes: number; atrasados: number } | null
-  auditoria: { ultima: FonteAuditoria | null; acoesAbertas: number; acoesAtrasadas: number; acoesParaValidar: number } | null
+  estados: ReturnType<typeof estadoDasFontes>
+  checklist: { aplica: boolean; media: number | null; execucoes: number | null; atrasados: number | null }
+  auditoria: { ultima: FonteAuditoria | null; acoes: { abertas: number; atrasadas: number; paraValidar: number } | null }
   chamados: { abertos: number; slaEstourado: number; aguardandoUnidade: number } | null
   universidade: { pessoas: number; certificados: number; pendentes: number; cursosPublicados: number | null } | null
   manuais: { pessoas: number; concluidos: number; emAndamento: number; trilha: number | null; percentual: number | null } | null
   marketing: { abertos: number; aguardandoUnidade: number; entregues: number } | null
-  passos: { abertos: number; atrasados: number; paraValidar: number }
+  passos: { abertos: number; atrasados: number; paraValidar: number } | null
+  contatoDisponivel: boolean
   ultimoContatoMs: number | null
 }
 
@@ -105,29 +143,29 @@ export function resumirUnidade(
 ): ResumoUnidade {
   const da = <T extends { unidadeId: string }>(l: T[] | null) => (l ? l.filter((x) => x.unidadeId === unidade.id) : null)
 
-  let checklist: ResumoUnidade['checklist'] = null
+  const aplica = unidade.modulosLiberados.includes('checklist')
   const execs = da(f.execucoes)
-  if (execs && f.modelosChecklist) {
-    const aplica = unidade.modulosLiberados.includes('checklist')
-    const recentes = execs.filter((e) => e.criadoEmMs >= agoraMs - 30 * DIA)
-    const scores = recentes.map((e) => calcularTotais(e.respostas).score)
-    const atrasados = aplica
+  const recentes = execs?.filter((e) => e.criadoEmMs >= agoraMs - 30 * DIA)
+  const scores = recentes?.map((e) => calcularTotais(e.respostas).score)
+  const checklist = {
+    aplica,
+    media: scores?.length ? Math.round(scores.reduce((s, x) => s + x, 0) / scores.length) : null,
+    execucoes: recentes?.length ?? null,
+    atrasados: !aplica ? 0 : execs && f.modelosChecklist
       ? f.modelosChecklist.filter((m) => modeloServeUnidade(m, unidade.id) && situacaoModelo(m, execs, agoraMs).situacao === 'atrasado').length
-      : 0
-    checklist = { aplica, media: scores.length ? Math.round(scores.reduce((s, x) => s + x, 0) / scores.length) : null, execucoes: recentes.length, atrasados }
+      : null,
   }
 
-  let auditoria: ResumoUnidade['auditoria'] = null
   const auds = da(f.auditorias)
   const acoes = da(f.acoes)
-  if (auds && acoes) {
-    const assinadas = auds.filter((a) => a.status !== 'rascunho').sort((a, b) => b.dataVisitaMs - a.dataVisitaMs)
-    auditoria = {
-      ultima: assinadas[0] ?? null,
-      acoesAbertas: acoes.filter((a) => ['aberta', 'em_andamento', 'reaberta'].includes(a.status)).length,
-      acoesAtrasadas: acoes.filter((a) => acaoAtrasada(a, agoraMs)).length,
-      acoesParaValidar: acoes.filter((a) => a.status === 'concluida_unidade').length,
-    }
+  const assinadas = auds?.filter((a) => a.status !== 'rascunho').sort((a, b) => b.dataVisitaMs - a.dataVisitaMs)
+  const auditoria = {
+    ultima: assinadas?.[0] ?? null,
+    acoes: acoes ? {
+      abertas: acoes.filter((a) => ['aberta', 'em_andamento', 'reaberta'].includes(a.status)).length,
+      atrasadas: acoes.filter((a) => acaoAtrasada(a, agoraMs)).length,
+      paraValidar: acoes.filter((a) => a.status === 'concluida_unidade').length,
+    } : null,
   }
 
   const chs = da(f.chamados)
@@ -171,31 +209,36 @@ export function resumirUnidade(
       }
     : null
 
-  const passosUn = da(f.passos) ?? []
-  const regs = da(f.registros) ?? []
+  const passosUn = da(f.passos)
+  const regs = da(f.registros)
   return {
+    estados: estadoDasFontes(f, unidade.id),
     checklist,
     auditoria,
     chamados,
     universidade,
     manuais,
     marketing,
-    passos: {
+    passos: passosUn ? {
       abertos: passosUn.filter((p) => p.status === 'aberto' || p.status === 'reaberto').length,
       atrasados: passosUn.filter((p) => passoAtrasado(p, agoraMs)).length,
       paraValidar: passosUn.filter((p) => p.status === 'concluido_unidade').length,
-    },
-    ultimoContatoMs: regs.length ? Math.max(...regs.map((r) => r.dataMs)) : null,
+    } : null,
+    contatoDisponivel: regs !== null,
+    ultimoContatoMs: regs?.length ? Math.max(...regs.map((r) => r.dataMs)) : null,
   }
 }
 
 // ---------- Saúde da unidade ----------
 
 export type Nivel = 'verde' | 'amarelo' | 'vermelho'
+export type Classificacao = Nivel | 'insuficiente'
+
 export interface Sinal {
   chave: string
   rotulo: string
-  nivel: Nivel | 'neutro'
+  nivel: Nivel | 'neutro' | 'indisponivel'
+  fontes?: (keyof Fontes)[]
   detalhe: string
 }
 
@@ -207,21 +250,34 @@ export const CRITERIOS_SAUDE: { rotulo: string; regra: string }[] = [
   { rotulo: 'Chamados com SLA estourado', regra: 'verde 0; amarelo 1; vermelho 2 ou mais (abertos ou em andamento além do SLA da prioridade).' },
   { rotulo: 'Passos combinados atrasados', regra: 'verde 0; amarelo 1; vermelho 2 ou mais.' },
   { rotulo: 'Último contato da franqueadora', regra: 'verde até 45 dias; amarelo depois disso ou sem registro.' },
-  { rotulo: 'Resultado', regra: 'vermelho se algum sinal estiver vermelho; amarelo com 2 ou mais sinais amarelos; senão verde. Universidade, manuais e marketing são informativos e não entram na cor.' },
+  { rotulo: 'Resultado', regra: 'Crítica com qualquer sinal vermelho. Atenção com 2 ou mais sinais amarelos confirmados. Nos demais casos, Dados insuficientes se algum sinal de saúde estiver indisponível ou nenhum puder ser avaliado. Saudável nos outros casos. Universidade, manuais e marketing são informativos.' },
 ]
 
 const porContagem = (n: number, amarelo: number, vermelho: number): Nivel => (n >= vermelho ? 'vermelho' : n >= amarelo ? 'amarelo' : 'verde')
 
 export function sinaisSaude(r: ResumoUnidade, agoraMs: number): Sinal[] {
   const s: Sinal[] = []
-  if (!r.checklist) s.push({ chave: 'ck', rotulo: 'Checklist', nivel: 'neutro', detalhe: 'Sem leitura do checklist.' })
-  else if (!r.checklist.aplica) s.push({ chave: 'ck', rotulo: 'Checklist', nivel: 'neutro', detalhe: 'Unidade sem o módulo de checklist.' })
+  const indisponivel = (chave: string, rotulo: string, ...fontes: (keyof Fontes)[]): Sinal => ({
+    chave, rotulo, fontes, nivel: 'indisponivel',
+    detalhe: fontes.length === 1
+      ? `Dados indisponíveis: a consulta de ${ROTULO_FONTE[fontes[0]]} falhou.`
+      : `Dados indisponíveis: as consultas de ${fontes.map((fonte) => ROTULO_FONTE[fonte]).join(' e ')} falharam.`,
+  })
+
+  if (!r.checklist.aplica) s.push({ chave: 'ck', rotulo: 'Checklist', nivel: 'neutro', detalhe: 'Unidade sem o módulo de checklist.' })
   else {
     const m = r.checklist.media
-    s.push({ chave: 'ck', rotulo: 'Checklist (média 30 dias)', nivel: m === null ? 'amarelo' : m >= 80 ? 'verde' : m >= 60 ? 'amarelo' : 'vermelho', detalhe: m === null ? 'Nenhum checklist nos últimos 30 dias.' : `${m}% em ${r.checklist.execucoes} checklist(s).` })
-    s.push({ chave: 'ck-atraso', rotulo: 'Checklists atrasados', nivel: porContagem(r.checklist.atrasados, 1, 3), detalhe: `${r.checklist.atrasados} rotina(s) com o período anterior sem execução.` })
+    const rotuloMedia = 'Checklist (média 30 dias)'
+    const rotuloAtraso = 'Checklists atrasados'
+    s.push(r.estados.execucoes === 'falhou'
+      ? indisponivel('ck', rotuloMedia, 'execucoes')
+      : { chave: 'ck', rotulo: rotuloMedia, nivel: m === null ? 'amarelo' : m >= 80 ? 'verde' : m >= 60 ? 'amarelo' : 'vermelho', detalhe: m === null ? 'Nenhum checklist nos últimos 30 dias.' : `${m}% em ${r.checklist.execucoes} checklist(s).` })
+    const atrasados = r.checklist.atrasados
+    s.push(atrasados === null
+      ? indisponivel('ck-atraso', rotuloAtraso, ...fontesIndisponiveis(r.estados).filter((fonte) => fonte === 'modelosChecklist' || fonte === 'execucoes'))
+      : { chave: 'ck-atraso', rotulo: rotuloAtraso, nivel: porContagem(atrasados, 1, 3), detalhe: `${atrasados} rotina(s) com o período anterior sem execução.` })
   }
-  if (!r.auditoria) s.push({ chave: 'au', rotulo: 'Auditoria', nivel: 'neutro', detalhe: 'Sem leitura das auditorias.' })
+  if (r.estados.auditorias === 'falhou') s.push(indisponivel('au', 'Última auditoria', 'auditorias'))
   else {
     const u = r.auditoria.ultima
     const recente = u && u.dataVisitaMs >= agoraMs - 180 * DIA
@@ -230,23 +286,50 @@ export function sinaisSaude(r: ResumoUnidade, agoraMs: number): Sinal[] {
       nivel: !recente ? 'amarelo' : u.resultado === 'aprovada' ? 'verde' : 'vermelho',
       detalhe: !u ? 'Nenhuma auditoria assinada.' : `${u.resultado === 'aprovada' ? 'Aprovada' : 'Reprovada'} com ${u.score}%${recente ? '' : ' (há mais de 180 dias)'}.`,
     })
-    s.push({ chave: 'au-acoes', rotulo: 'Ações de auditoria atrasadas', nivel: porContagem(r.auditoria.acoesAtrasadas, 1, 2), detalhe: `${r.auditoria.acoesAtrasadas} atrasada(s) de ${r.auditoria.acoesAbertas} em aberto.` })
   }
-  if (!r.chamados) s.push({ chave: 'ch', rotulo: 'Chamados', nivel: 'neutro', detalhe: 'Sem leitura dos chamados.' })
-  else s.push({ chave: 'ch', rotulo: 'Chamados com SLA estourado', nivel: porContagem(r.chamados.slaEstourado, 1, 2), detalhe: `${r.chamados.slaEstourado} de ${r.chamados.abertos} em aberto.` })
-  s.push({ chave: 'passos', rotulo: 'Passos combinados atrasados', nivel: porContagem(r.passos.atrasados, 1, 2), detalhe: `${r.passos.atrasados} atrasado(s) de ${r.passos.abertos} em aberto.` })
-  const dias = r.ultimoContatoMs ? Math.floor((agoraMs - r.ultimoContatoMs) / DIA) : null
-  s.push({ chave: 'contato', rotulo: 'Último contato', nivel: dias !== null && dias <= 45 ? 'verde' : 'amarelo', detalhe: dias === null ? 'Nenhuma visita, reunião ou call registrada.' : `Há ${dias} dia(s).` })
+  const acoes = r.auditoria.acoes
+  s.push(acoes
+    ? { chave: 'au-acoes', rotulo: 'Ações de auditoria atrasadas', nivel: porContagem(acoes.atrasadas, 1, 2), detalhe: `${acoes.atrasadas} atrasada(s) de ${acoes.abertas} em aberto.` }
+    : indisponivel('au-acoes', 'Ações de auditoria atrasadas', 'acoes'))
+  s.push(r.chamados
+    ? { chave: 'ch', rotulo: 'Chamados com SLA estourado', nivel: porContagem(r.chamados.slaEstourado, 1, 2), detalhe: `${r.chamados.slaEstourado} de ${r.chamados.abertos} em aberto.` }
+    : indisponivel('ch', 'Chamados com SLA estourado', 'chamados'))
+  s.push(r.passos
+    ? { chave: 'passos', rotulo: 'Passos combinados atrasados', nivel: porContagem(r.passos.atrasados, 1, 2), detalhe: `${r.passos.atrasados} atrasado(s) de ${r.passos.abertos} em aberto.` }
+    : indisponivel('passos', 'Passos combinados atrasados', 'passos'))
+  const dias = r.ultimoContatoMs === null ? null : Math.floor((agoraMs - r.ultimoContatoMs) / DIA)
+  s.push(r.contatoDisponivel
+    ? { chave: 'contato', rotulo: 'Último contato', nivel: dias !== null && dias <= 45 ? 'verde' : 'amarelo', detalhe: dias === null ? 'Nenhuma visita, reunião ou call registrada.' : `Há ${dias} dia(s).` }
+    : indisponivel('contato', 'Último contato', 'registros'))
   return s
 }
 
-export function saudeDe(sinais: Sinal[]): Nivel {
-  if (sinais.some((x) => x.nivel === 'vermelho')) return 'vermelho'
-  if (sinais.filter((x) => x.nivel === 'amarelo').length >= 2) return 'amarelo'
+export function motivoSaude(sinais: Sinal[]) {
+  const indisponiveis = sinais.filter((s) => s.nivel === 'indisponivel')
+  return {
+    riscosConfirmados: sinais.filter((s) => s.nivel === 'vermelho' || s.nivel === 'amarelo'),
+    sinaisIndisponiveis: indisponiveis.map((s) => s.rotulo),
+    fontesIndisponiveis: [...new Set(indisponiveis.flatMap((s) => s.fontes ?? []))].map((fonte) => ROTULO_FONTE[fonte]),
+  }
+}
+
+export function saudeDe(sinais: Sinal[]): Classificacao {
+  if (sinais.some((s) => s.nivel === 'vermelho')) return 'vermelho'
+  const amarelos = sinais.filter((s) => s.nivel === 'amarelo').length
+  if (amarelos >= 2) return 'amarelo'
+  if (sinais.some((s) => s.nivel === 'indisponivel') || (!amarelos && !sinais.some((s) => s.nivel === 'verde'))) return 'insuficiente'
   return 'verde'
 }
 
 export const ROTULO_NIVEL: Record<Nivel, string> = { verde: 'Saudável', amarelo: 'Atenção', vermelho: 'Crítica' }
+export const ROTULO_CLASSIFICACAO: Record<Classificacao, string> = { ...ROTULO_NIVEL, insuficiente: 'Dados insuficientes' }
+export const ORDEM_CLASSIFICACAO: readonly Classificacao[] = ['vermelho', 'insuficiente', 'amarelo', 'verde']
+
+export function contarClassificacoes(classificacoes: Classificacao[]): Record<Classificacao, number> {
+  const contagem = { verde: 0, amarelo: 0, vermelho: 0, insuficiente: 0 }
+  for (const classificacao of classificacoes) contagem[classificacao] += 1
+  return contagem
+}
 
 // ---------- Registros e passos ----------
 

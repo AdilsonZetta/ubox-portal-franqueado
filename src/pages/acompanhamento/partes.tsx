@@ -5,33 +5,35 @@ import { useAuth } from '../../lib/auth'
 import { useVisao } from '../../lib/visao'
 import {
   CRITERIOS_SAUDE,
-  ROTULO_NIVEL,
+  ROTULO_CLASSIFICACAO,
   ROTULO_STATUS_PASSO,
   passoAtrasado,
   podeGerirAcompanhamento,
-  type Nivel,
+  type Classificacao,
   type Sinal,
   type StatusPasso,
 } from '../../lib/acompanhamento'
 
-export const COR_NIVEL: Record<Nivel | 'neutro', string> = {
+export const COR_NIVEL: Record<Classificacao | Sinal['nivel'], string> = {
   verde: 'bg-lime-dark',
   amarelo: 'bg-amber-400',
   vermelho: 'bg-red-600',
   neutro: 'bg-ink/20',
+  insuficiente: 'bg-slate-500',
+  indisponivel: 'bg-slate-500',
 }
 
-export function SaudeSelo({ nivel, grande = false }: { nivel: Nivel; grande?: boolean }) {
+export function SaudeSelo({ nivel, grande = false }: { nivel: Classificacao; grande?: boolean }) {
   return (
     <span
       className={cx(
         'inline-flex items-center gap-1.5 rounded-full font-bold',
-        nivel === 'verde' ? 'bg-lime/25 text-lime-dark' : nivel === 'amarelo' ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800',
+        nivel === 'verde' ? 'bg-lime/25 text-lime-dark' : nivel === 'amarelo' ? 'bg-amber-100 text-amber-900' : nivel === 'vermelho' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700',
         grande ? 'px-3 py-1 text-sm' : 'px-2 py-0.5 text-[11px] uppercase tracking-wide',
       )}
     >
-      <span className={cx('h-2 w-2 rounded-full', COR_NIVEL[nivel])} aria-hidden="true" />
-      {ROTULO_NIVEL[nivel]}
+      <span className={cx('h-2 w-2 shrink-0 rounded-full', COR_NIVEL[nivel])} aria-hidden="true" />
+      {ROTULO_CLASSIFICACAO[nivel]}
     </span>
   )
 }
@@ -41,7 +43,7 @@ export function ListaSinais({ sinais }: { sinais: Sinal[] }) {
     <ul className="space-y-1.5">
       {sinais.map((s) => (
         <li key={s.chave} className="flex items-start gap-2 text-sm">
-          <span className={cx('mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full', COR_NIVEL[s.nivel])} aria-label={s.nivel} />
+          <span className={cx('mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full', COR_NIVEL[s.nivel])} role="img" aria-label={s.nivel === 'indisponivel' ? 'Indisponível' : s.nivel === 'neutro' ? 'Informativo' : ROTULO_CLASSIFICACAO[s.nivel]} />
           <span><span className="font-semibold">{s.rotulo}:</span> <span className="text-ink/70">{s.detalhe}</span></span>
         </li>
       ))}
@@ -65,7 +67,6 @@ export function CriteriosSaude() {
               <dd className="inline text-ink/70">{c.regra}</dd>
             </div>
           ))}
-          <p className="pt-1 text-xs text-ink/50">Calculado no navegador a partir dos dados que a franqueadora já lê. Fontes indisponíveis aparecem em cinza e não entram na cor.</p>
         </dl>
       ) : null}
     </div>

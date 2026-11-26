@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
+  estadoDasFontes,
+  contarClassificacoes,
+  motivoSaude,
+  ROTULO_CLASSIFICACAO,
   passoAtrasado,
   podeGerirAcompanhamento,
   resumirUnidade,
@@ -50,7 +54,7 @@ describe('Acompanhamento: agregação por unidade', () => {
     f.acoes = [{ unidadeId: 'un-1', status: 'aberta', prazoMs: agora - 3 * DIA }, { unidadeId: 'un-1', status: 'concluida_unidade', prazoMs: agora - 3 * DIA }]
     const r = resumirUnidade(un, f, agora)
     expect(r.auditoria?.ultima?.id).toBe('b')
-    expect(r.auditoria).toMatchObject({ acoesAbertas: 1, acoesAtrasadas: 1, acoesParaValidar: 1 })
+    expect(r.auditoria.acoes).toEqual({ abertas: 1, atrasadas: 1, paraValidar: 1 })
   })
   it('SLA estourado só para chamados abertos ou em andamento', () => {
     expect(slaEstourado({ unidadeId: 'un-1', status: 'aberto', criadoEmMs: agora - 30 * 3_600_000, slaHoras: 24 }, agora)).toBe(true)
@@ -75,11 +79,11 @@ describe('Acompanhamento: agregação por unidade', () => {
     ]
     expect(resumirUnidade(un, f, agora).manuais).toMatchObject({ pessoas: 2, concluidos: 2, percentual: 25 })
   })
-  it('fonte sem leitura fica nula e aparece como neutra na saúde', () => {
+  it('fonte sem leitura aparece como indisponível na saúde', () => {
     const f = vazio()
     f.chamados = null
     const sinais = sinaisSaude(resumirUnidade(un, f, agora), agora)
-    expect(sinais.find((s) => s.chave === 'ch')?.nivel).toBe('neutro')
+    expect(sinais.find((s) => s.chave === 'ch')?.nivel).toBe('indisponivel')
   })
 })
 
@@ -103,6 +107,82 @@ describe('Acompanhamento: saúde', () => {
     f.auditorias = [{ id: 'a', unidadeId: 'un-1', dataVisitaMs: agora - 10 * DIA, score: 95, resultado: 'aprovada', status: 'concluida', modeloTitulo: 'T' }]
     expect(saudeDe(sinaisSaude(resumirUnidade(un, f, agora), agora))).toBe('amarelo')
   })
+  it('simula falha nas consultas de todas as fontes da unidade Aurora', () => {
+    const fontes = {
+      modelosChecklist: null, execucoes: null, auditorias: null, acoes: null, chamados: null,
+      tentativas: null, cursosPublicados: null, progresso: null, trilhaManuais: null,
+      pedidos: null, registros: null, passos: null,
+    }
+    const resumo = resumirUnidade({ ...un, id: 'aurora' }, fontes, agora)
+    const saude = saudeDe(sinaisSaude(resumo, agora))
+    expect(resumo).toMatchObject({ passos: null, ultimoContatoMs: null, contatoDisponivel: false })
+    expect(saude).toBe('insuficiente')
+    expect(ROTULO_CLASSIFICACAO[saude]).toBe('Dados insuficientes')
+    expect(contarClassificacoes([saude])).toEqual({ verde: 0, amarelo: 0, vermelho: 0, insuficiente: 1 })
+  })
+
+  it('distingue fontes vazias de falhas e considera a unidade', () => {
+    const fontes: Fontes = { ...vazio(), cursosPublicados: 0, trilhaManuais: 0 }
+    expect(Object.values(estadoDasFontes(fontes, un.id))).toEqual(Array(12).fill('vazia'))
+    const resumo = resumirUnidade(un, fontes, agora)
+    expect(resumo).toMatchObject({ passos: { atrasados: 0 }, ultimoContatoMs: null, contatoDisponivel: true })
+    expect(motivoSaude(sinaisSaude(resumo, agora)).fontesIndisponiveis).toEqual([])
+
+    fontes.registros = [{ unidadeId: 'outra', dataMs: agora }]
+    fontes.passos = null
+    fontes.trilhaManuais = 2
+    expect(estadoDasFontes(fontes)).toMatchObject({ registros: 'com_dados', passos: 'falhou', trilhaManuais: 'com_dados' })
+    expect(estadoDasFontes(fontes, un.id)).toMatchObject({ registros: 'vazia', passos: 'falhou', cursosPublicados: 'vazia' })
+  })
+
+  it('preserva auditoria vermelha confirmada quando a consulta de ações falha', () => {
+    const f = vazio()
+    f.auditorias = [{ id: 'a', unidadeId: un.id, dataVisitaMs: agora, score: 50, resultado: 'reprovada', status: 'concluida', modeloTitulo: 'T' }]
+    f.acoes = null
+    const sinais = sinaisSaude(resumirUnidade(un, f, agora), agora)
+    expect(saudeDe(sinais)).toBe('vermelho')
+    expect(motivoSaude(sinais)).toMatchObject({
+      riscosConfirmados: expect.arrayContaining([expect.objectContaining({ chave: 'au', nivel: 'vermelho' })]),
+      fontesIndisponiveis: ['Ações de auditoria'],
+    })
+  })
+
+  it('classifica como insuficiente com falha parcial e os demais sinais verdes', () => {
+    const f = vazio()
+    f.auditorias = [{ id: 'a', unidadeId: un.id, dataVisitaMs: agora, score: 95, resultado: 'aprovada', status: 'concluida', modeloTitulo: 'T' }]
+    f.chamados = null
+    f.modelosChecklist = null
+    f.execucoes = null
+    f.registros = [{ unidadeId: un.id, dataMs: agora }]
+    const sinais = sinaisSaude(resumirUnidade({ ...un, modulosLiberados: [] }, f, agora), agora)
+    expect(sinais.find((s) => s.chave === 'ck')?.nivel).toBe('neutro')
+    expect(motivoSaude(sinais).fontesIndisponiveis).toEqual(['Chamados'])
+    expect(saudeDe(sinais)).toBe('insuficiente')
+  })
+
+  it('preserva dois amarelos confirmados quando há uma fonte com falha', () => {
+    const f = { ...vazio(), chamados: null }
+    expect(saudeDe(sinaisSaude(resumirUnidade(un, f, agora), agora))).toBe('amarelo')
+  })
+
+  it('preserva o checklist vermelho quando só os modelos estão indisponíveis', () => {
+    const f = vazio()
+    f.modelosChecklist = null
+    f.execucoes = [{ unidadeId: un.id, modeloId: 'm', criadoEmMs: agora, respostas: [nok(1)] }]
+    const sinais = sinaisSaude(resumirUnidade(un, f, agora), agora)
+    expect(saudeDe(sinais)).toBe('vermelho')
+    expect(motivoSaude(sinais).fontesIndisponiveis).toEqual(['Modelos de checklist'])
+  })
+
+  it('mantém a classificação quando falham apenas fontes informativas', () => {
+    const f = { ...vazio(), tentativas: null, cursosPublicados: null, progresso: null, trilhaManuais: null, pedidos: null }
+    f.auditorias = [{ id: 'a', unidadeId: un.id, dataVisitaMs: agora, score: 95, resultado: 'aprovada', status: 'concluida', modeloTitulo: 'T' }]
+    f.registros = [{ unidadeId: un.id, dataMs: agora }]
+    const sinais = sinaisSaude(resumirUnidade({ ...un, modulosLiberados: [] }, f, agora), agora)
+    expect(saudeDe(sinais)).toBe('verde')
+    expect(motivoSaude(sinais).fontesIndisponiveis).toEqual([])
+  })
+
   it('passo atrasado conta a partir do dia seguinte ao prazo', () => {
     const prazo = new Date(2026, 10, 10, 12).getTime()
     expect(passoAtrasado({ status: 'aberto', prazoMs: prazo }, new Date(2026, 10, 10, 23).getTime())).toBe(false)

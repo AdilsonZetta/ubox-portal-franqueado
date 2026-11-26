@@ -8,6 +8,10 @@ import { formatarData, formatarDia } from '../../lib/format'
 import { listarUnidades } from '../../lib/gestao'
 import {
   ROTULO_TIPO_REG,
+  ROTULO_FONTE,
+  fontesIndisponiveis,
+  motivoSaude,
+  type EstadoFonte,
   TIPOS_REGISTRO,
   resumirUnidade,
   saudeDe,
@@ -33,11 +37,15 @@ const paraInput = (ms: number) => {
 }
 const formVazio = (): RegistroForm => ({ tipo: 'visita', data: hoje(), notas: '', compartilhado: false, geradoPorIA: false, iaModelo: '', passos: [] })
 
-function Cartao({ titulo, children, indisponivel = false }: { titulo: string; children: ReactNode; indisponivel?: boolean }) {
+function Cartao({ titulo, children, estados = [] }: { titulo: string; children: ReactNode; estados?: EstadoFonte[] }) {
   return (
     <section className="rounded-2xl border border-line bg-white p-4 shadow-sm">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-ink/50">{titulo}</h2>
-      <div className="mt-2 text-sm">{indisponivel ? <span className="text-ink/45">Indisponível (sem leitura desta fonte).</span> : children}</div>
+      <div className="mt-2 text-sm">
+        {estados.includes('falhou') ? <p className="text-ink-soft">Dados indisponíveis — a consulta falhou.</p>
+          : estados.length && estados.every((estado) => estado === 'vazia') ? <p className="text-ink-soft">Nenhum registro.</p>
+          : children}
+      </div>
     </section>
   )
 }
@@ -97,6 +105,8 @@ function PainelUnidade({ id }: { id: string }) {
   const resumo = unidade && dados ? resumirUnidade(unidade, dados.fontes, agora) : null
   const sinais = resumo ? sinaisSaude(resumo, agora) : []
   const saude = saudeDe(sinais)
+  const motivo = motivoSaude(sinais)
+  const fontesComFalha = resumo ? fontesIndisponiveis(resumo.estados).map((fonte) => ROTULO_FONTE[fonte]) : []
 
   async function gravar() {
     if (gravacaoEmCurso.current || carregando) return
@@ -157,7 +167,8 @@ function PainelUnidade({ id }: { id: string }) {
 
   const f = dados?.fontes
   const registrosIndisponiveis = f?.registros === null || f?.passos === null
-  const ultima = resumo?.auditoria?.ultima ?? null
+  const ultima = resumo?.auditoria.ultima ?? null
+  const acoes = resumo?.auditoria.acoes
 
   return (
     <div className="space-y-5">
@@ -178,21 +189,30 @@ function PainelUnidade({ id }: { id: string }) {
             </div>
             <ListaSinais sinais={sinais} />
           </header>
+          {fontesComFalha.length ? (
+            <Aviso tom="info">
+              <div role="status">
+                <p><span className="font-semibold">Fontes indisponíveis:</span> {fontesComFalha.join(', ')}.</p>
+                {motivo.sinaisIndisponiveis.length ? <p><span className="font-semibold">Sinais indisponíveis:</span> {motivo.sinaisIndisponiveis.join(', ')}.</p> : null}
+              </div>
+              <Button variant="ghost" disabled={carregando} onClick={recarregar}>{carregando ? 'Recarregando…' : 'Tentar novamente'}</Button>
+            </Aviso>
+          ) : null}
           <CriteriosSaude />
 
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            <Cartao titulo="Checklist operacional" indisponivel={!resumo.checklist}>
-              {resumo.checklist && !resumo.checklist.aplica ? <span className="text-ink/55">Unidade sem o módulo de checklist.</span> : null}
-              {resumo.checklist?.aplica ? (
+            <Cartao titulo="Checklist operacional" estados={resumo.checklist.aplica ? [resumo.estados.modelosChecklist, resumo.estados.execucoes] : []}>
+              {!resumo.checklist.aplica ? <span className="text-ink/55">Unidade sem o módulo de checklist.</span> : null}
+              {resumo.checklist.aplica ? (
                 <div className="flex items-center gap-6">
                   <div>{resumo.checklist.media !== null ? <ScoreSelo score={resumo.checklist.media} grande /> : <span className="text-ink/45">sem dados</span>}<p className="text-[11px] text-ink/55">média 30 dias (recalculada)</p></div>
                   <Numero valor={resumo.checklist.execucoes} rotulo="checklists em 30 dias" />
-                  <Numero valor={resumo.checklist.atrasados} rotulo="rotinas atrasadas" alerta={resumo.checklist.atrasados > 0} />
+                  <Numero valor={resumo.checklist.atrasados} rotulo="rotinas atrasadas" alerta={(resumo.checklist.atrasados ?? 0) > 0} />
                 </div>
               ) : null}
             </Cartao>
-            <Cartao titulo="Auditoria e qualidade" indisponivel={!resumo.auditoria}>
-              {resumo.auditoria ? (
+            <Cartao titulo="Auditoria e qualidade" estados={[resumo.estados.auditorias, resumo.estados.acoes]}>
+              {acoes ? (
                 <div className="space-y-2">
                   {ultima ? (
                     <p className="flex flex-wrap items-center gap-2">
@@ -202,14 +222,14 @@ function PainelUnidade({ id }: { id: string }) {
                     </p>
                   ) : <p className="text-ink/55">Nenhuma auditoria assinada.</p>}
                   <div className="flex gap-6">
-                    <Numero valor={resumo.auditoria.acoesAbertas} rotulo="ações em aberto" />
-                    <Numero valor={resumo.auditoria.acoesAtrasadas} rotulo="atrasadas" alerta={resumo.auditoria.acoesAtrasadas > 0} />
-                    <Numero valor={resumo.auditoria.acoesParaValidar} rotulo="para validar" />
+                    <Numero valor={acoes.abertas} rotulo="ações em aberto" />
+                    <Numero valor={acoes.atrasadas} rotulo="atrasadas" alerta={acoes.atrasadas > 0} />
+                    <Numero valor={acoes.paraValidar} rotulo="para validar" />
                   </div>
                 </div>
               ) : null}
             </Cartao>
-            <Cartao titulo="Chamados" indisponivel={!resumo.chamados}>
+            <Cartao titulo="Chamados" estados={[resumo.estados.chamados]}>
               {resumo.chamados ? (
                 <div className="flex gap-6">
                   <Numero valor={resumo.chamados.abertos} rotulo="em aberto" />
@@ -218,7 +238,7 @@ function PainelUnidade({ id }: { id: string }) {
                 </div>
               ) : null}
             </Cartao>
-            <Cartao titulo="Universidade UBOX" indisponivel={!resumo.universidade}>
+            <Cartao titulo="Universidade UBOX" estados={[resumo.estados.tentativas, resumo.estados.cursosPublicados]}>
               {resumo.universidade ? (
                 <div className="flex gap-6">
                   <Numero valor={resumo.universidade.certificados} rotulo="cursos aprovados (certificados)" />
@@ -227,7 +247,7 @@ function PainelUnidade({ id }: { id: string }) {
                 </div>
               ) : null}
             </Cartao>
-            <Cartao titulo="Trilha de manuais" indisponivel={!resumo.manuais}>
+            <Cartao titulo="Trilha de manuais" estados={[resumo.estados.progresso, resumo.estados.trilhaManuais]}>
               {resumo.manuais ? (
                 <div className="flex gap-6">
                   <Numero valor={resumo.manuais.percentual === null ? '—' : `${resumo.manuais.percentual}%`} rotulo={`da trilha (${resumo.manuais.trilha ?? '—'} manuais × ${resumo.manuais.pessoas} pessoas)`} />
@@ -236,7 +256,7 @@ function PainelUnidade({ id }: { id: string }) {
                 </div>
               ) : null}
             </Cartao>
-            <Cartao titulo="Pedidos de marketing" indisponivel={!resumo.marketing}>
+            <Cartao titulo="Pedidos de marketing" estados={[resumo.estados.pedidos]}>
               {resumo.marketing ? (
                 <div className="flex gap-6">
                   <Numero valor={resumo.marketing.abertos} rotulo="em aberto" />
@@ -252,7 +272,7 @@ function PainelUnidade({ id }: { id: string }) {
               <h2 className="text-lg font-bold">Visitas, reuniões e calls</h2>
               <Button type="button" variant="secondary" disabled={salvando || carregando || registrosIndisponiveis} onClick={() => { setEditando(null); setForm(formVazio()); setOk('') }}><Plus className="h-4 w-4" aria-hidden="true" /> Novo registro</Button>
             </div>
-            {registrosIndisponiveis ? <Aviso tom="erro"><span role="alert">Não foi possível carregar todos os registros e passos desta unidade.</span> <Button variant="ghost" disabled={carregando} onClick={recarregar}>Tentar novamente</Button></Aviso> : null}
+            {registrosIndisponiveis ? <Aviso tom="info">Dados indisponíveis — a consulta falhou.</Aviso> : null}
             {form && !registrosIndisponiveis ? (
               <div className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
                 <h3 className="font-bold">{editando ? 'Editar registro' : 'Novo registro'}</h3>
