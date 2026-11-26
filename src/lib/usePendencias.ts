@@ -8,16 +8,15 @@ import { useAuth } from './auth'
 import { observarChamados, prazoDoChamado } from './chamados'
 import { fazChecklist, inicioHistoricoVigencias, inicioPeriodo, situacaoModelo, vigenciaDe } from './checklist'
 import { listarExecucoes, listarModelos, listarVigencias } from './checklistApi'
-import { fazCliente, hojeISO, situacao } from './cliente'
-import { carregarClientes, carregarCobrancasDaUnidade } from './clienteApi'
-import { fazCrm, followUps } from './crm'
-import { carregarUnidade } from './crmApi'
+import { fazCliente } from './cliente'
+import { fazCrm } from './crm'
+import { contarCobrancasAtrasadas, contarFollowUpsAtrasados } from './pendenciasApi'
 import { podeModulo } from './modulosAcesso'
 import { montarPendencias, type FontesPendencias } from './pendencias'
 import { usePortal } from './portal'
 import { useVisao } from './visao'
 
-export function usePendencias() {
+export function usePendencias(pessoal = false) {
   const { user } = useAuth()
   const { comoFranqueado, ehAdmin } = useVisao()
   const portal = usePortal()
@@ -32,6 +31,7 @@ export function usePendencias() {
     let ativo = true
     const agora = Date.now()
     const unidade = pessoa.unidadeId
+    const solicitanteUid = pessoal && pessoa.papel === 'equipe_franqueado' ? pessoa.uid : undefined
     const rede = pessoa.papel === 'admin' || pessoa.papel === 'equipe_franqueadora'
     const permitido = (slug: string) => podeModulo(pessoa, slug, false)
     const tarefas: Promise<void>[] = []
@@ -51,12 +51,12 @@ export function usePendencias() {
     if (permitido('chamados') && (rede || unidade)) {
       buscar('chamados', () => new Promise<number>((resolve, reject) => {
         concluirChamados = () => resolve(0)
-        cancelarChamados = observarChamados({ rede, unidadeId: unidade }, (chamados) => {
-          resolve(chamados.filter((c) => prazoDoChamado(c, agora).atrasado).length)
+        cancelarChamados = observarChamados({ rede, unidadeId: unidade, solicitanteUid }, (chamados) => {
+          resolve(chamados.filter((c) => (!pessoal || c.abertoPor === pessoa.uid) && prazoDoChamado(c, agora).atrasado).length)
         }, reject)
       }).finally(() => cancelarChamados?.()))
     }
-    if (unidade && permitido('checklist') && fazChecklist(pessoa)) {
+    if (!pessoal && unidade && permitido('checklist') && fazChecklist(pessoa)) {
       buscar('checklists', async () => {
         const deMs = inicioPeriodo('diaria', agora) - 62 * 86_400_000
         const [modelos, vigencias] = await Promise.all([
@@ -70,23 +70,13 @@ export function usePendencias() {
         return modelos.filter((m) => m.ativo && situacaoModelo(m, execucoes, agora, vigenciaDe(vigencias, m.id, unidade)).situacao === 'atrasado').length
       })
     }
-    if (unidade && permitido('crm') && fazCrm(pessoa)) {
-      buscar('crm', async () => followUps((await carregarUnidade(unidade)).leads, agora).atrasados.length)
-    }
-    if (unidade && permitido('cliente') && fazCliente(pessoa)) {
-      buscar('cobrancas', async () => {
-        const { clientes, paineis } = await carregarClientes(unidade)
-        const idsAtivos = new Set(clientes.filter((c) => c.status === 'ativo').map((c) => c.id))
-        const cobrancas = await carregarCobrancasDaUnidade(new Map([...paineis].filter(([id]) => idsAtivos.has(id))))
-        const hoje = hojeISO(agora)
-        return [...cobrancas.values()].flat().filter((c) => situacao(c, hoje) === 'atrasado').length
-      })
-    }
+    if (!pessoal && unidade && permitido('crm') && fazCrm(pessoa)) buscar('crm', () => contarFollowUpsAtrasados(unidade, agora))
+    if (!pessoal && unidade && permitido('cliente') && fazCliente(pessoa)) buscar('cobrancas', () => contarCobrancasAtrasadas(unidade, agora))
     const gestorAuditoria = podeGerirAuditoria(pessoa, ehAdmin)
-    if (permitido('auditoria') && (gestorAuditoria || (unidade && daUnidade(pessoa)))) {
+    if (!pessoal && permitido('auditoria') && (gestorAuditoria || (unidade && daUnidade(pessoa)))) {
       buscar('auditoria', async () => (await listarAcoes(gestorAuditoria, unidade)).filter((a) => acaoAtrasada(a, agora)).length)
     }
-    if (unidade && permitido('acompanhamento') && daUnidade(pessoa)) {
+    if (!pessoal && unidade && permitido('acompanhamento') && daUnidade(pessoa)) {
       buscar('acompanhamento', async () => (await listarCompartilhados(unidade)).passos.filter((p) => passoAtrasado(p, agora)).length)
     }
     void Promise.all(tarefas).then(() => {
@@ -96,7 +86,7 @@ export function usePendencias() {
       ativo = false
       concluirChamados?.()
     }
-  }, [pessoa, tentativa, ehAdmin])
+  }, [pessoa, tentativa, ehAdmin, pessoal])
 
   const atual = carga && carga.pessoa === pessoa ? carga : undefined
   const fontes: FontesPendencias = { ...atual?.fontes }

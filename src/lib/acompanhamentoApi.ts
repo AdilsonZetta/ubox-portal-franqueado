@@ -1,3 +1,4 @@
+import { STATUS_PENDENTES } from '../data/chamados'
 import type { VigenciaChecklist } from './checklist'
 import { BACKEND } from './backend'
 import {
@@ -22,7 +23,7 @@ import {
 } from 'firebase/firestore'
 import { requireDb } from './firebase'
 import { paraMillis } from './format'
-import { mapExecucao, mapModelo } from './checklistApi'
+import { listarModelos, mapExecucao, mapModelo } from './checklistApi'
 import { mapAcao, mapAuditoria } from './auditoriaApi'
 import { entradaPrazoChamado, mapChamado } from './chamados'
 import { mapPedido } from './marketingApi'
@@ -94,7 +95,7 @@ export interface DadosAcompanhamento {
   fontes: Omit<Fontes, 'modelosChecklist' | 'acoes' | 'chamados'> & {
     modelosChecklist: (NonNullable<Fontes['modelosChecklist']>[number] & { titulo?: string })[] | null
     acoes: (NonNullable<Fontes['acoes']>[number] & { id?: string; auditoriaId?: string; descricao?: string; responsavel?: string })[] | null
-    chamados: (NonNullable<Fontes['chamados']>[number] & { id?: string; titulo?: string })[] | null
+    chamados: (NonNullable<Fontes['chamados']>[number] & { id?: string; titulo?: string; abertoPor?: string })[] | null
   }
   /** Início e primeiro vencimento das rotinas por unidade (etapa 04). Vazio no Firebase ou sem a migração. */
   vigenciasChecklist?: VigenciaChecklist[]
@@ -102,32 +103,43 @@ export interface DadosAcompanhamento {
   passos: PassoAc[]
 }
 
-/** Lê tudo o que o painel agrega. Com `unidadeId`, só a unidade; sem, a rede toda (visão geral). Somente leitura. */
-export async function carregarAcompanhamento(unidadeId?: string): Promise<DadosAcompanhamento> {
-  if (BACKEND === 'supabase') return carregarAcompanhamentoSb(unidadeId)
+export interface OpcoesAcompanhamento {
+  fontes?: readonly (keyof Fontes)[]
+  incluirChamadosEncerrados?: boolean
+  solicitanteUid?: string
+}
+
+/** Lê o que o painel agrega. Com `unidadeId`, só a unidade; sem, a rede toda (visão geral). Somente leitura. */
+export async function carregarAcompanhamento(unidadeId?: string, opcoes: OpcoesAcompanhamento = {}): Promise<DadosAcompanhamento> {
+  if (BACKEND === 'supabase') return carregarAcompanhamentoSb(unidadeId, opcoes)
   const banco = requireDb()
   const un: QueryConstraint[] = unidadeId ? [where('unidadeId', '==', unidadeId)] : []
   const ler = (nome: string, ...extra: QueryConstraint[]) => getDocs(query(collection(banco, nome), ...un, ...extra))
   const agora = Date.now()
+  const lerFonte = <T>(fonte: keyof Fontes, consulta: () => Promise<T>) =>
+    !opcoes.fontes || opcoes.fontes.includes(fonte) ? seguro(consulta()) : Promise.resolve(null)
   const [modelos, execucoes, auditorias, acoes, chamados, tentativas, cursos, progresso, trilha, pedidos, registros, passos] = await Promise.all([
-    seguro(getDocs(collection(banco, 'checklistModelos')).then((s) => s.docs.map((d) => mapModelo(d.id, d.data())))),
-    seguro(ler('checklistExecucoes', where('criadoEm', '>=', new Date(agora - 62 * DIA)), orderBy('criadoEm', 'desc'), limit(3000)).then((s) => s.docs.map((d) => mapExecucao(d.id, d.data())))),
+    lerFonte('modelosChecklist', () => unidadeId && opcoes.fontes ? listarModelos({ unidadeId }, false) : getDocs(collection(banco, 'checklistModelos')).then((s) => s.docs.map((d) => mapModelo(d.id, d.data())))),
+    lerFonte('execucoes', () => ler('checklistExecucoes', where('criadoEm', '>=', new Date(agora - 62 * DIA)), orderBy('criadoEm', 'desc'), limit(3000)).then((s) => s.docs.map((d) => mapExecucao(d.id, d.data())))),
     // Só auditorias assinadas: o rascunho é do auditor (as rules exigem este filtro).
-    seguro(ler('auditorias', where('status', 'in', ['aguardando_ciencia', 'concluida'])).then((s) => s.docs.map((d) => mapAuditoria(d.id, d.data())))),
-    seguro(ler('auditoriaAcoes').then((s) => s.docs.map((d) => mapAcao(d.id, d.data())))),
-    seguro(
-      ler('chamados', ...(unidadeId ? [] : [where('status', 'in', ['aberto', 'em_andamento', 'aguardando_franqueado'])])).then((s) =>
+    lerFonte('auditorias', () => ler('auditorias', where('status', 'in', ['aguardando_ciencia', 'concluida'])).then((s) => s.docs.map((d) => mapAuditoria(d.id, d.data())))),
+    lerFonte('acoes', () => ler('auditoriaAcoes').then((s) => s.docs.map((d) => mapAcao(d.id, d.data())))),
+    lerFonte('chamados', () =>
+      ler('chamados',
+        ...(opcoes.solicitanteUid ? [where('abertoPor', '==', opcoes.solicitanteUid)] : []),
+        ...(unidadeId || opcoes.incluirChamadosEncerrados ? [] : [where('status', 'in', STATUS_PENDENTES)]),
+      ).then((s) =>
         s.docs.map((d) => mapChamado(d.id, d.data())).filter((c) => c !== null),
       ),
     ),
-    seguro(ler('tentativasProva').then((s) => s.docs.map((d) => mapTentativa(d.id, d.data())))),
+    lerFonte('tentativas', () => ler('tentativasProva').then((s) => s.docs.map((d) => mapTentativa(d.id, d.data())))),
     // O consultor só lê cursos publicados (as rules exigem este filtro).
-    seguro(getDocs(query(collection(banco, 'cursos'), where('publicado', '==', true))).then((s) => s.size)),
-    seguro(ler('progressoManuais').then((s) => s.docs.map((d) => mapProgresso(d.id, d.data())))),
-    seguro(getDocs(collection(banco, 'manuaisTrilha')).then((s) => s.docs.filter((d) => d.data().ativo === true).length)),
-    seguro(ler('marketingSolicitacoes').then((s) => s.docs.map((d) => mapPedido(d.id, d.data())))),
-    seguro(ler('acompanhamentoRegistros').then((s) => s.docs.map((d) => mapRegistro(d.id, d.data())))),
-    seguro(ler('acompanhamentoPassos').then((s) => s.docs.map((d) => mapPasso(d.id, d.data())))),
+    lerFonte('cursosPublicados', () => getDocs(query(collection(banco, 'cursos'), where('publicado', '==', true))).then((s) => s.size)),
+    lerFonte('progresso', () => ler('progressoManuais').then((s) => s.docs.map((d) => mapProgresso(d.id, d.data())))),
+    lerFonte('trilhaManuais', () => getDocs(collection(banco, 'manuaisTrilha')).then((s) => s.docs.filter((d) => d.data().ativo === true).length)),
+    lerFonte('pedidos', () => ler('marketingSolicitacoes').then((s) => s.docs.map((d) => mapPedido(d.id, d.data())))),
+    lerFonte('registros', () => ler('acompanhamentoRegistros').then((s) => s.docs.map((d) => mapRegistro(d.id, d.data())))),
+    lerFonte('passos', () => ler('acompanhamentoPassos').then((s) => s.docs.map((d) => mapPasso(d.id, d.data())))),
   ])
   return {
     fontes: {
@@ -135,7 +147,7 @@ export async function carregarAcompanhamento(unidadeId?: string): Promise<DadosA
       execucoes,
       auditorias,
       acoes,
-      chamados: chamados ? chamados.map((c) => ({ id: c.id, titulo: c.titulo, unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })) : null,
+      chamados: chamados ? chamados.map((c) => ({ id: c.id, titulo: c.titulo, unidadeId: c.unidadeId, abertoPor: c.abertoPor, ...entradaPrazoChamado(c) })) : null,
       tentativas,
       cursosPublicados: cursos,
       progresso,

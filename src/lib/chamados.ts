@@ -145,7 +145,7 @@ export function mapChamado(id: string, data: Record<string, unknown>): Chamado |
 }
 
 export function observarChamados(
-  filtro: { rede: boolean; unidadeId?: string | null },
+  filtro: { rede: boolean; unidadeId?: string | null; solicitanteUid?: string },
   aoMudar: (chamados: Chamado[]) => void,
   aoErro: (erro: unknown) => void,
 ): () => void {
@@ -155,7 +155,10 @@ export function observarChamados(
     return () => undefined
   }
   const base = collection(requireDb(), 'chamados')
-  const consulta = filtro.rede ? base : query(base, where('unidadeId', '==', filtro.unidadeId))
+  const consulta = query(base,
+    ...(filtro.rede ? [] : [where('unidadeId', '==', filtro.unidadeId)]),
+    ...(filtro.solicitanteUid ? [where('abertoPor', '==', filtro.solicitanteUid)] : []),
+  )
   return onSnapshot(
     consulta,
     (snap) => {

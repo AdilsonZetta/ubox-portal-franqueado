@@ -1,4 +1,4 @@
-import { Activity, Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, LayoutTemplate, LogOut, Menu, MessageCircle, Route as RotaIcon, Search, Shield, SlidersHorizontal, Upload, UserRound, Users, X } from 'lucide-react'
+import { Activity, Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, LayoutDashboard, LayoutTemplate, LogOut, Menu, MessageCircle, Route as RotaIcon, Search, Shield, SlidersHorizontal, Upload, UserRound, Users, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { GRUPOS, MODULOS } from '../data/modulos'
@@ -152,7 +152,7 @@ export function Layout() {
 
   const miolo = (
     <>
-      <Link to="/" className="block w-fit rounded-xl outline-none ring-brand/30 focus-visible:ring-2" aria-label="Módulos">
+      <Link to="/" className="block w-fit rounded-xl outline-none ring-brand/30 focus-visible:ring-2" aria-label="Painel">
         <Logo claro />
       </Link>
       <form onSubmit={buscar} role="search" aria-label="Busca no menu" className="mt-4 shrink-0 space-y-2">
@@ -193,6 +193,15 @@ export function Layout() {
         </div>
       </form>
       <nav className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
+        <NavLink
+          to="/"
+          end
+          onClick={() => setMenuAberto(false)}
+          className={({ isActive }) => cx('flex min-h-9 w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}
+        >
+          <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span className="min-w-0 flex-1 wrap-anywhere">Painel</span>
+        </NavLink>
         {GRUPOS.map((grupo) => {
           const doGrupo = MODULOS.filter((modulo) => modulo.grupo === grupo && podeMostrarModulo(pessoa, modulo.slug, { ehAdmin, simulando: comoFranqueado }))
           if (!doGrupo.length) return null
@@ -201,7 +210,7 @@ export function Layout() {
             <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted">{grupo}</p>
             <div className="mt-1 space-y-0.5">
               {doGrupo.map((modulo) => {
-                const aberto = expandido === modulo.slug
+                const aberto = pathname !== '/' && expandido === modulo.slug
                 const Icone = modulo.icon
                 return (
                   <div key={modulo.slug}>
@@ -482,7 +491,7 @@ export function Layout() {
           <button className="grid size-11 place-items-center rounded-[10px]" onClick={() => setMenuAberto(true)} aria-label="Abrir menu">
             <Menu className="h-5 w-5" />
           </button>
-          <Link to="/" className="flex min-h-11 items-center gap-2" aria-label="Módulos">
+          <Link to="/" className="flex min-h-11 items-center gap-2" aria-label="Painel">
             <Logo compacto />
             <span className="text-sm font-semibold">Portal Ubox</span>
           </Link>

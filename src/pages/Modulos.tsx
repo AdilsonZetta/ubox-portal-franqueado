@@ -4,15 +4,9 @@ import { Link, useParams } from 'react-router-dom'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
 import { useAuth } from '../lib/auth'
 import { primeiroNome } from '../lib/format'
-import { podeModulo, podeMostrarModulo } from '../lib/modulosAcesso'
+import { podeMostrarModulo } from '../lib/modulosAcesso'
 import { useVisao } from '../lib/visao'
-import { CompromissosUnidade } from './CompromissosUnidade'
-import { PedidosUnidade } from '../components/PedidosUnidade'
-import { AcoesRapidas } from './inicio/AcoesRapidas'
-import { AtencaoRede } from './inicio/AtencaoRede'
-import { EscolhaUnidade } from './inicio/EscolhaUnidade'
-import { PendenciasInicio } from './inicio/PendenciasInicio'
-import { CartaoUniversidade } from './universidade/Universidade'
+import { PainelInicial } from './inicio/PainelInicial'
 
 export function ModulosPage() {
   const { user } = useAuth()
@@ -28,31 +22,20 @@ export function ModulosPage() {
             <Textura variante="linha" className="pointer-events-none absolute inset-y-0 right-0 -z-10 hidden h-full w-1/3 opacity-50 xl:block" />
             <p className="text-xs font-semibold uppercase tracking-wider text-lime-soft">UBOX · Portal do Franqueado</p>
             <h1 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">{comoFranqueado ? unidadeSimulada || 'Ver como franqueado' : `Olá, ${primeiroNome(user?.nome ?? '')}.`}</h1>
-            {modulos.length ? (
-              <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-line-strong">Escolha um dos módulos abaixo para continuar.</p>
-            ) : null}
+            <p className="mt-3 text-base text-line-strong">Painel inicial</p>
           </div>
           <Textura className="h-8 w-full sm:h-12" />
         </header>
-        <AcoesRapidas />
-        <AtencaoRede />
-        {precisaEscolherUnidade ? <EscolhaUnidade /> : null}
-        {!comoFranqueado ? <PendenciasInicio /> : null}
-        <PedidosUnidade />
-        {!comoFranqueado ? <CompromissosUnidade pessoa={pessoa} /> : null}
-        {!comoFranqueado && podeModulo(pessoa, 'universidade', false) ? (
-          <div className="mt-6 max-w-2xl">
-            <CartaoUniversidade />
-          </div>
-        ) : null}
-        {!precisaEscolherUnidade ? <div className="mt-8 space-y-8">
+        <PainelInicial />
+        {!precisaEscolherUnidade ? <section className="mt-8 space-y-5" aria-labelledby="atalhos-titulo">
+          <h2 id="atalhos-titulo" className="text-xl font-bold tracking-tight">Todos os módulos</h2>
           {!modulos.length ? <Vazio titulo="Nenhum módulo disponível" texto="Confirme com a franqueadora quais módulos estão liberados." /> : null}
           {GRUPOS.map((grupo) => {
             const itens = modulos.filter((modulo) => modulo.grupo === grupo)
             if (!itens.length) return null
             return (
             <section key={grupo}>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">{grupo}</h2>
+              <h3 className="text-sm font-semibold text-ink-soft">{grupo}</h3>
               <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {itens.map((modulo) => {
                   const Icone = modulo.icon
@@ -69,7 +52,7 @@ export function ModulosPage() {
                         </span>
                         {modulo.ativo ? null : <Selo>Em breve</Selo>}
                       </span>
-                      <h3 className="mt-4 font-bold leading-snug">{modulo.nome}</h3>
+                      <h4 className="mt-4 font-bold leading-snug">{modulo.nome}</h4>
                       <p className="mt-1 flex-1 text-sm leading-relaxed text-muted">{modulo.descricao}</p>
                     </Link>
                   )
@@ -78,7 +61,7 @@ export function ModulosPage() {
             </section>
             )
           })}
-        </div> : null}
+        </section> : null}
       </div>
     </div>
   )

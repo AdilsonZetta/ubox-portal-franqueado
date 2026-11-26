@@ -1,12 +1,12 @@
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { STATUS_PENDENTES } from '../data/chamados'
 import type { PassoAc, RegistroAc, RegistroForm } from './acompanhamento'
-import { mapPasso, mapRegistro, type DadosAcompanhamento } from './acompanhamentoApi'
+import { mapPasso, mapRegistro, type DadosAcompanhamento, type OpcoesAcompanhamento } from './acompanhamentoApi'
 import { mapAcaoSb, mapAuditoriaSb } from './auditoriaSupabase'
 import { mapChamadoSb } from './chamadosSupabase'
 import { entradaPrazoChamado } from './chamados'
 import { inicioHistoricoVigencias } from './checklist'
-import { listarVigenciasSb, mapExecucaoSb, mapModeloSb } from './checklistSupabase'
+import { listarModelosSb, listarVigenciasSb, mapExecucaoSb, mapModeloSb } from './checklistSupabase'
 import { mapProgressoSb } from './manuaisSupabase'
 import { mapPedidoSb } from './marketingSupabase'
 import { requireSupabase } from './supabase'
@@ -89,34 +89,40 @@ function ordenarListas(registros: RegistroAc[], passos: PassoAc[]) {
   }
 }
 
-export async function carregarAcompanhamentoSb(unidadeId?: string): Promise<DadosAcompanhamento> {
+export async function carregarAcompanhamentoSb(unidadeId?: string, opcoes: OpcoesAcompanhamento = {}): Promise<DadosAcompanhamento> {
   const unidade = (q: Consulta) => unidadeId ? q.eq('unidade_id', unidadeId) : q
   const agora = Date.now()
-  const modelosVisiveis = seguro(listarLinhas('checklist_modelos').then((linhas) => linhas.map(mapModeloSb)))
-  const vigenciasVisiveis = seguro(listarVigenciasSb(unidadeId))
+  const permite = (fonte: keyof DadosAcompanhamento['fontes']) => !opcoes.fontes || opcoes.fontes.includes(fonte)
+  const lerFonte = <T>(fonte: keyof DadosAcompanhamento['fontes'], consulta: () => Promise<T>) =>
+    permite(fonte) ? seguro(consulta()) : Promise.resolve(null)
+  const modelosVisiveis = lerFonte('modelosChecklist', () => unidadeId && opcoes.fontes ? listarModelosSb({ unidadeId }, false) : listarLinhas('checklist_modelos').then((linhas) => linhas.map(mapModeloSb)))
+  const vigenciasVisiveis = lerFonte('execucoes', () => listarVigenciasSb(unidadeId))
   const [modelosChecklist, vigenciasChecklist, execucoes, auditorias, acoes, chamados, tentativas, cursosPublicados, progresso, trilhaManuais, pedidos, registros, passos] = await Promise.all([
     modelosVisiveis,
     vigenciasVisiveis,
-    seguro(Promise.all([modelosVisiveis, vigenciasVisiveis]).then(([modelos, vigencias]) => {
+    lerFonte('execucoes', () => Promise.all([modelosVisiveis, vigenciasVisiveis]).then(([modelos, vigencias]) => {
       if (!vigencias) return null
       const desde = inicioHistoricoVigencias(vigencias, modelos ?? [], agora, agora - 62 * 86_400_000)
       return listarLinhas('checklist_execucoes', (q) => unidade(q).gte('criado_em', new Date(desde).toISOString()).order('criado_em', { ascending: false }), vigencias.length ? Infinity : 3000)
         .then((linhas) => linhas.map(mapExecucaoSb))
     })),
-    seguro(listarLinhas('auditorias', (q) => unidade(q).in('status', ['aguardando_ciencia', 'concluida']))
+    lerFonte('auditorias', () => listarLinhas('auditorias', (q) => unidade(q).in('status', ['aguardando_ciencia', 'concluida']))
       .then((linhas) => linhas.map(mapAuditoriaSb))),
-    seguro(listarLinhas('auditoria_acoes', unidade).then((linhas) => linhas.map(mapAcaoSb))),
-    seguro(listarLinhas('chamados', (q) => unidadeId ? unidade(q) : q.in('status', STATUS_PENDENTES))
+    lerFonte('acoes', () => listarLinhas('auditoria_acoes', unidade).then((linhas) => linhas.map(mapAcaoSb))),
+    lerFonte('chamados', () => listarLinhas('chamados', (q) => {
+      if (opcoes.solicitanteUid) q = q.eq('aberto_por', opcoes.solicitanteUid)
+      return unidadeId || opcoes.incluirChamadosEncerrados ? unidade(q) : q.in('status', STATUS_PENDENTES)
+    })
       .then((linhas) => linhas.map(mapChamadoSb).filter((c) => c !== null)
-        .map((c) => ({ id: c.id, titulo: c.titulo, unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })))),
-    seguro(listarLinhas<Parameters<typeof mapTentativaSb>[0]>('tentativas_prova', unidade)
+        .map((c) => ({ id: c.id, titulo: c.titulo, unidadeId: c.unidadeId, abertoPor: c.abertoPor, ...entradaPrazoChamado(c) })))),
+    lerFonte('tentativas', () => listarLinhas<Parameters<typeof mapTentativaSb>[0]>('tentativas_prova', unidade)
       .then((linhas) => linhas.map(mapTentativaSb))),
-    seguro(contar('cursos', 'publicado')),
-    seguro(listarLinhas('progresso_manuais', unidade).then((linhas) => linhas.map(mapProgressoSb))),
-    seguro(contar('manuais_trilha', 'ativo')),
-    seguro(listarLinhas('marketing_solicitacoes', unidade).then((linhas) => linhas.map(mapPedidoSb))),
-    seguro(listarLinhas('acompanhamento_registros', unidade).then((linhas) => linhas.map(mapRegistroSb))),
-    seguro(listarLinhas('acompanhamento_passos', unidade).then((linhas) => linhas.map(mapPassoSb))),
+    lerFonte('cursosPublicados', () => contar('cursos', 'publicado')),
+    lerFonte('progresso', () => listarLinhas('progresso_manuais', unidade).then((linhas) => linhas.map(mapProgressoSb))),
+    lerFonte('trilhaManuais', () => contar('manuais_trilha', 'ativo')),
+    lerFonte('pedidos', () => listarLinhas('marketing_solicitacoes', unidade).then((linhas) => linhas.map(mapPedidoSb))),
+    lerFonte('registros', () => listarLinhas('acompanhamento_registros', unidade).then((linhas) => linhas.map(mapRegistroSb))),
+    lerFonte('passos', () => listarLinhas('acompanhamento_passos', unidade).then((linhas) => linhas.map(mapPassoSb))),
   ])
 
   return {
