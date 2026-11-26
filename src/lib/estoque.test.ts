@@ -5,6 +5,10 @@ import {
   centavosDe,
   deltaDe,
   linhasContagem,
+  linhasDigitadas,
+  camposContagem,
+  criarFilaContagem,
+  situacaoSaldo,
   nivelEstoque,
   podeGerirEstoque,
   recalcularContagem,
@@ -120,4 +124,36 @@ describe('pedido, catálogo e acesso', () => {
     expect(r[0]).toMatchObject({ unidadeId: 'u1', itensBaixos: 1, itensZerados: 0, ultimoMovimentoMs: 9 })
     expect(r[1]).toMatchObject({ unidadeId: 'u2', itensBaixos: 0, itensZerados: 0 })
   })
+})
+
+it('inclui unidade sem lançamento e distingue zero confirmado de item nunca lançado', () => {
+  const itens = [item('a', 5), item('b', 3)]
+  const zero = linhasContagem(itens, new Map(), { a: 0 })
+  expect(resumoRede(itens, [], [], [], [{ id: 'u', nome: 'Centro' }])[0]).toMatchObject({ situacao: 'Sem lançamento', itensZerados: 0, itensBaixos: 0 })
+  expect(tabelaSaldos(itens, [], zero).map(situacaoSaldo)).toEqual(['Saldo zero', 'Sem lançamento'])
+})
+
+it('restaura 5, zero e vazio e exclui o vazio ao recalcular diferenças', () => {
+  const linhas = linhasDigitadas([item('a', 1), item('b', 1), item('c', 1)], new Map([['a', 3], ['b', 2]]), { a: '5', b: '0', c: '' })
+  expect(camposContagem(linhas)).toEqual({ a: '5', b: '0', c: '' })
+  expect(recalcularContagem(linhas, new Map([['a', 3], ['b', 2]])).map((l) => [l.contado, l.sistema, l.diferenca])).toEqual([[5, 3, 2], [0, 2, -2]])
+})
+
+it('serializa o salvamento e reutiliza o id aberto após a primeira gravação', async () => {
+  const ids: (string | null)[] = []
+  let liberar!: () => void
+  const primeira = new Promise<void>((resolve) => { liberar = resolve })
+  const fila = criarFilaContagem(null, async (id) => {
+    ids.push(id)
+    if (!id) await primeira
+    return id ?? 'aberta'
+  })
+  const [zero] = linhasDigitadas([item('a', 1)], new Map(), { a: '0' })
+  const a = fila.salvar({ itens: [zero], obs: '' })
+  const b = fila.salvar({ itens: [{ ...zero, contado: null }], obs: '' })
+  await Promise.resolve()
+  expect(ids).toEqual([null])
+  liberar()
+  await expect(Promise.all([a, b])).resolves.toEqual(['aberta', 'aberta'])
+  expect(ids).toEqual([null, 'aberta'])
 })

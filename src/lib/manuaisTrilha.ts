@@ -1,3 +1,4 @@
+import { situacaoTreinamento, type Designado, type SituacaoTreinamento } from './adesao'
 /**
  * Lógica pura da trilha de Manuais e Processos (módulo 4).
  * Sem Firebase aqui: tudo que decide desbloqueio, tempo e rótulos é testável no Vitest.
@@ -172,6 +173,7 @@ export interface ResumoPessoa {
   reinicios: number
   ultimoConcluido: string
   ultimoConcluidoMs: number
+  situacao: SituacaoTreinamento
 }
 
 export interface ResumoUnidade {
@@ -187,25 +189,37 @@ export interface ResumoUnidade {
 export function resumirProgresso(
   itens: Pick<ItemTrilhaManual, 'documentoId' | 'titulo' | 'ativo'>[],
   progressos: Array<Pick<ProgressoManual, 'uid' | 'nome' | 'unidadeId' | 'unidadeNome' | 'documentoId' | 'status' | 'reinicios'> & { concluidoMs?: number }>,
+  designados?: Designado[],
 ): ResumoUnidade[] {
   const ativos = new Map(itens.filter((i) => i.ativo).map((i) => [i.documentoId, i.titulo]))
   const total = ativos.size
   const pessoas = new Map<string, ResumoPessoa>()
+  const pessoaInicial = ({ uid, nome, unidadeId, unidadeNome }: Designado): ResumoPessoa =>
+    ({ uid, nome, unidadeId, unidadeNome, concluidos: 0, total, reinicios: 0, ultimoConcluido: '', ultimoConcluidoMs: 0, situacao: 'Não iniciou' })
+  for (const d of designados ?? []) pessoas.set(d.uid, pessoaInicial(d))
+  const concluidos = new Map<string, Set<string>>()
   for (const p of progressos) {
+    // Com a lista disponível, o relatório ignora o histórico de quem deixou de ser designado.
+    if (designados && !pessoas.has(p.uid)) continue
     let pessoa = pessoas.get(p.uid)
     if (!pessoa) {
-      pessoa = { uid: p.uid, nome: p.nome, unidadeId: p.unidadeId, unidadeNome: p.unidadeNome, concluidos: 0, total, reinicios: 0, ultimoConcluido: '', ultimoConcluidoMs: 0 }
+      pessoa = pessoaInicial(p)
       pessoas.set(p.uid, pessoa)
     }
+    if (!ativos.has(p.documentoId)) continue
     pessoa.reinicios += p.reinicios
-    if (p.status === 'concluido' && ativos.has(p.documentoId)) {
-      pessoa.concluidos += 1
+    if (p.status === 'concluido') {
+      const documentos = concluidos.get(p.uid) ?? new Set<string>()
+      documentos.add(p.documentoId)
+      concluidos.set(p.uid, documentos)
+      pessoa.concluidos = documentos.size
       const ms = p.concluidoMs ?? 0
       if (ms >= pessoa.ultimoConcluidoMs) {
         pessoa.ultimoConcluidoMs = ms
         pessoa.ultimoConcluido = ativos.get(p.documentoId) ?? ''
       }
     }
+    pessoa.situacao = situacaoTreinamento(true, pessoa.concluidos, total)
   }
   const unidades = new Map<string, ResumoUnidade>()
   for (const pessoa of pessoas.values()) {

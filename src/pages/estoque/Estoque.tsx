@@ -8,37 +8,31 @@ import { Aviso, Button, Campo, Carregando, Selo, Vazio, cx, inputClass } from '.
 import { mensagemErro } from '../../lib/errors'
 import { formatarData } from '../../lib/format'
 import {
-  MAX_ITENS_CONTAGEM,
   MAX_ITENS_PEDIDO,
   ROTULO_CATEGORIA,
   ROTULO_STATUS_PEDIDO,
   ROTULO_TIPO_MOV,
   TIPOS_MANUAIS,
   alertas,
-  divergencias,
   formatarPreco,
-  linhasContagem,
   saldos,
+  situacaoSaldo,
   sugestaoReposicao,
   tabelaSaldos,
-  validarContagem,
   validarMovimento,
   validarPedido,
-  type Contagem,
   type ItemEstoque,
   type Movimento,
   type Pedido,
   type TipoManual,
 } from '../../lib/estoque'
 import {
-  cancelarContagem,
   cancelarPedidoUnidade,
-  confirmarContagem,
   criarPedido,
   receberPedido,
   registrarMovimento,
-  salvarContagem,
 } from '../../lib/estoqueApi'
+import { Contagens } from './Contagens'
 import { NivelSelo, StatusPedidoSelo, useEstoque, type UsoEstoque } from './partes'
 
 type Aba = 'saldo' | 'movimentar' | 'historico' | 'contagem' | 'pedidos'
@@ -53,7 +47,7 @@ export function EstoquePage() {
   const [confirmado, setConfirmado] = useState<string | null>(null)
   const [rascunhoPedido, setRascunhoPedido] = useState<{ itemId: string; quantidade: number }[] | null>(null)
 
-  const linhas = useMemo(() => tabelaSaldos(dados.itens, dados.movimentos), [dados.itens, dados.movimentos])
+  const linhas = useMemo(() => tabelaSaldos(dados.itens, dados.movimentos, dados.contagens.filter((c) => c.status === 'confirmada').flatMap((c) => c.itens)), [dados.itens, dados.movimentos, dados.contagens])
   const criticos = alertas(linhas)
 
   const alvoPronto = Boolean(alvo && aba === 'pedidos' && !dados.carregando && !dados.erro && dados.pedidos.some((p) => p.id === alvo))
@@ -116,7 +110,12 @@ export function EstoquePage() {
 
       {!dados.carregando && !dados.erro && aba === 'movimentar' ? <Movimentar dados={dados} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
       {!dados.carregando && !dados.erro && aba === 'historico' ? <Historico movimentos={dados.movimentos} itens={dados.itens} /> : null}
-      {!dados.carregando && !dados.erro && aba === 'contagem' ? <Contagens dados={dados} onFeito={(m) => { setOk(m); dados.recarregar() }} /> : null}
+      {!dados.carregando && !dados.erro && dados.pessoa ? (
+        <div hidden={aba !== 'contagem'}>
+          <Contagens key={`${dados.pessoa.uid}/${dados.pessoa.unidadeId}`} ativa={aba === 'contagem'} dados={dados}
+            onFeito={(m) => { setOk(m); dados.recarregar() }} />
+        </div>
+      ) : null}
       {!dados.carregando && !dados.erro && aba === 'pedidos' ? (
         <Pedidos dados={dados} alvo={alvo} rascunho={rascunhoPedido} onRascunhoUsado={() => setRascunhoPedido(null)} onFeito={(m, id) => {
           setOk(m)
@@ -133,8 +132,8 @@ export function TabelaSaldo({ linhas }: { linhas: ReturnType<typeof tabelaSaldos
   return (
     <div className="space-y-3">
       <BotaoCsv arquivo="estoque-saldo" cabecalhos={['Item', 'Código', 'Categoria', 'Saldo', 'Unidade', 'Mínimo', 'Situação', 'Preço sugerido']}
-        linhas={linhas.map((l) => [l.item.nome, l.item.codigo, ROTULO_CATEGORIA[l.item.categoria], l.saldo, l.item.unidadeMedida, l.item.estoqueMinimo,
-          !l.item.ativo ? 'fora do catálogo' : l.nivel, l.item.precoSugeridoCentavos ? formatarPreco(l.item.precoSugeridoCentavos) : null])} />
+        linhas={linhas.map((l) => [l.item.nome, l.item.codigo, ROTULO_CATEGORIA[l.item.categoria], l.nivel === 'sem_lancamento' ? null : l.saldo, l.item.unidadeMedida, l.item.estoqueMinimo,
+          !l.item.ativo ? 'fora do catálogo' : situacaoSaldo(l), l.item.precoSugeridoCentavos ? formatarPreco(l.item.precoSugeridoCentavos) : null])} />
     <div className="overflow-x-auto rounded-2xl border border-line bg-white">
       <table className="w-full text-left text-sm">
         <thead className="bg-paper text-xs uppercase tracking-wide text-ink/50">
@@ -149,16 +148,16 @@ export function TabelaSaldo({ linhas }: { linhas: ReturnType<typeof tabelaSaldos
         </thead>
         <tbody className="divide-y divide-line">
           {linhas.map((l) => (
-            <tr key={l.item.id} className={cx(l.nivel !== 'ok' && 'bg-red-50/40')}>
+            <tr key={l.item.id} className={cx((l.nivel === 'zerado' || l.nivel === 'baixo') && 'bg-red-50/40')}>
               <td className="px-4 py-2.5">
                 <span className="font-medium">{l.item.nome}</span>
                 {l.item.codigo ? <span className="ml-1.5 text-xs text-ink/45">{l.item.codigo}</span> : null}
                 {!l.item.ativo ? <span className="ml-1.5"><Selo>Inativo</Selo></span> : null}
               </td>
               <td className="px-4 py-2.5 text-ink/70">{ROTULO_CATEGORIA[l.item.categoria]}</td>
-              <td className="px-4 py-2.5 text-right font-bold tabular-nums">{l.saldo} <span className="font-normal text-ink/45">{l.item.unidadeMedida}</span></td>
+              <td className="px-4 py-2.5 text-right font-bold tabular-nums">{l.nivel === 'sem_lancamento' ? '—' : <>{l.saldo} <span className="font-normal text-ink/45">{l.item.unidadeMedida}</span></>}</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-ink/70">{l.item.estoqueMinimo}</td>
-              <td className="px-4 py-2.5">{l.item.ativo ? <NivelSelo nivel={l.nivel} /> : <span className="text-xs text-ink/45">fora do catálogo</span>}</td>
+              <td className="px-4 py-2.5">{l.item.ativo ? <NivelSelo linha={l} /> : <span className="text-xs text-ink/45">fora do catálogo</span>}</td>
               <td className="px-4 py-2.5 text-right tabular-nums text-ink/70">{l.item.precoSugeridoCentavos ? formatarPreco(l.item.precoSugeridoCentavos) : '—'}</td>
             </tr>
           ))}
@@ -182,6 +181,9 @@ function Movimentar({ dados, onFeito }: { dados: UsoEstoque; onFeito: (msg: stri
   const opcoes = tipo === 'entrada' ? ativos : todos
   const item = opcoes.find((i) => i.id === itemId) ?? null
   const saldoAtual = item ? mapa.get(item.id) ?? 0 : 0
+  const saldoLancado = item && (mapa.has(item.id) || dados.contagens.some(
+    (c) => c.status === 'confirmada' && c.itens.some((l) => l.itemId === item.id && l.contado !== null),
+  ))
 
   async function gravar() {
     if (salvando || dados.simulando) return
@@ -225,7 +227,7 @@ function Movimentar({ dados, onFeito }: { dados: UsoEstoque; onFeito: (msg: stri
           {opcoes.map((i) => <option key={i.id} value={i.id}>{i.nome} ({ROTULO_CATEGORIA[i.categoria]})</option>)}
         </select>
       </Campo>
-      {item ? <p className="text-sm text-ink/70">Saldo atual: <strong>{saldoAtual} {item.unidadeMedida}</strong> · mínimo {item.estoqueMinimo}</p> : null}
+      {item ? <p className="text-sm text-ink/70">Saldo atual: <strong>{!saldoLancado ? 'Sem lançamento' : saldoAtual === 0 ? 'Saldo zero' : `${saldoAtual} ${item.unidadeMedida}`}</strong> · mínimo {item.estoqueMinimo}</p> : null}
       <Campo label={`Quantidade${item ? ` (${item.unidadeMedida})` : ''}`}>
         <input className={inputClass} type="number" min={1} step={1} inputMode="numeric" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} />
       </Campo>
@@ -289,121 +291,6 @@ export function Historico({ movimentos, itens, mostrarUnidade = false }: { movim
             </tbody>
           </table>
         </div>
-      )}
-    </section>
-  )
-}
-
-function Contagens({ dados, onFeito }: { dados: UsoEstoque; onFeito: (msg: string) => void }) {
-  const aberta = dados.contagens.find((c) => c.status === 'aberta') ?? null
-  const mapa = useMemo(() => saldos(dados.movimentos), [dados.movimentos])
-  const contaveis = dados.itens.filter((i) => i.ativo || (mapa.get(i.id) ?? 0) !== 0).slice(0, MAX_ITENS_CONTAGEM)
-  const [contados, setContados] = useState<Record<string, string>>({})
-  const [obs, setObs] = useState('')
-  const [erro, setErro] = useState('')
-  const [salvando, setSalvando] = useState(false)
-
-  useEffect(() => {
-    if (!aberta) return
-    setContados(Object.fromEntries(aberta.itens.map((l) => [l.itemId, String(l.contado)])))
-    setObs(aberta.obs)
-  }, [aberta])
-
-  const numeros = Object.fromEntries(Object.entries(contados).filter(([, v]) => v.trim() !== '').map(([k, v]) => [k, Number(v)]))
-  const linhas = linhasContagem(contaveis, mapa, numeros)
-
-  async function executar(acao: 'salvar' | 'confirmar' | 'cancelar') {
-    if (!dados.pessoa || salvando || dados.simulando) return
-    if (acao !== 'cancelar') {
-      const erros = validarContagem(linhas)
-      if (erros.length) { setErro(erros.join(' ')); return }
-    }
-    if (acao === 'confirmar' && !window.confirm('Confirmar esta contagem? As diferenças viram ajustes no estoque e não podem ser desfeitas.')) return
-    if (acao === 'cancelar' && !window.confirm('Cancelar esta contagem? Nenhum ajuste será gerado.')) return
-    setSalvando(true)
-    setErro('')
-    try {
-      if (acao === 'cancelar' && aberta) {
-        await cancelarContagem(dados.pessoa, aberta)
-        onFeito('Contagem cancelada. Nenhum ajuste foi gerado.')
-      } else if (acao === 'salvar') {
-        await salvarContagem(dados.pessoa, aberta, linhas, obs)
-        onFeito('Contagem salva. O franqueado confere e confirma para gerar os ajustes.')
-      } else {
-        const id = await salvarContagem(dados.pessoa, aberta, linhas, obs)
-        const contagem: Contagem = { ...(aberta ?? { id, unidadeId: '', unidadeNome: '', status: 'aberta', totalDivergencias: 0, criadoPorNome: '', criadoEmMs: Date.now(), confirmadoNome: '', confirmadoEmMs: 0, atualizadoPorNome: '', atualizadoEmMs: 0 }), id, itens: linhas, obs }
-        const n = await confirmarContagem(dados.pessoa, contagem, mapa, obs)
-        onFeito(n ? `Contagem confirmada: ${n} ajuste(s) lançado(s) no estoque.` : 'Contagem confirmada: o físico bateu com o sistema, nenhum ajuste.')
-      }
-      if (acao !== 'salvar') setContados({})
-    } catch (falha) {
-      setErro(mensagemErro(falha))
-    } finally {
-      setSalvando(false)
-    }
-  }
-
-  const anteriores = dados.contagens.filter((c) => c.status !== 'aberta')
-  return (
-    <section className="space-y-4">
-      <div className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-bold">{aberta ? 'Contagem em andamento' : 'Nova contagem de inventário'}</h2>
-          {aberta ? <span className="text-xs text-ink/50">iniciada por {aberta.criadoPorNome} em {formatarData(aberta.criadoEmMs)}</span> : null}
-        </div>
-        <p className="text-sm text-ink/60">Conte o físico e digite a quantidade. Deixe em branco o que não contou. Ao confirmar, cada diferença vira um ajuste (só o franqueado confirma).</p>
-        {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
-        {!contaveis.length ? <Vazio titulo="Nada para contar" texto="O catálogo da rede ainda está vazio." /> : (
-          <div className="overflow-x-auto rounded-2xl border border-line">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-paper text-xs uppercase tracking-wide text-ink/50">
-                <tr>
-                  <th className="px-3 py-2 font-semibold">Item</th>
-                  <th className="px-3 py-2 text-right font-semibold">Sistema</th>
-                  <th className="px-3 py-2 font-semibold">Contado</th>
-                  <th className="px-3 py-2 text-right font-semibold">Diferença</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {contaveis.map((i) => {
-                  const linha = linhas.find((l) => l.itemId === i.id)
-                  return (
-                    <tr key={i.id}>
-                      <td className="px-3 py-1.5 font-medium">{i.nome}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-ink/70">{mapa.get(i.id) ?? 0}</td>
-                      <td className="px-3 py-1.5">
-                        <div className="w-28"><input aria-label={`Contado de ${i.nome}`} className={cx(inputClass, 'py-1')} type="number" min={0} step={1} inputMode="numeric"
-                          value={contados[i.id] ?? ''} onChange={(e) => setContados({ ...contados, [i.id]: e.target.value })} /></div>
-                      </td>
-                      <td className={cx('px-3 py-1.5 text-right font-bold tabular-nums', linha && linha.diferenca < 0 && 'text-red-700', linha && linha.diferenca > 0 && 'text-lime-dark')}>
-                        {linha ? `${linha.diferenca > 0 ? '+' : ''}${linha.diferenca}` : '—'}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <Campo label="Observação"><textarea className={inputClass} rows={2} maxLength={1000} value={obs} onChange={(e) => setObs(e.target.value)} /></Campo>
-        <p className="text-sm text-ink/70">{linhas.length} item(ns) contado(s) · {divergencias(linhas)} divergência(s)</p>
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="secondary" onClick={() => void executar('salvar')} disabled={salvando || dados.simulando}>Salvar contagem</Button>
-          {dados.ehFranqueado ? <Button type="button" onClick={() => void executar('confirmar')} disabled={salvando || dados.simulando}>Confirmar e gerar ajustes</Button> : null}
-          {dados.ehFranqueado && aberta ? <Button type="button" variant="ghost" onClick={() => void executar('cancelar')} disabled={salvando || dados.simulando}>Cancelar contagem</Button> : null}
-        </div>
-        {!dados.ehFranqueado ? <p className="text-xs text-ink/50">A equipe salva a contagem; o franqueado confere e confirma os ajustes.</p> : null}
-      </div>
-      <h3 className="text-sm font-bold uppercase tracking-wide text-ink/50">Contagens anteriores</h3>
-      {!anteriores.length ? <Vazio titulo="Nenhuma contagem concluída" texto="As contagens confirmadas ou canceladas ficam aqui." /> : (
-        <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white">
-          {anteriores.map((c) => (
-            <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-              <span>{formatarData(c.criadoEmMs)} · {c.itens.length} item(ns) · {c.totalDivergencias} divergência(s){c.obs ? ` · ${c.obs}` : ''}</span>
-              {c.status === 'confirmada' ? <Selo tom="lima">Confirmada por {c.confirmadoNome}</Selo> : <Selo>Cancelada</Selo>}
-            </li>
-          ))}
-        </ul>
       )}
     </section>
   )

@@ -157,3 +157,10 @@ describe('Consulta e tempo ativo', () => {
     expect(alteracoesNaTrilha([depois], [antes])).toEqual([depois])
   })
 })
+
+it('inclui duas pessoas sem início entre três designadas e ignora ex-alunos', () => {
+  const designados = ['Ana', 'Bia', 'Caio'].map((nome, i) => ({ uid: nome, nome, unidadeId: String(i % 2), unidadeNome: String(i % 2) }))
+  const progresso = { ...designados[0], documentoId: 'a', status: 'concluido' as const, reinicios: 0 }
+  const pessoas = resumirProgresso([item('a', 1, '')], [progresso, { ...progresso, uid: 'ex' }], designados).flatMap((u) => u.pessoas)
+  expect(pessoas.map((p) => p.situacao).sort()).toEqual(['Concluiu', 'Não iniciou', 'Não iniciou'])
+})

@@ -15,9 +15,9 @@ describe('mapeadores de estoque no Supabase', () => {
       .toMatchObject({ unidadeId: 'u', itemId: 'i', tipo: 'ajuste', delta: -2, origemId: 'c', indice: 1 })
   })
   it('lê linhas legadas da contagem e carimbos opcionais', () => {
-    expect(mapContagemSb({ id: 'c', itens: [{ itemId: 'i', sistema: 3, contado: 1, diferenca: -2 }],
+    expect(mapContagemSb({ id: 'c', itens: [{ itemId: 'i', sistema: 3, contado: 1, diferenca: -2 }, { itemId: 'b', contado: null }, { itemId: 'z', contado: 0 }],
       total_divergencias: 1, confirmado_em: null }))
-      .toMatchObject({ itens: [{ itemId: 'i', sistema: 3, contado: 1, diferenca: -2 }],
+      .toMatchObject({ itens: [{ itemId: 'i', sistema: 3, contado: 1, diferenca: -2 }, { itemId: 'b', contado: null }, { itemId: 'z', contado: 0 }],
         totalDivergencias: 1, confirmadoEmMs: 0 })
   })
   it('lê as quantidades enviadas e o carimbo de recebimento', () => {

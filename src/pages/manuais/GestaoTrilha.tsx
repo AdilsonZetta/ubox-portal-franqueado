@@ -1,3 +1,6 @@
+import { listarDesignados } from '../../lib/adesaoApi'
+import type { Designado } from '../../lib/adesao'
+import { TotaisTreinamento } from '../../components/TotaisTreinamento'
 import { useEffect, useMemo, useState } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { ArrowDown, ArrowUp, Plus, Sparkles } from 'lucide-react'
@@ -26,22 +29,30 @@ export function GestaoTrilhaPage() {
   const portal = usePortal()
   const [aba, setAba] = useState<Aba>('ordem')
   const [itens, setItens] = useState<ItemTrilhaEdicao[]>([])
+  const [trilhaSalva, setTrilhaSalva] = useState<Pick<ItemTrilhaEdicao, 'documentoId' | 'titulo' | 'ativo'>[]>([])
   const [progressos, setProgressos] = useState<ProgressoManual[]>([])
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [alterado, setAlterado] = useState(false)
   const [erro, setErro] = useState('')
+  const [erroCarga, setErroCarga] = useState('')
+  const [tentativa, setTentativa] = useState(0)
   const [ok, setOk] = useState('')
   const [novoId, setNovoId] = useState('')
   const [unidadeFiltro, setUnidadeFiltro] = useState('')
-  const permitido = podeGerirTrilha(user, ehAdmin) && !comoFranqueado
+  const [designados, setDesignados] = useState<Designado[] | null>(null)
+  const podeEditar = podeGerirTrilha(user, ehAdmin) && !comoFranqueado
+  const podeVerUnidade = !comoFranqueado && user?.papel === 'franqueado' && user.ativo && !user.recusado
+    && Boolean(user.unidadeId && user.modulosLiberados?.includes('manuais'))
+  const permitido = podeEditar || podeVerUnidade
 
   useEffect(() => {
     if (!user || !permitido) return
     let ativo = true
     setCarregando(true)
-    void Promise.all([listarTrilhaManuais(), listarProgressoVisivel(user)])
-      .then(([trilha, lista]) => {
+    setErroCarga('')
+    void Promise.all([listarTrilhaManuais(), listarProgressoVisivel(user), listarDesignados('manuais', user)])
+      .then(([trilha, lista, pessoas]) => {
         if (!ativo) return
         setItens(
           ordenarTrilha(trilha).map((i) => ({
@@ -54,14 +65,16 @@ export function GestaoTrilhaPage() {
             consultaLivre: i.consultaLivre,
           })),
         )
+        setTrilhaSalva(trilha)
         setProgressos(lista)
+        setDesignados(pessoas)
       })
-      .catch((falha) => ativo && setErro(mensagemErro(falha)))
+      .catch((falha) => ativo && setErroCarga(mensagemErro(falha)))
       .finally(() => ativo && setCarregando(false))
     return () => {
       ativo = false
     }
-  }, [user, permitido])
+  }, [user, permitido, tentativa])
 
   const publicados = useMemo(() => portal.documentos.filter((d) => d.status === 'publicado'), [portal.documentos])
   const porId = useMemo(() => new Map(portal.documentos.map((d) => [d.id, d])), [portal.documentos])
@@ -69,10 +82,11 @@ export function GestaoTrilhaPage() {
   const ativos = itens.filter((i) => i.ativo)
   const resumo = useMemo(
     () => resumirProgresso(
-      itens.map((i) => ({ documentoId: i.documentoId, titulo: i.titulo, ativo: i.ativo })),
+      trilhaSalva,
       progressos.map((p) => ({ ...p, concluidoMs: paraMillis(p.concluidoEm) })),
+      designados ?? undefined,
     ),
-    [itens, progressos],
+    [trilhaSalva, progressos, designados],
   )
   const unidadesVisiveis = unidadeFiltro ? resumo.filter((u) => u.unidadeId === unidadeFiltro) : resumo
 
@@ -125,12 +139,13 @@ export function GestaoTrilhaPage() {
   }
 
   async function salvar() {
-    if (!user) return
+    if (!user || !podeEditar) return
     setSalvando(true)
     setErro('')
     setOk('')
     try {
       await salvarTrilhaManuais(user, itens)
+      setTrilhaSalva(itens)
       setAlterado(false)
       setOk('Trilha salva. As unidades já veem a nova ordem e os novos tempos.')
     } catch (falha) {
@@ -144,13 +159,13 @@ export function GestaoTrilhaPage() {
     <div className="mx-auto max-w-6xl space-y-6">
       <header className="cabecalho-pagina flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Manuais e Processos · Franqueadora</p>
-          <h1 className="text-2xl font-bold text-ink">Gestão da trilha de manuais</h1>
-          <p className="mt-0.5 max-w-2xl text-sm text-muted">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted">Manuais e Processos</p>
+          <h1 className="text-2xl font-bold text-ink">{podeEditar ? 'Gestão da trilha de manuais' : 'Progresso da trilha de manuais'}</h1>
+          {podeEditar ? <p className="mt-0.5 max-w-2xl text-sm text-muted">
             Defina a ordem em que os manuais abrem para as unidades e o tempo mínimo de cada um. Acompanhe quem já concluiu.
-          </p>
+          </p> : null}
         </div>
-        <div className="flex rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="Seções da gestão">
+        {podeEditar ? <div className="flex rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="Seções da gestão">
           {(['ordem', 'progresso'] as Aba[]).map((item) => (
             <button
               key={item}
@@ -163,10 +178,10 @@ export function GestaoTrilhaPage() {
               {item === 'ordem' ? 'Ordem e tempo' : 'Progresso'}
             </button>
           ))}
-        </div>
+        </div> : null}
       </header>
 
-      <nav aria-label="Gestão da biblioteca" className="flex flex-wrap gap-2">
+      {podeEditar ? <nav aria-label="Gestão da biblioteca" className="flex flex-wrap gap-2">
         <Link to="/admin/documento/novo" className="rounded-xl bg-brand-dark px-3 py-2 text-sm font-semibold text-white">
           Novo documento
         </Link>
@@ -176,13 +191,14 @@ export function GestaoTrilhaPage() {
         <Link to="/admin/categorias" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
           Gerenciar categorias
         </Link>
-      </nav>
+      </nav> : null}
 
+      {erroCarga ? <Aviso tom="erro"><p>{erroCarga}</p><Button type="button" variant="secondary" className="mt-2" disabled={alterado} onClick={() => setTentativa((n) => n + 1)}>Tentar novamente</Button></Aviso> : null}
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
       {carregando ? <Carregando texto="Carregando a trilha…" /> : null}
 
-      {!carregando && aba === 'ordem' ? (
+      {!carregando && !erroCarga && podeEditar && aba === 'ordem' ? (
         <section className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
           <div className="flex flex-col gap-3 border-b border-line p-5 md:flex-row md:items-end md:justify-between">
             <div>
@@ -311,11 +327,17 @@ export function GestaoTrilhaPage() {
         </section>
       ) : null}
 
-      {!carregando && aba === 'progresso' ? (
+      {!carregando && !erroCarga && (aba === 'progresso' || !podeEditar) ? (
         <section className="space-y-4">
+          {designados === null
+            ? <Aviso>
+                <p>Não foi possível consultar as pessoas designadas. O relatório mostra apenas quem tem progresso registrado.</p>
+                <Button type="button" variant="secondary" className="mt-2" disabled={alterado} onClick={() => setTentativa((n) => n + 1)}>Tentar novamente</Button>
+              </Aviso>
+            : <TotaisTreinamento pessoas={unidadesVisiveis.flatMap((u) => u.pessoas)} />}
           <div className="flex flex-wrap items-end justify-between gap-3">
             <p className="text-sm text-muted">
-              {resumo.length} unidade{resumo.length === 1 ? '' : 's'} com alguém na trilha · {ativos.length} manuais ativos. Pessoas que ainda não abriram nenhum manual não aparecem.
+              {resumo.length} unidade{resumo.length === 1 ? '' : 's'} no relatório · {trilhaSalva.filter((i) => i.ativo).length} manuais ativos.
             </p>
             <label className="text-xs font-medium text-ink/70" htmlFor="filtro-unidade">
               Unidade
@@ -329,12 +351,13 @@ export function GestaoTrilhaPage() {
               </select>
             </label>
           </div>
-          {!unidadesVisiveis.length ? <Vazio titulo="Ninguém começou a trilha ainda" texto="Assim que alguém de uma unidade abrir o primeiro manual, o progresso aparece aqui." /> : null}
+          {!unidadesVisiveis.length ? <Vazio titulo="Nenhuma pessoa no relatório" texto="Confira o filtro e a liberação do módulo Manuais para as unidades." /> : null}
           {unidadesVisiveis.map((unidade) => (
             <article key={unidade.unidadeId} className="overflow-hidden rounded-3xl border border-line bg-surface shadow-sm">
               <div className="flex flex-wrap items-center gap-4 border-b border-line px-5 py-4">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-bold text-ink">{unidade.unidadeNome}</h2>
+                  {designados !== null ? <TotaisTreinamento pessoas={unidade.pessoas} compacto /> : null}
                   <p className="text-xs text-muted">
                     {unidade.pessoas.length} pessoa{unidade.pessoas.length === 1 ? '' : 's'} · {unidade.concluidos} de {unidade.possiveis} manuais concluídos
                   </p>
@@ -365,7 +388,7 @@ export function GestaoTrilhaPage() {
                         <td className="px-5 py-3 font-medium">{p.nome}</td>
                         <td className="px-4 py-3">
                           {p.concluidos} / {p.total}
-                          {p.total && p.concluidos === p.total ? <span className="ml-2"><Selo tom="lima">Completa</Selo></span> : null}
+                          <span className="ml-2"><Selo tom={p.situacao === 'Concluiu' ? 'lima' : p.situacao === 'Em andamento' ? 'marca' : 'neutro'}>{p.situacao}</Selo></span>
                         </td>
                         <td className="px-4 py-3 text-muted">{p.ultimoConcluido || '—'}</td>
                         <td className="px-5 py-3 text-right text-muted">{p.reinicios}</td>

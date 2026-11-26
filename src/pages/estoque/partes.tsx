@@ -3,7 +3,7 @@ import { AlertTriangle } from 'lucide-react'
 import { Selo } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
-import { ROTULO_STATUS_PEDIDO, fazEstoque, podeGerirEstoque, type Nivel, type StatusPedido } from '../../lib/estoque'
+import { ROTULO_STATUS_PEDIDO, fazEstoque, podeGerirEstoque, situacaoSaldo, type LinhaSaldo, type StatusPedido } from '../../lib/estoque'
 import { carregarEstoque, type DadosEstoque } from '../../lib/estoqueApi'
 import { useVisao } from '../../lib/visao'
 import type { Usuario } from '../../types'
@@ -69,8 +69,10 @@ export function useEstoque(unidadeFiltro: string | null = null): UsoEstoque {
   }
 }
 
-export function NivelSelo({ nivel }: { nivel: Nivel }) {
-  if (nivel === 'zerado') return <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-800"><AlertTriangle className="h-3 w-3" aria-hidden="true" />Zerado</span>
+export function NivelSelo({ linha }: { linha: LinhaSaldo }) {
+  const { nivel } = linha
+  if (nivel === 'sem_lancamento') return <Selo>{situacaoSaldo(linha)}</Selo>
+  if (nivel === 'zerado') return <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-red-800"><AlertTriangle className="h-3 w-3" aria-hidden="true" />{situacaoSaldo(linha)}</span>
   if (nivel === 'baixo') return <Selo tom="alerta">Abaixo do mínimo</Selo>
   return <Selo tom="lima">OK</Selo>
 }

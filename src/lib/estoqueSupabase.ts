@@ -138,14 +138,19 @@ export async function registrarMovimentoSb(item: ItemEstoque, tipo: TipoManual, 
 const unidade = (autor: Usuario) => ({ unidade_id: autor.unidadeId ?? '', unidade_nome: autor.unidade ?? '' })
 const nota = (obs: string) => obs.trim().slice(0, 1000)
 
-export function salvarContagemSb(autor: Usuario, existente: Contagem | null, linhas: LinhaContagem[], obs: string): Promise<string> {
+export async function salvarContagemSb(autor: Usuario, existente: Pick<Contagem, 'id'> | null, linhas: LinhaContagem[], obs: string): Promise<string> {
+  const { data, error } = await requireSupabase().rpc('salvar_contagem_aberta_estoque', {
+    p_id: existente?.id ?? null, p_itens: linhas, p_obs: nota(obs),
+  })
+  if (!error) return data
+  if (error.code !== 'PGRST202') throw error
   return gravar('estoque_contagens', existente?.id ?? null, {
     ...(existente ? {} : unidade(autor)),
     itens: linhas, total_itens: linhas.length, total_divergencias: divergencias(linhas), obs: nota(obs),
   })
 }
 
-export async function confirmarContagemSb(contagem: Contagem, saldoAtual: Map<string, number>, obs: string): Promise<number> {
+export async function confirmarContagemSb(contagem: Pick<Contagem, 'id' | 'itens'>, saldoAtual: Map<string, number>, obs: string): Promise<number> {
   const { data, error } = await requireSupabase().rpc('confirmar_contagem_estoque', {
     p_id: contagem.id, p_itens: recalcularContagem(contagem.itens, saldoAtual), p_obs: nota(obs),
   })
@@ -153,7 +158,7 @@ export async function confirmarContagemSb(contagem: Contagem, saldoAtual: Map<st
   return data
 }
 
-export async function cancelarContagemSb(contagem: Contagem): Promise<void> {
+export async function cancelarContagemSb(contagem: Pick<Contagem, 'id'>): Promise<void> {
   await gravar('estoque_contagens', contagem.id, { status: 'cancelada' })
 }
 

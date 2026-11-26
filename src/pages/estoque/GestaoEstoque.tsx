@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { listarUnidadesComEstoque } from '../../lib/adesaoApi'
+import { useEffect, useMemo, useState } from 'react'
 import { Navigate, useSearchParams } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { BotaoCsv } from '../../components/BotaoCsv'
@@ -52,7 +53,21 @@ export function GestaoEstoquePage() {
   const [statusFiltro, setStatusFiltro] = useState<StatusPedido | 'ativos'>('ativos')
   const [categoria, setCategoria] = useState('')
 
-  const resumo = useMemo(() => resumoRede(dados.itens, dados.movimentos, dados.pedidos, dados.contagens), [dados.itens, dados.movimentos, dados.pedidos, dados.contagens])
+  const [tentativaUnidades, setTentativaUnidades] = useState(0)
+  const [unidades, setUnidades] = useState<Awaited<ReturnType<typeof listarUnidadesComEstoque>> | undefined>(undefined)
+  useEffect(() => {
+    if (!dados.gestor || aba !== 'rede') return
+    let ativo = true
+    setUnidades(undefined)
+    void listarUnidadesComEstoque().then((lista) => { if (ativo) setUnidades(lista) })
+    return () => { ativo = false }
+  }, [dados.gestor, user, aba, tentativaUnidades])
+
+  const resumo = useMemo(
+    () => resumoRede(dados.itens, dados.movimentos, dados.pedidos, dados.contagens, unidades ?? undefined),
+    [dados.itens, dados.movimentos, dados.pedidos, dados.contagens, unidades],
+  )
+  const unidadeSelecionada = resumo.find((u) => u.unidadeId === unidadeVista)
 
   if (!user) return null
   if (!dados.carregando && !dados.gestor) return <Navigate to="/estoque" replace />
@@ -165,21 +180,28 @@ export function GestaoEstoquePage() {
         </div>
       ) : null}
 
-      {!dados.carregando && !dados.erro && aba === 'rede' ? (
+      {!dados.carregando && !dados.erro && aba === 'rede' && unidades === undefined ? <Carregando texto="Carregando unidades…" /> : null}
+      {!dados.carregando && !dados.erro && aba === 'rede' && unidades !== undefined ? (
         <section className="space-y-4">
-          <p className="text-sm text-ink/60">Unidades que já movimentaram, contaram ou pediram itens. Abaixo do mínimo = saldo menor que o mínimo do catálogo; zerado = saldo 0 ou menos.</p>
-          {resumo.length ? <BotaoCsv arquivo="estoque-rede" cabecalhos={['Unidade', 'Zerados', 'Abaixo do mínimo', 'Pedidos em andamento', 'Último movimento', 'Última contagem']}
-            linhas={resumo.map((u) => [u.unidadeNome, u.itensZerados, u.itensBaixos, u.pedidosAbertos, u.ultimoMovimentoMs ? formatarData(u.ultimoMovimentoMs) : null, u.ultimaContagemMs ? formatarData(u.ultimaContagemMs) : null])} /> : null}
-          {!resumo.length ? <Vazio titulo="Nenhuma unidade com estoque ainda" texto="Quando as unidades lançarem movimentos, o resumo aparece aqui." /> : (
+          {unidades === null ? (
+            <Aviso>
+              <p>Não foi possível consultar as unidades habilitadas. O relatório usa o histórico disponível.</p>
+              <Button type="button" variant="secondary" className="mt-2" onClick={() => setTentativaUnidades((n) => n + 1)}>Tentar novamente</Button>
+            </Aviso>
+          ) : null}
+          {resumo.length ? <BotaoCsv arquivo="estoque-rede" cabecalhos={['Unidade', 'Situação', 'Zerados', 'Abaixo do mínimo', 'Pedidos em andamento', 'Último movimento', 'Última contagem']}
+            linhas={resumo.map((u) => [u.unidadeNome, u.situacao, u.itensZerados, u.itensBaixos, u.pedidosAbertos, u.ultimoMovimentoMs ? formatarData(u.ultimoMovimentoMs) : null, u.ultimaContagemMs ? formatarData(u.ultimaContagemMs) : null])} /> : null}
+          {!resumo.length ? <Vazio titulo="Nenhuma unidade no relatório" texto="Confira se há unidades ativas com o módulo Estoque habilitado." /> : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {resumo.map((u) => (
-                <button key={u.unidadeId} type="button" onClick={() => setUnidadeVista(u.unidadeId === unidadeVista ? '' : u.unidadeId)}
+                <button key={u.unidadeId} type="button" aria-pressed={u.unidadeId === unidadeVista} onClick={() => setUnidadeVista(u.unidadeId === unidadeVista ? '' : u.unidadeId)}
                   className={cx('space-y-1.5 rounded-2xl border bg-white p-4 text-left shadow-sm hover:border-brand', u.unidadeId === unidadeVista ? 'border-brand' : u.itensZerados + u.itensBaixos ? 'border-red-200' : 'border-line')}>
                   <p className="font-bold">{u.unidadeNome}</p>
                   <div className="flex flex-wrap gap-1.5">
                     {u.itensZerados ? <span className="rounded-full bg-red-100 px-2 py-0.5 text-[11px] font-semibold text-red-800">{u.itensZerados} zerado(s)</span> : null}
                     {u.itensBaixos ? <Selo tom="alerta">{u.itensBaixos} abaixo do mínimo</Selo> : null}
-                    {!u.itensZerados && !u.itensBaixos ? <Selo tom="lima">Tudo acima do mínimo</Selo> : null}
+                    {u.situacao === 'Sem lançamento' ? <Selo>Sem lançamento</Selo> : null}
+                    {u.situacao === 'Com lançamentos' && !u.itensZerados && !u.itensBaixos ? <Selo tom="lima">Sem alertas de saldo</Selo> : null}
                     {u.pedidosAbertos ? <Selo tom="marca">{u.pedidosAbertos} pedido(s) em andamento</Selo> : null}
                   </div>
                   <p className="text-xs text-ink/50">Último movimento: {u.ultimoMovimentoMs ? formatarData(u.ultimoMovimentoMs) : '—'} · Última contagem: {u.ultimaContagemMs ? formatarData(u.ultimaContagemMs) : 'nunca'}</p>
@@ -187,10 +209,10 @@ export function GestaoEstoquePage() {
               ))}
             </div>
           )}
-          {unidadeVista ? (
+          {unidadeSelecionada ? (
             <div className="space-y-2">
-              <h2 className="text-lg font-bold">Saldo de {resumo.find((u) => u.unidadeId === unidadeVista)?.unidadeNome}</h2>
-              <TabelaSaldo linhas={tabelaSaldos(dados.itens, dados.movimentos.filter((m) => m.unidadeId === unidadeVista))} />
+              <h2 className="text-lg font-bold">Saldo de {unidadeSelecionada.unidadeNome}</h2>
+              <TabelaSaldo linhas={tabelaSaldos(dados.itens, dados.movimentos.filter((m) => m.unidadeId === unidadeVista), dados.contagens.filter((c) => c.unidadeId === unidadeVista && c.status === 'confirmada').flatMap((c) => c.itens))} />
             </div>
           ) : null}
         </section>
