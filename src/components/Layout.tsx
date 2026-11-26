@@ -2,6 +2,7 @@ import { Activity, Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, La
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { GRUPOS, MODULOS } from '../data/modulos'
+import { destinoDaBusca, type ModoBusca } from '../lib/buscaPortal'
 import { useAuth } from '../lib/auth'
 import { observarPendentes } from '../lib/chamados'
 import { podeModulo } from '../lib/modulosAcesso'
@@ -19,6 +20,11 @@ import { Logo } from './Logo'
 import { cx } from './ui'
 
 const CHAVE = 'ubox-modulo-expandido'
+const CHAVE_MODO_BUSCA = 'ubox-modo-busca'
+const MODOS_BUSCA = [
+  { modo: 'buscar', titulo: 'Buscar', placeholder: 'Buscar documentos e ações' },
+  { modo: 'perguntar', titulo: 'Perguntar', placeholder: 'Pergunte ao portal' },
+] as const
 
 const itensManuais = [
   { to: '/manuais', label: 'Início', icon: Home, fim: true },
@@ -52,7 +58,7 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/senhas')) return 'senhas'
   if (pathname.startsWith('/franqueadora')) return 'gestao-franqueadora'
   if (pathname.startsWith('/gestao-usuarios')) return 'gestao-usuarios'
-  if (pathname === '/' || pathname.startsWith('/minha-equipe')) return null
+  if (pathname === '/' || pathname === '/busca' || pathname.startsWith('/minha-equipe')) return null
   return 'manuais'
 }
 
@@ -64,6 +70,10 @@ export function Layout() {
   const { avisos, avisosLidos, categorias, documentos } = usePortal()
   const [menuAberto, setMenuAberto] = useState(false)
   const [consulta, setConsulta] = useState('')
+  const [modoBusca, setModoBusca] = useState<ModoBusca>(() => localStorage.getItem(CHAVE_MODO_BUSCA) === 'perguntar' ? 'perguntar' : 'buscar')
+  const podePerguntar = ehAdmin || podeModulo(pessoa, 'manuais', comoFranqueado)
+  const modoAtual = podePerguntar ? modoBusca : 'buscar'
+  const placeholderBusca = (modoAtual === 'buscar' ? MODOS_BUSCA[0] : MODOS_BUSCA[1]).placeholder
   const [expandido, setExpandido] = useState(() => localStorage.getItem(CHAVE) || 'manuais')
   const navigate = useNavigate()
   const { pathname } = useLocation()
@@ -125,9 +135,8 @@ export function Layout() {
 
   function buscar(evento: FormEvent) {
     evento.preventDefault()
-    const texto = consulta.trim()
-    if (!texto) return
-    const destino = texto.endsWith('?') ? `/pergunte?q=${encodeURIComponent(texto)}` : `/busca?q=${encodeURIComponent(texto)}`
+    const destino = destinoDaBusca(consulta, modoAtual)
+    if (!destino) return
     navigate(destino)
     setMenuAberto(false)
   }
@@ -145,16 +154,42 @@ export function Layout() {
       <Link to="/" className="block w-fit rounded-xl outline-none ring-brand/30 focus-visible:ring-2" aria-label="Módulos">
         <Logo claro />
       </Link>
-      <form onSubmit={buscar} className="relative mt-4 shrink-0">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-sidebar-muted" />
-        <input
-          id="busca-portal"
-          aria-label="Pergunte ou busque um POP"
-          value={consulta}
-          onChange={(evento) => setConsulta(evento.target.value)}
-          placeholder="Buscar ou perguntar"
-          className="w-full rounded-xl border border-line-control bg-sidebar-field py-2.5 pl-9 pr-3 text-sm transition-portal motion-reduce:transition-none"
-        />
+      <form onSubmit={buscar} role="search" aria-label="Busca no menu" className="mt-4 shrink-0 space-y-2">
+        <div role="group" aria-label="Modo da busca" className="grid grid-cols-2 gap-1 rounded-xl border border-line-control bg-sidebar-field p-1">
+          {MODOS_BUSCA.map(({ modo, titulo }) => (
+            <button
+              key={modo}
+              type="button"
+              aria-pressed={modoAtual === modo}
+              disabled={modo === 'perguntar' && !podePerguntar}
+              title={modo === 'perguntar' && !podePerguntar ? 'Disponível com o módulo Manuais' : undefined}
+              onClick={() => {
+                setModoBusca(modo)
+                localStorage.setItem(CHAVE_MODO_BUSCA, modo)
+              }}
+              className={cx('min-h-8 rounded-lg px-2 text-xs font-semibold focus-visible:outline-2 focus-visible:outline-lime disabled:opacity-50',
+                modoAtual === modo ? 'bg-lime text-ink' : 'text-sidebar-muted hover:bg-surface/10 hover:text-surface')}
+            >
+              {titulo}
+            </button>
+          ))}
+        </div>
+        <div className="relative">
+          <input
+            id="busca-portal"
+            type="search"
+            name="q"
+            autoComplete="off"
+            aria-label={placeholderBusca}
+            value={consulta}
+            onChange={(evento) => setConsulta(evento.target.value)}
+            placeholder={placeholderBusca}
+            className="w-full rounded-xl border border-line-control bg-sidebar-field py-2.5 pl-3 pr-11 text-sm transition-portal motion-reduce:transition-none"
+          />
+          <button type="submit" aria-label={modoAtual === 'buscar' ? 'Buscar' : 'Perguntar'} className="absolute inset-y-0 right-0 grid w-11 place-items-center rounded-r-xl text-sidebar-muted hover:bg-surface/10 hover:text-surface">
+            {modoAtual === 'buscar' ? <Search className="size-4" aria-hidden="true" /> : <MessageCircle className="size-4" aria-hidden="true" />}
+          </button>
+        </div>
       </form>
       <nav className="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 py-1">
         {GRUPOS.map((grupo) => {

@@ -138,11 +138,19 @@ function DocumentoPorId({ id }: { id: string }) {
           {documento.atualizadoPorNome ? ` · ${documento.atualizadoPorNome}` : ''}
         </p>
       </header>
+      {acesso.consulta ? (
+        <div className="no-print mt-4">
+          <Aviso>
+            Consulta de procedimento: esta leitura não conta para a trilha. Para concluir o manual, siga a sequência da trilha.{' '}
+            <Link to="/manuais/trilha" className="font-semibold text-brand-dark underline">Ver na trilha</Link>
+          </Aviso>
+        </div>
+      ) : null}
       <div className="no-print mt-4 flex flex-wrap gap-2">
         <Link to={`/documento/${documento.id}/imprimir`} className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">
           Imprimir / PDF
         </Link>
-        {acesso.naTrilha ? (
+        {acesso.naTrilha && !acesso.consulta ? (
           <Link to="/manuais/trilha" className="rounded-xl border border-line bg-surface px-3 py-2 text-sm font-semibold">Ver na trilha</Link>
         ) : null}
         {gestor ? (

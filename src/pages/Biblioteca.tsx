@@ -134,12 +134,14 @@ export function BibliotecaPage() {
           {lista.map((documento) => {
             const acesso = trilhaAcesso.acesso(documento.id)
             if (!acesso.liberado) {
+              const proximo = trilhaAcesso.proximoPasso(documento.id)
               return (
                 <div key={documento.id} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0" aria-label={`${documento.titulo}: bloqueado pela trilha`}>
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-muted"><Lock className="h-4 w-4" aria-hidden="true" /></span>
                   <span className="min-w-0 flex-1">
                     <span className="block wrap-anywhere font-medium text-muted">{documento.titulo}</span>
                     <span className="text-xs text-muted">Abre na trilha de manuais, depois do manual anterior.</span>
+                    {proximo ? <Link to={`/manuais/estudo/${proximo.documentoId}`} className="block text-xs font-semibold text-brand-dark hover:underline">Próximo passo: concluir “{proximo.titulo}”</Link> : null}
                   </span>
                   <Link to="/manuais/trilha" className="shrink-0 text-xs font-semibold text-brand-dark hover:underline">Ver na trilha</Link>
                 </div>
@@ -147,14 +149,14 @@ export function BibliotecaPage() {
             }
             return (
               <div key={documento.id} className="flex items-center border-b border-line last:border-0 hover:bg-paper">
-                <Link to={`/documento/${documento.id}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-4 py-3">
+                <Link to={`/documento/${documento.id}${acesso.consulta ? '?consulta=1' : ''}`} className="flex min-w-0 flex-1 flex-wrap items-center gap-3 px-4 py-3">
                   <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-paper text-[10px] font-bold uppercase text-ink/70">{seloExibicao(tipoExibicao(documento))}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block wrap-anywhere font-medium">{documento.titulo}</span>
                     <span className="text-xs text-muted">Atualizado {formatarData(documento.atualizadoEm)}</span>
                   </span>
                   <span className="hidden text-xs text-muted sm:block">v{documento.versao}</span>
-                  {acesso.estado === 'concluido' ? <Selo tom="lima">Trilha: concluído</Selo> : acesso.estado ? <Selo>Na trilha</Selo> : null}
+                  {acesso.consulta ? <Selo tom="marca">Consulta livre</Selo> : acesso.estado === 'concluido' ? <Selo tom="lima">Trilha: concluído</Selo> : acesso.estado ? <Selo>Na trilha</Selo> : null}
                   {documento.status === 'rascunho' ? <Selo tom="alerta">Rascunho</Selo> : null}
                   {documento.leituraObrigatoria ? <Selo tom="marca">Aceite</Selo> : null}
                 </Link>

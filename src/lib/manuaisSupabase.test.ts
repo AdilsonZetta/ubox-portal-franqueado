@@ -15,7 +15,7 @@ const rascunho = {
   htmlConteudo: '', htmlUrl: ' ', anexos: [], ...audiencia,
 } as const
 const trilha = { ...audiencia, titulo: ' Trilha ', descricao: ' ', notaMinima: 75, publicado: true, itens: [], quizzes: [] }
-const item = { documentoId: 'manual-a', titulo: ' ', etapa: ' Início ', ordem: 1, anteriorId: '', ativo: true, tempoMinimoSeg: 10, videoMinutos: 800 }
+const item = { documentoId: 'manual-a', titulo: ' ', etapa: ' Início ', ordem: 1, anteriorId: '', ativo: true, consultaLivre: true, tempoMinimoSeg: 10, videoMinutos: 800 }
 const certificado = { uid: 'uid', trilhaId: 'trilha-1', trilhaTitulo: 'Trilha', codigo: 'UBX-123', tentativaId: 'sem-quiz', nome: 'Ana' }
 const data = '2026-11-20T12:00:00Z'
 
@@ -42,10 +42,10 @@ describe('Linhas da fase 3', () => {
     expect(sb.mapCertificadoSb({ id: 'uid_trilha-1', trilha_id: 'trilha-1', tentativa_id: 'sem-quiz' }))
       .toMatchObject({ trilhaId: 'trilha-1', tentativaId: 'sem-quiz' })
     expect(sb.mapAvisoLeituraSb({ id: 'uid_av-1', aviso_id: 'av-1' })).toMatchObject({ avisoId: 'av-1' })
-    expect(sb.mapItemTrilhaSb({ id: 'manual-a', tempo_minimo_seg: null, atualizado_por_nome: 'Ana' }))
-      .toMatchObject({ documentoId: 'manual-a', tempoMinimoSeg: 60, atualizadoPorNome: 'Ana' })
-    expect(sb.mapProgressoSb({ id: 'uid_manual-a', documento_id: 'manual-a', iniciado_em: data, concluido_em: null }))
-      .toMatchObject({ documentoId: 'manual-a', iniciadoEm: new Date(data), concluidoEm: null, status: 'em_andamento' })
+    expect(sb.mapItemTrilhaSb({ id: 'manual-a', tempo_minimo_seg: null, consulta_livre: true, atualizado_por_nome: 'Ana' }))
+      .toMatchObject({ documentoId: 'manual-a', tempoMinimoSeg: 60, consultaLivre: true, atualizadoPorNome: 'Ana' })
+    expect(sb.mapProgressoSb({ id: 'uid_manual-a', documento_id: 'manual-a', iniciado_em: data, segundos_ativos: 20, pausado_em: data, concluido_em: null }))
+      .toMatchObject({ documentoId: 'manual-a', iniciadoEm: new Date(data), segundosAtivos: 20, pausadoEm: new Date(data), concluidoEm: null, status: 'em_andamento' })
   })
 
   it('grava conteúdo e audiência sem carimbos e usa o id local da versão', () => {
@@ -76,7 +76,7 @@ describe('Linhas da fase 3', () => {
     expect(sb.avisoLeituraParaLinha('uid', 'av-1')).toEqual({ id: 'uid_av-1', uid: 'uid', aviso_id: 'av-1' })
     expect(sb.itemTrilhaParaLinha(item, usuario)).toEqual({
       id: 'manual-a', documento_id: 'manual-a', titulo: 'Manual', etapa: 'Início', ordem: 1,
-      anterior_id: '', ativo: true, tempo_minimo_seg: 30, video_minutos: 600, atualizado_por: 'uid', atualizado_por_nome: 'Ana',
+      anterior_id: '', ativo: true, consulta_livre: true, tempo_minimo_seg: 30, video_minutos: 600, atualizado_por: 'uid', atualizado_por_nome: 'Ana',
     })
     expect(sb.progressoParaLinha(usuario, item)).toEqual({
       id: 'uid_manual-a', uid: 'uid', documento_id: 'manual-a', nome: 'Ana', unidade_id: '',

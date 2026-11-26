@@ -154,11 +154,22 @@ it('retoma a ordem do pacote quando um item anterior da trilha falhou', async ()
   falhar = false
   await importarPacote(planejarImportacao(pacote, base), deps)
   expect(base.trilha.map((t) => t.documentoId)).toEqual(['doc-manual', 'doc-pop'])
+
+  base.trilha[0].consultaLivre = true
+  pacote.trilha[0].tempoMinimoSeg += 30
+  const atualizacao = planejarImportacao(pacote, base, { atualizarExistentes: true })
+  expect(atualizacao.trilha[0].acao).toBe('atualizar')
+  await importarPacote(atualizacao, {
+    ...deps,
+    salvarCategoria: async (_, id) => id!,
+    salvarDocumento: async (_, id) => id!,
+  })
+  expect(base.trilha[0]).toMatchObject({ consultaLivre: true, tempoMinimoSeg: pacote.trilha[0].tempoMinimoSeg })
 })
 
 it('calcula somente as gravações necessárias para preservar a corrente existente', async () => {
   const { encadearTrilha, alteracoesNaTrilha } = await import('./manuaisTrilha')
-  const item = { titulo: 'Manual', etapa: '', tempoMinimoSeg: 30, videoMinutos: 0, ativo: true }
+  const item = { titulo: 'Manual', etapa: '', tempoMinimoSeg: 30, videoMinutos: 0, ativo: true, consultaLivre: false }
   const antes = encadearTrilha([{ ...item, documentoId: 'a' }, { ...item, documentoId: 'b' }])
   const depois = encadearTrilha([...antes, { ...item, documentoId: 'c' }])
   expect(alteracoesNaTrilha(depois, antes).map((i) => i.documentoId)).toEqual(['c'])

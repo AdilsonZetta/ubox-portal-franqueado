@@ -490,6 +490,7 @@ export async function importarPacote(
     const id = documentos.get(item.documento)
     if (id) ordemPacote.set(id, indice)
   })
+  const trilhaPorDocumento = new Map(sequencia.map((item) => [item.documentoId, item]))
   const alteracoes = new Map<string, ItemTrilhaEdicao>()
   for (const { item, acao } of plano.trilha) {
     const documentoId = documentos.get(item.documento)
@@ -497,6 +498,7 @@ export async function importarPacote(
     alteracoes.set(item.chave, {
       documentoId, titulo: titulos.get(item.documento)!, etapa: item.etapa.trim(), tempoMinimoSeg: item.tempoMinimoSeg,
       videoMinutos: item.videoMinutos, ativo: item.ativo,
+      consultaLivre: trilhaPorDocumento.get(documentoId)?.consultaLivre ?? false,
     })
   }
 

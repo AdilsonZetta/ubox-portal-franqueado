@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { acessoAoManual, veTodosOsManuais } from './manuaisTrilha'
 
 const itens = [
-  { documentoId: 'm1', anteriorId: '', ativo: true },
-  { documentoId: 'm2', anteriorId: 'm1', ativo: true },
-  { documentoId: 'm3', anteriorId: 'm2', ativo: true },
-  { documentoId: 'm9', anteriorId: '', ativo: false },
+  { documentoId: 'm1', anteriorId: '', ativo: true, consultaLivre: false },
+  { documentoId: 'm2', anteriorId: 'm1', ativo: true, consultaLivre: false },
+  { documentoId: 'm3', anteriorId: 'm2', ativo: true, consultaLivre: false },
+  { documentoId: 'm9', anteriorId: '', ativo: false, consultaLivre: false },
 ]
 
 describe('trilha como única porta dos manuais', () => {
@@ -39,4 +39,12 @@ describe('trilha como única porta dos manuais', () => {
     expect(veTodosOsManuais({ papel: 'franqueado' }, false)).toBe(false)
     expect(veTodosOsManuais({ papel: 'equipe_franqueado' }, false)).toBe(false)
   })
+})
+
+it('permite consultar um manual bloqueado sem liberá-lo na trilha', () => {
+  const consulta = itens.map((item) => ({ ...item, consultaLivre: true }))
+  expect(acessoAoManual('m2', consulta, [], false)).toEqual({
+    liberado: true, naTrilha: true, estado: 'bloqueado', consulta: true,
+  })
+  expect(acessoAoManual('m2', consulta, [], true)).toEqual({ liberado: true, naTrilha: true, estado: null })
 })

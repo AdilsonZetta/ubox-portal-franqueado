@@ -234,6 +234,7 @@ export function mapItemTrilhaSb(data: LinhaComId): ItemTrilhaManual {
     videoMinutos: inteiro(data.video_minutos),
     anteriorId: texto(data.anterior_id),
     ativo: data.ativo === true,
+    consultaLivre: data.consulta_livre === true,
     atualizadoPor: texto(data.atualizado_por),
     atualizadoPorNome: texto(data.atualizado_por_nome),
     atualizadoEm: dataSb(data.atualizado_em),
@@ -251,6 +252,8 @@ export function mapProgressoSb(data: LinhaComId): ProgressoManual {
     unidadeNome: texto(data.unidade_nome),
     status: data.status === 'concluido' ? 'concluido' : 'em_andamento',
     iniciadoEm: dataSb(data.iniciado_em),
+    segundosAtivos: inteiro(data.segundos_ativos),
+    pausadoEm: dataSb(data.pausado_em),
     reinicios: inteiro(data.reinicios),
     tempoMinimoSeg: inteiro(data.tempo_minimo_seg, 60),
     concluidoEm: dataSb(data.concluido_em),
@@ -426,6 +429,7 @@ export function itemTrilhaParaLinha(item: ItemTrilhaEdicao & { ordem: number; an
     video_minutos: Math.min(600, Math.max(0, Math.round(item.videoMinutos || 0))),
     anterior_id: item.anteriorId,
     ativo: item.ativo,
+    consulta_livre: item.consultaLivre,
     atualizado_por: autor.uid,
     atualizado_por_nome: autor.nome,
   }
@@ -720,6 +724,13 @@ export async function salvarTrilhaManuaisSb(autor: Usuario, itens: ItemTrilhaEdi
   await gravar('manuais_trilha', alterados.map((item) => itemTrilhaParaLinha(item, autor)))
 }
 
+export async function cronometroManualSb(documentoId: string, acao: 'retomar' | 'pausar' | 'registrar'): Promise<ProgressoManual> {
+  const { data, error } = await requireSupabase().rpc('cronometro_manual', { p_documento: documentoId, p_acao: acao }).single()
+  falhou(error)
+  if (!data) throw new Error('O cronômetro não foi confirmado pelo servidor.')
+  return mapProgressoSb(data as LinhaComId)
+}
+
 export async function iniciarOuReiniciarSb(usuario: Usuario, item: ItemTrilhaManual): Promise<ProgressoManual | null> {
   const tabela = 'progresso_manuais'
   const linha = progressoParaLinha(usuario, item)
@@ -727,13 +738,9 @@ export async function iniciarOuReiniciarSb(usuario: Usuario, item: ItemTrilhaMan
   if (atual) {
     const progresso = mapProgressoSb(atual)
     if (progresso.status === 'concluido') return progresso
-    const { error } = await requireSupabase().from(tabela)
-      .update({ reinicios: progresso.reinicios + 1, tempo_minimo_seg: item.tempoMinimoSeg })
-      .eq('id', linha.id).eq('status', 'em_andamento').eq('reinicios', progresso.reinicios)
-    falhou(error)
-  } else {
-    await inserirUmaVez(tabela, linha)
+    return cronometroManualSb(item.documentoId, 'retomar')
   }
+  await inserirUmaVez(tabela, linha)
   const depois = await obterLinha(tabela, linha.id)
   return depois ? mapProgressoSb(depois) : null
 }

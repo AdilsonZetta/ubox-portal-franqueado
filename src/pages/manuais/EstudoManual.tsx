@@ -6,13 +6,16 @@ import { Aviso, Button, Carregando, LinkBotao, Selo } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
 import { mensagemErro } from '../../lib/errors'
 import { formatarData } from '../../lib/format'
-import { concluirManual, iniciarOuReiniciar, listarMeuProgresso, listarTrilhaManuais } from '../../lib/manuaisApi'
+import { concluirManual, iniciarOuReiniciar, listarMeuProgresso, listarTrilhaManuais, pausarManual, registrarManual, retomarManual, TEMPO_ACUMULADO } from '../../lib/manuaisApi'
 import {
   estadoDoManual,
   fazTrilha,
   formatarDuracao,
   ordenarTrilha,
   saiuDaTela,
+  proximoPassoDaTrilha,
+  restanteAtivo,
+  segundosAtivosAgora,
   segundosRestantes,
   type ItemTrilhaManual,
   type ProgressoManual,
@@ -23,6 +26,10 @@ import { useVisao } from '../../lib/visao'
 function focoEmIframeDaPagina(): boolean {
   const ativo = document.activeElement
   return Boolean(ativo && ativo.tagName === 'IFRAME' && document.body.contains(ativo))
+}
+
+function manualNaTela(): boolean {
+  return document.visibilityState === 'visible' && (document.hasFocus() || focoEmIframeDaPagina())
 }
 
 export function EstudoManualPage() {
@@ -49,6 +56,12 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
   const [iniciando, setIniciando] = useState(false)
   const [aviso, setAviso] = useState('')
   const [inicioLocal, setInicioLocal] = useState<number | null>(null)
+  const [acumulado, setAcumulado] = useState(0)
+  const [erroCronometro, setErroCronometro] = useState('')
+  const montado = useRef(false)
+  const inicioRef = useRef<number | null>(null)
+  const fila = useRef(Promise.resolve())
+  const versaoPresenca = useRef(0)
   const [agora, setAgora] = useState(() => Date.now())
   const [concluindo, setConcluindo] = useState(false)
   const reiniciando = useRef(false)
@@ -62,7 +75,27 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
   const participa = fazTrilha(user) && !comoFranqueado
   const concluido = progresso?.status === 'concluido'
   const monitorar = Boolean(participa && item && progresso && !concluido)
-  const restante = item && inicioLocal !== null ? segundosRestantes(inicioLocal, agora, item.tempoMinimoSeg) : item?.tempoMinimoSeg ?? 0
+  const tempoMinimo = item?.tempoMinimoSeg ?? 0
+  const restante = TEMPO_ACUMULADO
+    ? restanteAtivo(tempoMinimo, acumulado, inicioLocal, agora)
+    : inicioLocal !== null ? segundosRestantes(inicioLocal, agora, tempoMinimo) : tempoMinimo
+
+  const marcarInicio = useCallback((inicio: number | null) => {
+    inicioRef.current = inicio
+    setInicioLocal(inicio)
+    if (inicio !== null) setAgora(inicio)
+  }, [])
+
+  const enfileirar = useCallback((operacao: () => Promise<void>) => {
+    const proxima = fila.current.then(operacao)
+    fila.current = proxima.catch(() => undefined)
+    return proxima
+  }, [])
+
+  useEffect(() => {
+    montado.current = true
+    return () => { montado.current = false }
+  }, [])
 
   // Carrega a trilha e o progresso da pessoa.
   useEffect(() => {
@@ -89,26 +122,41 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
     reiniciando.current = true
     setIniciando(true)
     setErroInicio('')
-    setInicioLocal(null)
-    try {
+    marcarInicio(null)
+    const iniciar = async () => {
       const atual = await iniciarOuReiniciar(user, item)
-      if (!atual) {
-        setErroInicio('O cronômetro não foi confirmado pelo servidor.')
-        return
+      if (!atual) throw new Error('O cronômetro não foi confirmado pelo servidor.')
+
+      let acumuladoServidor = atual.segundosAtivos
+      if (TEMPO_ACUMULADO && atual.status !== 'concluido' && (!montado.current || !manualNaTela())) {
+        fora.current = true
+        try {
+          const resposta = await pausarManual(item.documentoId)
+          if (resposta) acumuladoServidor = resposta.segundosAtivos
+        } catch {
+          if (montado.current) setErroCronometro('Não foi possível salvar o tempo de leitura no servidor.')
+        }
+      } else if (TEMPO_ACUMULADO) {
+        setErroCronometro('')
       }
+      if (!montado.current) return
       setProgresso(atual)
+      if (TEMPO_ACUMULADO) setAcumulado(acumuladoServidor)
       if (atual.status !== 'concluido' && !fora.current) {
-        // O início local é marcado depois da gravação: o servidor sempre conta pelo menos o mesmo tempo.
-        setInicioLocal(Date.now())
-        setAgora(Date.now())
+        // O servidor começa a contar antes da confirmação chegar ao cliente.
+        marcarInicio(Date.now())
       }
+    }
+    try {
+      if (TEMPO_ACUMULADO) await enfileirar(iniciar)
+      else await iniciar()
     } catch (falha) {
       setErroInicio(mensagemErro(falha))
     } finally {
       reiniciando.current = false
       setIniciando(false)
     }
-  }, [user, item])
+  }, [user, item, enfileirar, marcarInicio])
 
   const podeIniciar = Boolean(participa && documento && item?.ativo && estado && estado !== 'bloqueado' && !carregando && !erroCarga)
   useEffect(() => {
@@ -117,54 +165,115 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [podeIniciar])
 
-  // Sair da tela zera: aba oculta ou janela sem foco (exceto foco num vídeo ou manual interativo da própria página).
-  // O cronômetro fica parado enquanto a pessoa está fora e recomeça do zero quando ela volta.
   useEffect(() => {
     if (!monitorar) return
-    const naTela = () => document.visibilityState === 'visible' && (document.hasFocus() || focoEmIframeDaPagina())
+    let ativo = true
+    let checkpointPendente = false
+    let ultimoCheckpoint = 0
+    let timerBlur: number | undefined
+
+    const sincronizar = (acao: 'pausar' | 'retomar' | 'registrar') => {
+      const versao = versaoPresenca.current
+      return enfileirar(async () => {
+        if (acao !== 'pausar' && (!ativo || versao !== versaoPresenca.current || !manualNaTela())) return
+        try {
+          const rpc = acao === 'pausar' ? pausarManual : acao === 'retomar' ? retomarManual : registrarManual
+          const resposta = await rpc(documentoId)
+          if (!ativo || !resposta) return
+          setAcumulado(resposta.segundosAtivos)
+          setErroCronometro('')
+          if (resposta.status === 'concluido') {
+            setProgresso(resposta)
+            marcarInicio(null)
+          } else if (acao !== 'pausar' && versao === versaoPresenca.current && !fora.current && manualNaTela()) {
+            marcarInicio(Date.now())
+          }
+        } catch {
+          if (!ativo) return
+          if (acao === 'retomar' && versao === versaoPresenca.current) {
+            setErroInicio('Não foi possível retomar a leitura.')
+          } else if (acao !== 'retomar') {
+            setErroCronometro('Não foi possível salvar o tempo de leitura no servidor.')
+          }
+        }
+      })
+    }
+
     const saiu = () => {
       if (fora.current) return
       fora.current = true
-      setInicioLocal(null)
-      setAviso('Você saiu da tela. Ao voltar, o tempo de leitura começa do zero.')
+      const inicio = inicioRef.current
+      marcarInicio(null)
+      if (TEMPO_ACUMULADO) {
+        versaoPresenca.current += 1
+        const momentoDaPausa = Date.now()
+        setAcumulado((valor) => segundosAtivosAgora(valor, inicio, momentoDaPausa))
+        setAviso('Leitura pausada. Ao voltar, o tempo continua de onde parou.')
+        void sincronizar('pausar')
+      } else {
+        setAviso('Você saiu da tela. Ao voltar, o tempo de leitura começa do zero.')
+      }
     }
     const voltou = () => {
-      if (!fora.current || !naTela()) return
+      if (!fora.current || !manualNaTela()) return
       fora.current = false
-      void comecar()
+      if (TEMPO_ACUMULADO) {
+        versaoPresenca.current += 1
+        setAviso('')
+        setErroInicio('')
+        void sincronizar('retomar')
+      } else {
+        void comecar()
+      }
     }
     const aoVisibilidade = () => {
       if (saiuDaTela({ tipo: 'visibilidade', oculto: document.visibilityState === 'hidden' })) saiu()
       else voltou()
     }
     const aoBlur = () => {
-      window.setTimeout(() => {
+      window.clearTimeout(timerBlur)
+      timerBlur = window.setTimeout(() => {
         if (saiuDaTela({ tipo: 'blur', focoEmIframeDaPagina: focoEmIframeDaPagina() })) saiu()
       }, 0)
     }
     const relogio = window.setInterval(() => {
-      setAgora(Date.now())
-      // Garantia extra para quando o navegador não dispara o evento.
-      if (!naTela()) saiu()
+      const momento = Date.now()
+      setAgora(momento)
+      // Alguns navegadores deixam de disparar os eventos de foco.
+      if (!manualNaTela()) saiu()
       else voltou()
+      const inicio = inicioRef.current
+      if (TEMPO_ACUMULADO && !fora.current && inicio !== null && momento - Math.max(inicio, ultimoCheckpoint) >= 15_000 && !checkpointPendente) {
+        checkpointPendente = true
+        ultimoCheckpoint = momento
+        void sincronizar('registrar').finally(() => { checkpointPendente = false })
+      }
     }, 1000)
     document.addEventListener('visibilitychange', aoVisibilidade)
     window.addEventListener('blur', aoBlur)
     window.addEventListener('focus', voltou)
+    if (TEMPO_ACUMULADO) {
+      if (manualNaTela()) voltou()
+      else saiu()
+    }
     return () => {
+      ativo = false
+      window.clearTimeout(timerBlur)
       window.clearInterval(relogio)
       document.removeEventListener('visibilitychange', aoVisibilidade)
       window.removeEventListener('blur', aoBlur)
       window.removeEventListener('focus', voltou)
+      if (TEMPO_ACUMULADO && !fora.current) void sincronizar('pausar')
     }
-  }, [monitorar, comecar])
+  }, [monitorar, comecar, documentoId, enfileirar, marcarInicio])
 
   async function concluir() {
-    if (!user || !item || restante > 0) return
+    if (!user || !item || restante > 0 || (TEMPO_ACUMULADO && inicioRef.current === null)) return
     setConcluindo(true)
     setErro('')
     try {
-      await concluirManual(user, item.documentoId)
+      if (TEMPO_ACUMULADO) await enfileirar(() => concluirManual(user, item.documentoId))
+      else await concluirManual(user, item.documentoId)
       const meus = await listarMeuProgresso(user.uid)
       setProgressos(meus)
       setProgresso(meus.find((p) => p.documentoId === item.documentoId) ?? null)
@@ -204,9 +313,16 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
     )
   }
   if (participa && estado === 'bloqueado') {
+    const proximo = proximoPassoDaTrilha(documentoId, itens, progressos)
     return (
       <div className="mx-auto max-w-3xl space-y-3">
-        <Aviso>Este manual abre quando você concluir o anterior da trilha.</Aviso>
+        <Aviso>
+          <p>Este manual abre quando você concluir o anterior da trilha.</p>
+          {proximo ? <Link to={`/manuais/estudo/${proximo.documentoId}`} className="mt-1 inline-block font-semibold text-brand-dark hover:underline">Próximo passo: concluir “{proximo.titulo}”</Link> : null}
+        </Aviso>
+        {item.consultaLivre ? (
+          <Link to={`/documento/${item.documentoId}?consulta=1`} className="mr-2 inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-4 text-sm font-semibold hover:border-brand">Consultar procedimento</Link>
+        ) : null}
         <LinkBotao to="/manuais/trilha">Voltar para a trilha</LinkBotao>
       </div>
     )
@@ -221,6 +337,7 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
     </div>
   )
 
+  const tempoAtivo = formatarDuracao(segundosAtivosAgora(acumulado, inicioLocal, agora))
   const percentual = item.tempoMinimoSeg ? Math.round(((item.tempoMinimoSeg - restante) / item.tempoMinimoSeg) * 100) : 100
 
   return (
@@ -230,7 +347,7 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
         {item.etapa ? `  /  ${item.etapa}` : ''}
       </p>
 
-      <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-line bg-white/95 p-4 shadow-sm backdrop-blur" aria-live="polite">
+      <div className="sticky top-0 z-20 -mx-1 rounded-2xl border border-line bg-white/95 p-4 shadow-sm backdrop-blur" aria-live={TEMPO_ACUMULADO ? undefined : 'polite'}>
         <div className="flex flex-wrap items-center gap-3">
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand/10 text-brand-dark" aria-hidden="true">
             {concluido ? <CheckCircle2 className="h-5 w-5" /> : <Clock className="h-5 w-5" />}
@@ -242,10 +359,12 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
             ) : participa ? (
               <p className="text-xs text-ink/60">
                 {inicioLocal === null ? (
-                  iniciando ? 'Iniciando o cronômetro…' : erroInicio ? 'O cronômetro está parado.' : 'Ao voltar para esta tela, o cronômetro começa do zero.'
+                  iniciando ? 'Iniciando o cronômetro…' : erroInicio ? 'O cronômetro está parado.' : TEMPO_ACUMULADO
+                    ? `Leitura pausada em ${tempoAtivo} de ${formatarDuracao(tempoMinimo)}. Volte para esta tela para continuar.`
+                    : 'Ao voltar para esta tela, o cronômetro começa do zero.'
                 ) : restante > 0 ? (
                   <>
-                    Faltam <strong className="text-ink">{formatarDuracao(restante)}</strong> de {formatarDuracao(item.tempoMinimoSeg)}. Fique nesta tela: se sair, o tempo recomeça.
+                    Faltam <strong className="text-ink">{formatarDuracao(restante)}</strong> de {formatarDuracao(item.tempoMinimoSeg)}. {TEMPO_ACUMULADO ? 'Se sair da tela, a contagem pausa e continua quando você voltar.' : 'Fique nesta tela: se sair, o tempo recomeça.'}
                   </>
                 ) : (
                   'Tempo mínimo cumprido. Já pode concluir.'
@@ -258,6 +377,7 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
               </p>
             )}
           </div>
+          {TEMPO_ACUMULADO && participa && !concluido ? <span className="text-xs tabular-nums text-muted">Tempo ativo: {tempoAtivo}</span> : null}
           {progresso && progresso.reinicios > 0 && !concluido ? <Selo tom="alerta">{progresso.reinicios} reinício{progresso.reinicios === 1 ? '' : 's'}</Selo> : null}
           {participa && !concluido ? (
             <Button type="button" onClick={() => void concluir()} disabled={restante > 0 || concluindo || inicioLocal === null}>
@@ -277,7 +397,12 @@ function EstudoPorManual({ documentoId }: { documentoId: string }) {
         ) : null}
       </div>
 
-      {aviso ? <Aviso>{aviso}</Aviso> : null}
+      {TEMPO_ACUMULADO ? (
+        <div role="status" className="empty:hidden space-y-2">
+          {aviso ? <Aviso>{aviso}</Aviso> : null}
+          {erroCronometro ? <Aviso>{erroCronometro}</Aviso> : null}
+        </div>
+      ) : aviso ? <Aviso>{aviso}</Aviso> : null}
       {erroInicio ? (
         <Aviso tom="erro">Falha ao iniciar o cronômetro. {erroInicio}{' '}
           <Button type="button" variant="ghost" onClick={() => void comecar()}>Tentar iniciar novamente</Button>

@@ -151,7 +151,7 @@ export function TrilhaManuaisPage() {
               const progresso = meusPorDoc.get(item.documentoId)
               const podeAbrir = item.estado !== 'bloqueado' && fazTrilha(pessoa) && !comoFranqueado
               return (
-                <li key={item.documentoId} className={cx('flex flex-wrap items-center gap-3 px-5 py-4', item.estado === 'bloqueado' && 'opacity-70')}>
+                <li key={item.documentoId} className={cx('flex flex-wrap items-center gap-3 px-5 py-4', item.estado === 'bloqueado' && !item.consultaLivre && 'opacity-70')}>
                   <span
                     className={cx(
                       'grid h-10 w-10 shrink-0 place-items-center rounded-xl',
@@ -175,6 +175,12 @@ export function TrilhaManuaisPage() {
                     </span>
                   </span>
                   <Selo tom={ESTADO[item.estado].tom}>{ESTADO[item.estado].rotulo}</Selo>
+                  {item.consultaLivre ? <Selo tom="marca">Consulta livre</Selo> : null}
+                  {item.estado === 'bloqueado' && item.consultaLivre ? (
+                    <Link to={`/documento/${item.documentoId}?consulta=1`} className="inline-flex min-h-11 items-center rounded-xl border border-line bg-surface px-3 text-sm font-semibold text-ink hover:border-brand">
+                      Consultar procedimento
+                    </Link>
+                  ) : null}
                   {podeAbrir ? (
                     <Link
                       to={`/manuais/estudo/${item.documentoId}`}
