@@ -146,7 +146,7 @@ export function ChamadosPage() {
   }
 
   if (!user) return null
-  if (comoFranqueado && !simulado) return <Aviso>Escolha qual franqueado simular para ver os chamados dessa unidade.</Aviso>
+  if (comoFranqueado && !simulado) return <Aviso>Escolha a unidade da simulação para ver os chamados dela.</Aviso>
   if (!rede && !unidadeId) return <Aviso tom="erro">Esta conta não está ligada a uma unidade, então ainda não abre chamados.</Aviso>
 
   return (

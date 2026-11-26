@@ -108,7 +108,7 @@ export async function carregarAcompanhamentoSb(unidadeId?: string): Promise<Dado
     seguro(listarLinhas('auditoria_acoes', unidade).then((linhas) => linhas.map(mapAcaoSb))),
     seguro(listarLinhas('chamados', (q) => unidadeId ? unidade(q) : q.in('status', STATUS_PENDENTES))
       .then((linhas) => linhas.map(mapChamadoSb).filter((c) => c !== null)
-        .map((c) => ({ unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })))),
+        .map((c) => ({ id: c.id, titulo: c.titulo, unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })))),
     seguro(listarLinhas<Parameters<typeof mapTentativaSb>[0]>('tentativas_prova', unidade)
       .then((linhas) => linhas.map(mapTentativaSb))),
     seguro(contar('cursos', 'publicado')),

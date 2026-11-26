@@ -8,9 +8,10 @@ import { formatarDia } from '../../lib/format'
 import { listarUnidades } from '../../lib/gestao'
 import {
   ORDEM_CLASSIFICACAO, ROTULO_CLASSIFICACAO, ROTULO_FONTE, contarClassificacoes,
-  estadoDasFontes, fontesIndisponiveis, motivoSaude, resumirUnidade, saudeDe, sinaisSaude, type Classificacao,
+  estadoDasFontes, fontesIndisponiveis, type Classificacao,
 } from '../../lib/acompanhamento'
 import { carregarAcompanhamento, type DadosAcompanhamento } from '../../lib/acompanhamentoApi'
+import { compararLinhasRede, linhasRede } from '../../lib/inicioRede'
 import type { Unidade } from '../../types'
 import { ScoreSelo } from '../checklist/partes'
 import { COR_NIVEL, CriteriosSaude, SaudeSelo, useAcessoAcompanhamento } from './partes'
@@ -44,22 +45,14 @@ export function VisaoRedePage() {
     }
   }, [gestor, tique])
 
-  const linhas = useMemo(() => {
-    if (!dados) return []
-    const agora = Date.now()
-    return unidades.map((u) => {
-      const resumo = resumirUnidade(u, dados.fontes, agora, dados.vigenciasChecklist)
-      const sinais = sinaisSaude(resumo, agora)
-      return { u, resumo, sinais, saude: saudeDe(sinais), motivo: motivoSaude(sinais) }
-    })
-  }, [unidades, dados])
+  const linhas = useMemo(() => dados ? linhasRede(unidades, dados, Date.now()) : [], [unidades, dados])
 
   if (!gestor) return <Navigate to="/" replace />
   const cidades = [...new Set(unidades.map((u) => u.cidade).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'pt-BR'))
   const contagem = contarClassificacoes(linhas.map((l) => l.saude))
   const filtradas = linhas
     .filter((l) => (!nivel || l.saude === nivel) && (!cidade || l.u.cidade === cidade) && (!busca.trim() || l.u.nome.toLowerCase().includes(busca.trim().toLowerCase())))
-    .sort((a, b) => ORDEM_CLASSIFICACAO.indexOf(a.saude) - ORDEM_CLASSIFICACAO.indexOf(b.saude) || a.u.nome.localeCompare(b.u.nome, 'pt-BR'))
+    .sort(compararLinhasRede)
   const indisponiveis = dados ? fontesIndisponiveis(estadoDasFontes(dados.fontes)).map((fonte) => ROTULO_FONTE[fonte]) : []
 
   return (
@@ -115,8 +108,8 @@ export function VisaoRedePage() {
           <CriteriosSaude />
           {!filtradas.length ? <Vazio titulo={linhas.length ? 'Nenhum resultado para este filtro' : 'Nenhuma unidade'} texto="Ajuste os filtros ou cadastre unidades na gestão da franqueadora." /> : null}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-            {filtradas.map(({ u, resumo, sinais, saude, motivo }) => (
-              <Link key={u.id} to={`/acompanhamento/unidade/${u.id}`} className="block rounded-2xl border border-line bg-white p-4 shadow-sm transition-colors hover:border-brand/50 motion-reduce:transition-none">
+            {filtradas.map(({ u, resumo, sinais, saude, motivo, destino }) => (
+              <Link key={u.id} to={destino} className="block rounded-2xl border border-line bg-white p-4 shadow-sm transition-colors hover:border-brand/50 motion-reduce:transition-none">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate font-bold">{u.nome}</p>

@@ -76,10 +76,10 @@ function Nuvem({ modo }: { modo: Modo }) {
     return (
       <div className="mx-auto max-w-3xl space-y-4">
         <Vazio
-          titulo={modo === 'rede' ? 'Nuvem da franqueadora' : 'Nuvem da unidade'}
+          titulo={modo === 'rede' ? 'Arquivos da rede' : 'Arquivos da unidade'}
           texto={modo === 'rede'
-            ? 'Disponível para o admin e para a equipe da franqueadora com o módulo "Armazenamento em Nuvem" da franqueadora.'
-            : 'Disponível para o franqueado e a equipe da unidade com o módulo liberado. A área privada da unidade não é lida pela franqueadora, nem na simulação.'}
+            ? 'Disponível para o admin e para a equipe da franqueadora com o módulo Arquivos da rede liberado.'
+            : 'Disponível para o franqueado e a equipe da unidade com o módulo Arquivos da unidade liberado. A área privada da unidade não é lida pela franqueadora, nem na simulação.'}
         />
       </div>
     )
@@ -108,7 +108,7 @@ function Nuvem({ modo }: { modo: Modo }) {
     <div className="mx-auto max-w-6xl space-y-6">
       <header className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">Armazenamento em Nuvem · {modo === 'rede' ? 'Franqueadora' : pessoa?.unidade || 'Unidade'}</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-ink/40">{modo === 'rede' ? 'Franqueadora' : pessoa?.unidade || 'Unidade'}</p>
           <h1 className="text-2xl font-black text-ink">{modo === 'rede' ? 'Arquivos da rede' : 'Arquivos da unidade'}</h1>
           <p className="mt-0.5 max-w-2xl text-sm text-ink/65">
             Organize os arquivos do Google Drive por pasta e etiqueta. O portal guarda só o link e as informações; quem consegue abrir o arquivo continua definido no compartilhamento do próprio Drive.
@@ -162,10 +162,10 @@ function Nuvem({ modo }: { modo: Modo }) {
             {modo === 'unidade' ? (
               <>
                 <Area titulo="Da franqueadora" dica="Compartilhados com a rede toda ou com a sua unidade." links={daRede} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
-                <Area titulo="Área privada da unidade" dica="Só a sua unidade vê. A franqueadora não tem acesso." links={privados} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
+                <Area titulo="Área privada da unidade" dica="Só a sua unidade vê (franqueado e equipe com esta área liberada). A franqueadora não tem acesso." links={privados} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
               </>
             ) : (
-              <Area titulo="Publicados pela franqueadora" dica="A área privada das unidades não aparece aqui." links={privados} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
+              <Area titulo="Publicados pela franqueadora" dica="Visíveis para a rede toda, para as unidades escolhidas ou só para a franqueadora, conforme a publicação. A área privada das unidades não aparece aqui." links={privados} podeEditar={(link) => !removendo && podeEditar(link)} onEditar={setEditando} onRemover={remover} />
             )}
           </div>
           <aside className="space-y-2 rounded-3xl border border-line bg-white p-4 shadow-sm">
@@ -174,7 +174,7 @@ function Nuvem({ modo }: { modo: Modo }) {
               {recentes(filtrados).map((l) => (
                 <li key={l.id} className="text-sm">
                   <a href={l.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-brand-dark hover:underline">{l.titulo}</a>
-                  <p className="text-[11px] text-ink/45">{l.pasta} · {formatarData(l.criadoEmMs)}</p>
+                  <p className="text-[11px] text-ink/45">{l.pasta} · {l.visibilidade === 'privada' ? 'Só a unidade' : ROTULO_VISIBILIDADE[l.visibilidade]} · {formatarData(l.criadoEmMs)}</p>
                 </li>
               ))}
             </ol>
@@ -208,7 +208,7 @@ function Area({ titulo, dica, links, podeEditar, onEditar, onRemover }: {
                     </a>
                     <Selo>{ROTULO_TIPO[tipoDoLink(l.url)]}</Selo>
                     <Selo tom={l.visibilidade === 'rede' ? 'marca' : l.visibilidade === 'privada' ? 'lima' : 'neutro'}>
-                      {ROTULO_VISIBILIDADE[l.visibilidade]}{l.visibilidade === 'unidades' ? ` (${l.unidades.length})` : ''}
+                      {l.visibilidade === 'privada' ? 'Só a unidade' : ROTULO_VISIBILIDADE[l.visibilidade]}{l.visibilidade === 'unidades' ? ` (${l.unidades.length})` : ''}
                     </Selo>
                   </div>
                   {l.descricao ? <p className="whitespace-pre-wrap text-sm text-ink/70">{l.descricao}</p> : null}

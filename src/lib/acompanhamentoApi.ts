@@ -91,7 +91,11 @@ async function seguro<T>(p: Promise<T>): Promise<T | null> {
 }
 
 export interface DadosAcompanhamento {
-  fontes: Fontes
+  fontes: Omit<Fontes, 'modelosChecklist' | 'acoes' | 'chamados'> & {
+    modelosChecklist: (NonNullable<Fontes['modelosChecklist']>[number] & { titulo?: string })[] | null
+    acoes: (NonNullable<Fontes['acoes']>[number] & { id?: string; auditoriaId?: string; descricao?: string; responsavel?: string })[] | null
+    chamados: (NonNullable<Fontes['chamados']>[number] & { id?: string; titulo?: string })[] | null
+  }
   /** Início e primeiro vencimento das rotinas por unidade (etapa 04). Vazio no Firebase ou sem a migração. */
   vigenciasChecklist?: VigenciaChecklist[]
   registros: RegistroAc[]
@@ -131,7 +135,7 @@ export async function carregarAcompanhamento(unidadeId?: string): Promise<DadosA
       execucoes,
       auditorias,
       acoes,
-      chamados: chamados ? chamados.map((c) => ({ unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })) : null,
+      chamados: chamados ? chamados.map((c) => ({ id: c.id, titulo: c.titulo, unidadeId: c.unidadeId, ...entradaPrazoChamado(c) })) : null,
       tentativas,
       cursosPublicados: cursos,
       progresso,
