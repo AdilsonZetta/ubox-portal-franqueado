@@ -15,6 +15,7 @@ import { observarSolicitacoesAbertas } from '../lib/senhas'
 import { usePortal } from '../lib/portal'
 import { filhosDe } from '../lib/trilha'
 import { useVisao } from '../lib/visao'
+import { SeletorUnidadeSimulada } from './SeletorUnidadeSimulada'
 import { Logo } from './Logo'
 import { cx } from './ui'
 
@@ -59,7 +60,7 @@ function moduloDaRota(pathname: string): string | null {
 // Menu lateral adaptado de shadcn-admin (MIT, https://github.com/satnaing/shadcn-admin)
 export function Layout() {
   const { user, sair } = useAuth()
-  const { comoFranqueado, ehAdmin, alternar, simulado, franqueados, escolher } = useVisao()
+  const { comoFranqueado, ehAdmin, alternar, simulado, unidadeSimulada } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
   const { avisos, avisosLidos, categorias, documentos } = usePortal()
   const [menuAberto, setMenuAberto] = useState(false)
@@ -398,30 +399,16 @@ export function Layout() {
       ) : null}
       {user?.papel === 'admin' ? (
         <div className="mt-3 shrink-0 space-y-2">
-          <button type="button" onClick={alternar} className="atalho-lateral w-full text-left">
+          <button type="button" onClick={() => { alternar(); setMenuAberto(false); navigate('/') }} className="atalho-lateral w-full text-left">
             <UserRound className="size-4 shrink-0" aria-hidden="true" />
             {comoFranqueado ? 'Voltar para franqueadora' : 'Ver como franqueado'}
           </button>
-          {comoFranqueado ? (
-            <select
-              aria-label="Franqueado para simulação"
-              value={simulado?.uid ?? ''}
-              onChange={(evento) => escolher(evento.target.value)}
-              className="w-full rounded-xl border border-line-control bg-graphite px-2 py-2 text-sm transition-portal motion-reduce:transition-none"
-            >
-              <option value="">Escolha o franqueado</option>
-              {franqueados.map((pessoa) => (
-                <option key={pessoa.uid} value={pessoa.uid}>
-                  {[pessoa.nome, pessoa.unidade].filter(Boolean).join(' · ')}
-                </option>
-              ))}
-            </select>
-          ) : null}
+          {comoFranqueado ? <SeletorUnidadeSimulada lateral /> : null}
         </div>
       ) : null}
       <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-surface/20 pt-3">
         <NavLink to="/perfil" className="min-w-0 flex-1" onClick={() => setMenuAberto(false)}>
-          <span className="block truncate text-sm font-semibold">{pessoa?.nome || 'Escolha o franqueado'}</span>
+          <span className="block truncate text-sm font-semibold">{pessoa?.nome || 'Escolha a unidade'}</span>
           <span className="block truncate text-[11px] text-sidebar-muted">{ehAdmin ? 'Franqueadora' : pessoa?.unidade || 'Franqueado'}</span>
         </NavLink>
         <button onClick={() => void sair()} className="rounded-lg p-2 text-line-strong hover:bg-surface/10" aria-label="Sair">
@@ -478,8 +465,11 @@ export function Layout() {
         </div>
         {comoFranqueado ? (
           <div className="no-print flex items-center justify-between gap-3 bg-brand px-4 py-2 text-sm font-semibold text-white md:px-8">
-            <span>Visualizando como franqueado{simulado ? ` · ${[simulado.nome, simulado.unidade].filter(Boolean).join(' · ')}` : ' · Escolha o franqueado'}</span>
-            <button type="button" onClick={alternar} className="rounded-lg bg-surface px-3 py-1 text-brand-dark">
+            <div className="min-w-0 break-words">
+              <span>Visualizando como franqueado · {unidadeSimulada || 'Escolha a unidade'}</span>
+              {simulado ? <span className="block text-xs font-medium">{simulado.nome}</span> : null}
+            </div>
+            <button type="button" onClick={() => { alternar(); navigate('/') }} className="shrink-0 rounded-lg bg-surface px-3 py-1 text-brand-dark">
               Voltar para franqueadora
             </button>
           </div>

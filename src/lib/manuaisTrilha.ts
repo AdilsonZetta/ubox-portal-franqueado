@@ -143,6 +143,10 @@ export function montarTrilhaDoUsuario<T extends ItemTrilhaManual>(
   return etapas
 }
 
+export function proximoManual<T extends Pick<ItemTrilhaManual, 'documentoId'> & { estado: EstadoManual }>(itens: T[]): T | undefined {
+  return itens.find((item) => item.estado === 'disponivel' || item.estado === 'em_andamento')
+}
+
 /** Cronômetro do cliente: quanto falta, dado o início local e o tempo mínimo. */
 export function segundosRestantes(inicioMs: number, agoraMs: number, tempoMinimoSeg: number): number {
   return Math.max(0, tempoMinimoSeg - Math.floor((agoraMs - inicioMs) / 1000))

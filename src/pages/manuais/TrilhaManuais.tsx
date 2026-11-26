@@ -9,7 +9,7 @@ import { listarMeuProgresso, listarProgressoVisivel, listarTrilhaManuais } from 
 import {
   fazTrilha,
   formatarDuracao,
-  montarTrilhaDoUsuario,
+  montarTrilhaDoUsuario, proximoManual,
   podeGerirTrilha,
   resumirProgresso,
   type EstadoManual,
@@ -66,7 +66,7 @@ export function TrilhaManuaisPage() {
   const etapas = useMemo(() => montarTrilhaDoUsuario(itens, meus), [itens, meus])
   const todos = etapas.flatMap((etapa) => etapa.itens)
   const concluidos = todos.filter((item) => item.estado === 'concluido').length
-  const proximo = todos.find((item) => item.estado === 'disponivel' || item.estado === 'em_andamento')
+  const proximo = proximoManual(todos)
   const tempoRestante = todos.filter((item) => item.estado !== 'concluido').reduce((soma, item) => soma + item.tempoMinimoSeg, 0)
   const percentual = todos.length ? Math.round((concluidos / todos.length) * 100) : 0
   const resumoEquipe = useMemo(() => resumirProgresso(itens, equipe.map((p) => ({ ...p, concluidoMs: paraMillis(p.concluidoEm) }))), [itens, equipe])

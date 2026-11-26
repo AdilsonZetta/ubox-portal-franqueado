@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
-import { Link, Navigate, useParams } from 'react-router-dom'
+import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
 import { Plus, Share2, Trash2 } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Selo, Vazio, cx, inputClass } from '../../components/ui'
 import { useAuth } from '../../lib/auth'
@@ -62,6 +62,8 @@ export function PainelUnidadePage() {
 }
 
 function PainelUnidade({ id }: { id: string }) {
+  const [params] = useSearchParams()
+  const alvo = params.get('passo')
   const { user } = useAuth()
   const { gestor } = useAcessoAcompanhamento()
   const [unidade, setUnidade] = useState<Unidade | null>(null)
@@ -97,6 +99,13 @@ function PainelUnidade({ id }: { id: string }) {
       ativo = false
     }
   }, [gestor, id, tique])
+
+  useEffect(() => {
+    if (!alvo || !gestor || carregando || erroCarga) return
+    const passo = document.getElementById(`passo-${alvo}`)
+    passo?.focus({ preventScroll: true })
+    passo?.scrollIntoView({ block: 'center', behavior: 'instant' })
+  }, [alvo, gestor, dados, carregando, erroCarga])
 
   if (!user) return null
   if (!gestor) return <Navigate to="/" replace />
@@ -340,7 +349,7 @@ function PainelUnidade({ id }: { id: string }) {
                     {passos.length ? (
                       <ul className="mt-3 space-y-2 border-t border-line pt-3">
                         {passos.map((p) => (
-                          <li key={p.id} className="rounded-xl bg-paper p-3">
+                          <li key={p.id} id={`passo-${p.id}`} tabIndex={p.id === alvo ? -1 : undefined} className={cx('rounded-xl bg-paper p-3', p.id === alvo && 'ring-2 ring-brand')}>
                             <div className="flex flex-wrap items-start justify-between gap-2">
                               <div className="min-w-0">
                                 <p className="font-semibold">{p.descricao}</p>

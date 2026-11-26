@@ -1,5 +1,4 @@
-import { Aviso, Button, Carregando, Selo, Vazio } from '../components/ui'
-import { usePendencias } from '../lib/usePendencias'
+import { Selo, Vazio } from '../components/ui'
 import { Textura } from '../components/Textura'
 import { Link, useParams } from 'react-router-dom'
 import { GRUPOS, MODULOS, moduloPorSlug } from '../data/modulos'
@@ -9,13 +8,17 @@ import { podeModulo } from '../lib/modulosAcesso'
 import { useVisao } from '../lib/visao'
 import { CompromissosUnidade } from './CompromissosUnidade'
 import { PedidosUnidade } from '../components/PedidosUnidade'
+import { AcoesRapidas } from './inicio/AcoesRapidas'
+import { AtencaoRede } from './inicio/AtencaoRede'
+import { EscolhaUnidade } from './inicio/EscolhaUnidade'
+import { PendenciasInicio } from './inicio/PendenciasInicio'
 import { CartaoUniversidade } from './universidade/Universidade'
 
 export function ModulosPage() {
   const { user } = useAuth()
-  const { ehAdmin, comoFranqueado, simulado } = useVisao()
+  const { ehAdmin, comoFranqueado, simulado, unidadeSimulada } = useVisao()
   const pessoa = comoFranqueado ? simulado : user
-  const pendencias = usePendencias()
+  const precisaEscolherUnidade = comoFranqueado && !simulado
   const modulos = MODULOS.filter((modulo) => ehAdmin || podeModulo(pessoa, modulo.slug, comoFranqueado))
   return (
     <div>
@@ -24,48 +27,25 @@ export function ModulosPage() {
           <div className="relative px-5 py-8 sm:px-8 sm:py-10">
             <Textura variante="linha" className="pointer-events-none absolute inset-y-0 right-0 -z-10 hidden h-full w-1/3 opacity-50 xl:block" />
             <p className="text-xs font-semibold uppercase tracking-wider text-lime-soft">UBOX · Portal do Franqueado</p>
-            <h1 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">Olá, {primeiroNome(user?.nome ?? '')}.</h1>
-            <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-line-strong">
-              {modulos.length ? 'Escolha um dos módulos abaixo para continuar.' : 'Ainda não há módulos disponíveis nesta visão.'}
-            </p>
+            <h1 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight sm:text-4xl">{comoFranqueado ? unidadeSimulada || 'Ver como franqueado' : `Olá, ${primeiroNome(user?.nome ?? '')}.`}</h1>
+            {modulos.length ? (
+              <p className="mt-3 max-w-xl text-base font-light leading-relaxed text-line-strong">Escolha um dos módulos abaixo para continuar.</p>
+            ) : null}
           </div>
           <Textura className="h-8 w-full sm:h-12" />
         </header>
-        {comoFranqueado ? (
-          <div className="mt-6"><Aviso>Na simulação, as pendências da unidade ficam ocultas para proteger os dados dela.</Aviso></div>
-        ) : (
-          <section className="mt-6 space-y-3" aria-labelledby="pendencias-titulo">
-            <h2 id="pendencias-titulo" className="text-lg font-bold">Pendências</h2>
-            {pendencias.carregando ? <Carregando texto="Consultando pendências…" /> : null}
-            {pendencias.falhou ? (
-              <Aviso>
-                Algumas pendências ficaram indisponíveis.{' '}
-                <Button variant="ghost" onClick={pendencias.recarregar} disabled={pendencias.carregando}>Tentar novamente</Button>
-              </Aviso>
-            ) : null}
-            {!pendencias.carregando && !pendencias.falhou && !pendencias.itens.length ? (
-              <p className="text-sm text-muted">Você está em dia. Escolha um módulo abaixo para continuar.</p>
-            ) : null}
-            <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {pendencias.itens.map((item) => (
-                <li key={item.id}>
-                  <Link to={item.para} className="block rounded-2xl border border-line bg-surface p-4 hover:border-brand">
-                    <p className="mb-2 font-semibold">{item.titulo}</p>
-                    <Selo tom={item.tom === 'alerta' ? 'alerta' : 'neutro'}>{item.detalhe}</Selo>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <AcoesRapidas />
+        <AtencaoRede />
+        {precisaEscolherUnidade ? <EscolhaUnidade /> : null}
+        {!comoFranqueado ? <PendenciasInicio /> : null}
         <PedidosUnidade />
         {!comoFranqueado ? <CompromissosUnidade pessoa={pessoa} /> : null}
-        {podeModulo(pessoa, 'universidade', comoFranqueado) ? (
+        {!comoFranqueado && podeModulo(pessoa, 'universidade', false) ? (
           <div className="mt-6 max-w-2xl">
             <CartaoUniversidade />
           </div>
         ) : null}
-        <div className="mt-8 space-y-8">
+        {!precisaEscolherUnidade ? <div className="mt-8 space-y-8">
           {!modulos.length ? <Vazio titulo="Nenhum módulo disponível" texto="Confirme com a franqueadora quais módulos estão liberados." /> : null}
           {GRUPOS.map((grupo) => {
             const itens = modulos.filter((modulo) => modulo.grupo === grupo)
@@ -98,7 +78,7 @@ export function ModulosPage() {
             </section>
             )
           })}
-        </div>
+        </div> : null}
       </div>
     </div>
   )
