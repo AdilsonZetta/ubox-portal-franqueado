@@ -24,6 +24,7 @@ export function useRascunhoChecklist(autor: Usuario, modelo: ModeloChecklist, pe
     timer: undefined as number | undefined,
     pausada: false,
     indisponivel: false,
+    proteger: false,
     montado: false,
   })
   const atual = useRef(formulario)
@@ -31,7 +32,7 @@ export function useRascunhoChecklist(autor: Usuario, modelo: ModeloChecklist, pe
 
   const gravar = useCallback(function gravar() {
     const f = fila.current
-    if (f.pausada || f.indisponivel || f.gravando || !f.pendente) return
+    if (f.pausada || f.indisponivel || f.proteger || f.gravando || !f.pendente) return
     window.clearTimeout(f.timer)
     f.timer = undefined
     const dados = f.pendente
@@ -79,11 +80,13 @@ export function useRascunhoChecklist(autor: Usuario, modelo: ModeloChecklist, pe
       .catch((erro) => {
         if (!ativo) return
         f.indisponivel = rascunhoIndisponivel(erro)
+        // Sem a leitura, um salvamento gravaria o formulário vazio por cima do rascunho.
+        f.proteger = !f.indisponivel
         setStatus(f.indisponivel ? INDISPONIVEL : 'Não foi possível recuperar as respostas salvas.')
       })
       .finally(() => ativo && setCarregando(false))
     const gravarPendentes = () => {
-      if (!f.pendente || f.pausada || f.indisponivel) return
+      if (!f.pendente || f.pausada || f.indisponivel || f.proteger) return
       window.clearTimeout(f.timer)
       f.timer = undefined
       if (f.gravando) void f.gravando.then(gravar)
@@ -111,7 +114,7 @@ export function useRascunhoChecklist(autor: Usuario, modelo: ModeloChecklist, pe
     const dados = alterar(atual.current)
     atual.current = dados
     setFormulario(dados)
-    if (f.indisponivel) return
+    if (f.indisponivel || f.proteger) return
     f.pendente = dados
     setStatus('Salvando…')
     window.clearTimeout(f.timer)
