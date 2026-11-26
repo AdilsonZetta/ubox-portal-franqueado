@@ -1,5 +1,5 @@
 // Módulo 9: Acompanhamento do Franqueado. Lógica pura (sem Firebase), testada no Vitest.
-import { calcularTotais, modeloServeUnidade, situacaoModelo, type ModeloChecklist, type Resposta } from './checklist'
+import { calcularTotais, modeloServeUnidade, situacaoModelo, vigenciaDe, type VigenciaChecklist, type ModeloChecklist, type Resposta } from './checklist'
 import { acaoAtrasada, type StatusAcao } from './auditoria'
 import { calcularPrazoChamado, type EntradaPrazo } from '../data/chamados'
 
@@ -140,6 +140,7 @@ export function resumirUnidade(
   unidade: { id: string; modulosLiberados: string[] },
   f: Fontes,
   agoraMs: number,
+  vigenciasChecklist: VigenciaChecklist[] = [],
 ): ResumoUnidade {
   const da = <T extends { unidadeId: string }>(l: T[] | null) => (l ? l.filter((x) => x.unidadeId === unidade.id) : null)
 
@@ -152,7 +153,7 @@ export function resumirUnidade(
     media: scores?.length ? Math.round(scores.reduce((s, x) => s + x, 0) / scores.length) : null,
     execucoes: recentes?.length ?? null,
     atrasados: !aplica ? 0 : execs && f.modelosChecklist
-      ? f.modelosChecklist.filter((m) => modeloServeUnidade(m, unidade.id) && situacaoModelo(m, execs, agoraMs).situacao === 'atrasado').length
+      ? f.modelosChecklist.filter((m) => modeloServeUnidade(m, unidade.id) && situacaoModelo(m, execs, agoraMs, vigenciaDe(vigenciasChecklist, m.id, unidade.id)).situacao === 'atrasado').length
       : null,
   }
 

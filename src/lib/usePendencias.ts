@@ -6,8 +6,8 @@ import { acaoAtrasada, daUnidade, podeGerirAuditoria } from './auditoria'
 import { listarAcoes } from './auditoriaApi'
 import { useAuth } from './auth'
 import { observarChamados, prazoDoChamado } from './chamados'
-import { fazChecklist, inicioPeriodo, situacaoModelo } from './checklist'
-import { listarExecucoes, listarModelos } from './checklistApi'
+import { fazChecklist, inicioHistoricoVigencias, inicioPeriodo, situacaoModelo, vigenciaDe } from './checklist'
+import { listarExecucoes, listarModelos, listarVigencias } from './checklistApi'
 import { fazCliente, hojeISO, situacao } from './cliente'
 import { carregarClientes, carregarCobrancasDaUnidade } from './clienteApi'
 import { fazCrm, followUps } from './crm'
@@ -59,11 +59,15 @@ export function usePendencias() {
     if (unidade && permitido('checklist') && fazChecklist(pessoa)) {
       buscar('checklists', async () => {
         const deMs = inicioPeriodo('diaria', agora) - 62 * 86_400_000
-        const [modelos, execucoes] = await Promise.all([
+        const [modelos, vigencias] = await Promise.all([
           listarModelos(pessoa, false),
-          listarExecucoes(pessoa, false, { deMs }),
+          listarVigencias(pessoa, false),
         ])
-        return modelos.filter((m) => m.ativo && situacaoModelo(m, execucoes, agora).situacao === 'atrasado').length
+        const execucoes = await listarExecucoes(pessoa, false, {
+          deMs: inicioHistoricoVigencias(vigencias, modelos, agora, deMs),
+          maximo: vigencias.length ? Infinity : undefined,
+        })
+        return modelos.filter((m) => m.ativo && situacaoModelo(m, execucoes, agora, vigenciaDe(vigencias, m.id, unidade)).situacao === 'atrasado').length
       })
     }
     if (unidade && permitido('crm') && fazCrm(pessoa)) {

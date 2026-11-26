@@ -5,6 +5,7 @@ import {
   fazChecklist,
   filtrarExecucoes,
   horarioValido,
+  inicioHistoricoVigencias,
   inicioPeriodo,
   liberacaoChecklist,
   itensMudaram,
@@ -17,11 +18,13 @@ import {
   pesoValido,
   podeGerirChecklist,
   porSecao,
+  primeiroVencimentoPadrao,
   respostasIniciais,
   situacaoModelo,
   totaisConferem,
   validarExecucao,
   validarModelo,
+  validarVigencia,
   versaoMuda,
   type ExecucaoChecklist,
   type ItemModelo,
@@ -207,5 +210,64 @@ describe('horário de liberação', () => {
 
   it.each(['', '8:30', '24:00', '08:60', '08:30:00', '08:30 ', '08:30\n', null])('rejeita %j', (horario) => {
     expect(horarioValido(horario)).toBe(false)
+  })
+})
+
+describe('primeiro vencimento por unidade', () => {
+  it.each(['diaria', 'semanal', 'mensal'] as const)('mantém a rotina %s antiga de Aurora pendente até o fim do primeiro vencimento', (frequencia) => {
+    const hoje = new Date(2026, 10, 26, 12).getTime()
+    const amanhaFim = new Date(2026, 10, 27, 23, 59).getTime()
+    const depois = new Date(2026, 10, 28).getTime()
+    const modelo = { id: 'm1', frequencia, criadoEmMs: new Date(2026, 2, 1).getTime() }
+    const vigencia = { inicio: '2026-11-26', primeiroVencimento: '2026-11-27' }
+    const feita = [{ modeloId: modelo.id, criadoEmMs: hoje }]
+
+    expect(situacaoModelo(modelo, [], hoje).situacao).toBe('atrasado')
+    expect(situacaoModelo(modelo, [], hoje, vigencia)).toMatchObject({
+      situacao: 'pendente', venceEmMs: depois, primeiroVencimentoMs: depois, aguardandoInicio: false,
+    })
+    expect(situacaoModelo(modelo, [], amanhaFim, vigencia).situacao).toBe('pendente')
+    expect(situacaoModelo(modelo, [], depois, vigencia).situacao).toBe('atrasado')
+    expect(situacaoModelo(modelo, feita, depois, vigencia).situacao).toBe(frequencia === 'diaria' ? 'pendente' : 'em_dia')
+  })
+})
+
+describe('datas e transição da vigência', () => {
+  it('mostra a data inicial futura e ignora execuções anteriores ao início', () => {
+    const modelo = { id: 'm1', frequencia: 'semanal' as const, criadoEmMs: new Date(2026, 1, 1).getTime() }
+    const vigencia = { inicio: '2026-11-26', primeiroVencimento: '2026-11-29' }
+    const antiga = [{ modeloId: 'm1', criadoEmMs: new Date(2026, 10, 25, 12).getTime() }]
+    expect(situacaoModelo(modelo, antiga, new Date(2026, 10, 25, 18).getTime(), vigencia)).toMatchObject({
+      situacao: 'pendente', aguardandoInicio: true, ultimaMs: null, venceEmMs: new Date(2026, 10, 30).getTime(),
+    })
+    expect(situacaoModelo(modelo, antiga, new Date(2026, 10, 30).getTime(), vigencia).situacao).toBe('atrasado')
+  })
+
+  it('usa execuções de uma janela inicial longa e depois volta aos períodos regulares', () => {
+    const modelo = { id: 'm1', frequencia: 'mensal' as const, criadoEmMs: 0 }
+    const inicio = new Date(2026, 5, 1).getTime()
+    const vigencia = {
+      id: 'v1', modeloId: 'm1', unidadeId: 'aurora', registradoPorNome: 'Ana', registradoEmMs: inicio,
+      inicio: '2026-06-01', primeiroVencimento: '2026-11-27',
+    }
+    const execucoes = [{ modeloId: 'm1', criadoEmMs: inicio }]
+    const depois = new Date(2026, 10, 28).getTime()
+    const dezembro = new Date(2026, 11, 1).getTime()
+    const janeiro = new Date(2027, 0, 1).getTime()
+    const deMs = new Date(2026, 9, 1).getTime()
+    expect(inicioHistoricoVigencias([vigencia], [modelo], depois, deMs)).toBe(inicio)
+    expect(situacaoModelo(modelo, execucoes, depois, vigencia).situacao).toBe('em_dia')
+    expect(situacaoModelo(modelo, execucoes, dezembro, vigencia).situacao).toBe('pendente')
+    expect(situacaoModelo(modelo, execucoes, janeiro, vigencia).situacao).toBe('atrasado')
+    expect(inicioHistoricoVigencias([vigencia], [modelo], janeiro, deMs)).toBe(deMs)
+  })
+
+  it('valida datas de calendário e sugere o fim do período que contém o início', () => {
+    expect(validarVigencia({ inicio: '2026-02-30', primeiroVencimento: '2026-03-02' }, '2026-03-01')).toHaveLength(1)
+    expect(validarVigencia({ inicio: '2026-03-03', primeiroVencimento: '2026-03-02' }, '2026-03-01')).toHaveLength(1)
+    expect(validarVigencia({ inicio: '2026-03-01', primeiroVencimento: '2026-03-01' }, '2026-03-02')).toEqual([])
+    expect(primeiroVencimentoPadrao('diaria', '2026-12-31')).toBe('2026-12-31')
+    expect(primeiroVencimentoPadrao('semanal', '2026-12-31')).toBe('2027-01-03')
+    expect(primeiroVencimentoPadrao('mensal', '2028-02-12')).toBe('2028-02-29')
   })
 })

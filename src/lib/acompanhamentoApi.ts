@@ -1,3 +1,4 @@
+import type { VigenciaChecklist } from './checklist'
 import { BACKEND } from './backend'
 import {
   carregarAcompanhamentoSb,
@@ -91,6 +92,8 @@ async function seguro<T>(p: Promise<T>): Promise<T | null> {
 
 export interface DadosAcompanhamento {
   fontes: Fontes
+  /** Início e primeiro vencimento das rotinas por unidade (etapa 04). Vazio no Firebase ou sem a migração. */
+  vigenciasChecklist?: VigenciaChecklist[]
   registros: RegistroAc[]
   passos: PassoAc[]
 }

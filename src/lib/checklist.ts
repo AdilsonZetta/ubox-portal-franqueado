@@ -290,29 +290,117 @@ export function periodoAnterior(freq: Exclude<Frequencia, 'avulsa'>, inicioMs: n
   return new Date(d.getFullYear(), d.getMonth() - 1, 1).getTime()
 }
 
+export interface VigenciaChecklist {
+  id: string
+  modeloId: string
+  unidadeId: string
+  inicio: string // YYYY-MM-DD
+  primeiroVencimento: string // YYYY-MM-DD
+  registradoPorNome: string
+  registradoEmMs: number
+}
+
+type DatasVigencia = Pick<VigenciaChecklist, 'inicio' | 'primeiroVencimento'>
+type FrequenciaRecorrente = Exclude<Frequencia, 'avulsa'>
+
+function dataISOlocal(data: Date): string {
+  const ano = String(data.getFullYear()).padStart(4, '0')
+  const mes = String(data.getMonth() + 1).padStart(2, '0')
+  const dia = String(data.getDate()).padStart(2, '0')
+  return `${ano}-${mes}-${dia}`
+}
+
+export function dataLocalMs(iso: string): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso) || iso.startsWith('0000')) return NaN
+  const data = new Date(`${iso}T00:00:00`)
+  return dataISOlocal(data) === iso ? data.getTime() : NaN
+}
+
+/** Limite exclusivo do período, em horário local. */
+export function fimPeriodo(freq: FrequenciaRecorrente, inicioMs: number): number {
+  const d = new Date(inicioMs)
+  if (freq === 'mensal') d.setMonth(d.getMonth() + 1, 1)
+  else d.setDate(d.getDate() + (freq === 'semanal' ? 7 : 1))
+  return d.setHours(0, 0, 0, 0)
+}
+
+export function vigenciaDe(vigencias: VigenciaChecklist[], modeloId: string, unidadeId: string) {
+  return vigencias.find((v) => v.modeloId === modeloId && v.unidadeId === unidadeId)
+}
+
+export function validarVigencia({ inicio, primeiroVencimento }: DatasVigencia, _hojeISO: string): string[] {
+  const erros: string[] = []
+  if (!Number.isFinite(dataLocalMs(inicio))) erros.push('Informe uma data válida para o início da responsabilidade.')
+  if (!Number.isFinite(dataLocalMs(primeiroVencimento))) erros.push('Informe uma data válida para o primeiro vencimento.')
+  if (!erros.length && primeiroVencimento < inicio) erros.push('O primeiro vencimento deve ser na data de início ou depois.')
+  return erros
+}
+
+export function primeiroVencimentoPadrao(freq: Frequencia, inicioISO: string): string {
+  const inicio = dataLocalMs(inicioISO)
+  if (!Number.isFinite(inicio)) return ''
+  if (freq === 'avulsa') return inicioISO
+  return dataISOlocal(new Date(fimPeriodo(freq, inicioPeriodo(freq, inicio)) - 1))
+}
+
+/** Amplia o histórico enquanto uma execução na primeira janela ainda pode valer. */
+export function inicioHistoricoVigencias(
+  vigencias: VigenciaChecklist[], modelos: Pick<ModeloChecklist, 'id' | 'frequencia'>[], agoraMs: number, deMs: number,
+): number {
+  const frequencias = new Map(modelos.map((m) => [m.id, m.frequencia]))
+  for (const v of vigencias) {
+    const freq = frequencias.get(v.modeloId)
+    if (!freq || freq === 'avulsa') continue
+    const anterior = periodoAnterior(freq, inicioPeriodo(freq, agoraMs))
+    if (anterior < fimPeriodo('diaria', dataLocalMs(v.primeiroVencimento))) {
+      deMs = Math.min(deMs, dataLocalMs(v.inicio))
+    }
+  }
+  return deMs
+}
+
 export const ROTULO_PERIODO: Record<Exclude<Frequencia, 'avulsa'>, string> = { diaria: 'hoje', semanal: 'nesta semana', mensal: 'neste mês' }
 
 export type Situacao = 'em_dia' | 'pendente' | 'atrasado' | 'avulso'
 export const ROTULO_SITUACAO: Record<Situacao, string> = { em_dia: 'Em dia', pendente: 'Pendente', atrasado: 'Atrasado', avulso: 'Avulso' }
 
-/**
- * Em dia: feito no período atual. Pendente: falta no período atual, mas o anterior foi feito
- * (ou o modelo é mais novo que o período anterior). Atrasado: o período anterior ficou sem execução.
- */
 export function situacaoModelo(
   modelo: Pick<ModeloChecklist, 'id' | 'frequencia' | 'criadoEmMs'>,
   execucoes: Pick<ExecucaoChecklist, 'modeloId' | 'criadoEmMs'>[],
   agoraMs: number,
-): { situacao: Situacao; ultimaMs: number | null } {
-  const doModelo = execucoes.filter((e) => e.modeloId === modelo.id)
-  const ultimaMs = doModelo.length ? Math.max(...doModelo.map((e) => e.criadoEmMs)) : null
-  if (modelo.frequencia === 'avulsa') return { situacao: 'avulso', ultimaMs }
-  const atual = inicioPeriodo(modelo.frequencia, agoraMs)
-  if (doModelo.some((e) => e.criadoEmMs >= atual)) return { situacao: 'em_dia', ultimaMs }
-  const anterior = periodoAnterior(modelo.frequencia, atual)
-  const anteriorFeito = doModelo.some((e) => e.criadoEmMs >= anterior && e.criadoEmMs < atual)
-  if (anteriorFeito || modelo.criadoEmMs >= atual) return { situacao: 'pendente', ultimaMs }
-  return { situacao: 'atrasado', ultimaMs }
+  vigencia?: DatasVigencia | null,
+): { situacao: Situacao; ultimaMs: number | null; venceEmMs: number | null; primeiroVencimentoMs: number | null; aguardandoInicio: boolean } {
+  const freq = modelo.frequencia
+  const inicio = vigencia && freq !== 'avulsa' ? dataLocalMs(vigencia.inicio) : -Infinity
+  const doModelo = execucoes.filter((e) => e.modeloId === modelo.id && e.criadoEmMs >= inicio)
+  const ultimaMs = doModelo.reduce<number | null>((ultima, e) => Math.max(ultima ?? -Infinity, e.criadoEmMs), null)
+  const padrao = { ultimaMs, venceEmMs: null, primeiroVencimentoMs: null, aguardandoInicio: false }
+  if (freq === 'avulsa') return { ...padrao, situacao: 'avulso' }
+
+  const atual = inicioPeriodo(freq, agoraMs)
+  const anterior = periodoAnterior(freq, atual)
+  const regular = { ...padrao, venceEmMs: fimPeriodo(freq, atual) }
+  const feita = (de: number, ate = Infinity) => doModelo.some((e) => e.criadoEmMs >= de && e.criadoEmMs < ate)
+
+  if (!vigencia) {
+    if (feita(atual)) return { ...regular, situacao: 'em_dia' }
+    return { ...regular, situacao: feita(anterior, atual) || modelo.criadoEmMs >= atual ? 'pendente' : 'atrasado' }
+  }
+
+  const primeiroVencimentoMs = fimPeriodo('diaria', dataLocalMs(vigencia.primeiroVencimento))
+  if (agoraMs < primeiroVencimentoMs) {
+    const aguardandoInicio = agoraMs < inicio
+    return {
+      ...padrao, aguardandoInicio, primeiroVencimentoMs, venceEmMs: primeiroVencimentoMs,
+      situacao: !aguardandoInicio && feita(inicio, primeiroVencimentoMs) ? 'em_dia' : 'pendente',
+    }
+  }
+  if (atual < primeiroVencimentoMs) {
+    return { ...regular, situacao: doModelo.some((e) => e.criadoEmMs <= agoraMs) ? 'em_dia' : 'atrasado' }
+  }
+  if (feita(atual)) return { ...regular, situacao: 'em_dia' }
+  const janelaAnterior = anterior >= primeiroVencimentoMs ? anterior : inicio
+  return { ...regular, situacao: feita(janelaAnterior, atual) ? 'pendente' : 'atrasado' }
 }
 
 export interface NaoConformidade {
