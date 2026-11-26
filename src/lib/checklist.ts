@@ -38,6 +38,7 @@ export interface ModeloChecklist {
   descricao: string
   tipo: TipoChecklist
   frequencia: Frequencia
+  horarioLiberacao?: string | null
   itens: ItemModelo[]
   totalItens: number
   pesoTotal: number
@@ -95,6 +96,27 @@ export interface ExecucaoChecklist extends Totais {
   obsProprietarioNome: string
   obsProprietarioEmMs: number
   criadoEmMs: number
+}
+
+const HORA_BRASILIA = new Intl.DateTimeFormat('pt-BR', {
+  timeZone: 'America/Sao_Paulo',
+  hourCycle: 'h23',
+  hour: '2-digit',
+  minute: '2-digit',
+})
+
+export function horarioValido(h: unknown): h is string {
+  return typeof h === 'string' && /^([01][0-9]|2[0-3]):[0-5][0-9]$/.test(h)
+}
+
+export function liberacaoChecklist(
+  modelo: Pick<ModeloChecklist, 'horarioLiberacao'>,
+  agora: Date,
+): { liberado: boolean; horario: string | null } {
+  const horario = modelo.horarioLiberacao
+  if (!horarioValido(horario)) return { liberado: true, horario: null }
+  // HH:MM tem largura fixa e ordena da mesma forma que os minutos do dia.
+  return { liberado: HORA_BRASILIA.format(agora) >= horario, horario }
 }
 
 const DIA = 86_400_000
@@ -180,6 +202,7 @@ export function validarExecucao(modelo: Pick<ModeloChecklist, 'itens'>, resposta
 }
 
 export interface ModeloForm {
+  horarioLiberacao?: string | null
   titulo: string
   descricao: string
   tipo: TipoChecklist
@@ -194,6 +217,9 @@ export interface ModeloForm {
 
 export function validarModelo(f: ModeloForm): string[] {
   const erros: string[] = []
+  if (f.horarioLiberacao != null && !horarioValido(f.horarioLiberacao)) {
+    erros.push('Informe um horário de liberação válido no formato HH:MM.')
+  }
   if (f.titulo.trim().length < 2 || f.titulo.trim().length > 120) erros.push('O título precisa ter de 2 a 120 caracteres.')
   if (!f.itens.length) erros.push('Inclua ao menos um item.')
   if (f.itens.length > MAX_ITENS) erros.push(`Um checklist aceita até ${MAX_ITENS} itens.`)

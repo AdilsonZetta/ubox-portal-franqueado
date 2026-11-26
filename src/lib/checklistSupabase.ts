@@ -26,6 +26,7 @@ function dataSb(valor: unknown): number {
 export function mapModeloSb(linha: Linha) {
   return mapModelo(linha.id, {
     ...linha,
+    horarioLiberacao: linha.horario_liberacao,
     totalItens: linha.total_itens,
     pesoTotal: linha.peso_total,
     geradoPorIA: linha.gerado_por_ia,
@@ -117,6 +118,7 @@ export function salvarModeloSb(existente: ModeloChecklist | null, f: ModeloForm)
     descricao: f.descricao.trim().slice(0, 1000),
     tipo: f.tipo,
     frequencia: f.frequencia,
+    ...(f.horarioLiberacao === undefined ? {} : { horario_liberacao: f.horarioLiberacao }),
     itens,
     total_itens: itens.length,
     peso_total: pesoTotal,

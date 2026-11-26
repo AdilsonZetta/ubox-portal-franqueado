@@ -30,6 +30,7 @@ import {
   RESULTADOS,
   TIPOS_CHECKLIST,
   calcularTotais,
+  horarioValido,
   normalizarItem,
   pesoTotalDe,
   pesoValido,
@@ -81,6 +82,7 @@ export function mapModelo(id: string, d: DocumentData): ModeloChecklist {
     descricao: texto(d.descricao),
     tipo: umDe(TIPOS_CHECKLIST, d.tipo, 'outro'),
     frequencia: umDe(FREQUENCIAS, d.frequencia, 'avulsa'),
+    horarioLiberacao: horarioValido(d.horarioLiberacao) ? d.horarioLiberacao : null,
     itens,
     totalItens: numero(d.totalItens),
     pesoTotal: numero(d.pesoTotal),
@@ -149,7 +151,10 @@ export async function lerModelo(id: string): Promise<ModeloChecklist | null> {
 }
 
 export async function salvarModelo(autor: Usuario, existente: ModeloChecklist | null, f: ModeloForm): Promise<string> {
-  if (BACKEND === 'supabase') return salvarModeloSb(existente, f)
+  if (BACKEND === 'supabase') {
+    return salvarModeloSb(existente, { ...f, horarioLiberacao: autor.papel === 'admin' ? f.horarioLiberacao : undefined })
+  }
+  // A lista de chaves permitidas nas regras do Firestore exclui horarioLiberacao.
   const banco = requireDb()
   const ref = existente ? doc(banco, 'checklistModelos', existente.id) : doc(collection(banco, 'checklistModelos'))
   const itens = f.itens.map(normalizarItem)

@@ -6,6 +6,15 @@ import { listarExecucoes, listarModelos, type ConsultaExecucoes } from '../../li
 import { useVisao } from '../../lib/visao'
 import type { Usuario } from '../../types'
 
+export function useRelogioChecklist() {
+  const [agora, setAgora] = useState(Date.now)
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setAgora(Date.now()), 30_000)
+    return () => window.clearInterval(intervalo)
+  }, [])
+  return agora
+}
+
 export interface DadosChecklist {
   pessoa: Usuario | null
   gestor: boolean
