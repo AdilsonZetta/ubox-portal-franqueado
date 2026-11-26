@@ -23,18 +23,21 @@ import {
   pesoTotalDe,
   situacaoModelo,
   validarModelo,
+  vigenciaDe,
   type ModeloChecklist,
   type ModeloForm,
 } from '../../lib/checklist'
-import { salvarModelo } from '../../lib/checklistApi'
+import { salvarModelo, VIGENCIA_DISPONIVEL } from '../../lib/checklistApi'
+import { listarUnidadesChecklistSb } from '../../lib/checklistSupabase'
 import { useVisao } from '../../lib/visao'
 import { Filtros, useFiltros } from './Historico'
 import { ListaNaoConformidades, ScoreSelo, SituacaoSelo } from './partes'
 import { ListaHistorico } from './ListaHistorico'
-import { useChecklist } from './useChecklist'
+import { useChecklist, useRelogioChecklist } from './useChecklist'
+import { VigenciasUnidade } from './VigenciasUnidade'
 
-type Aba = 'modelos' | 'execucoes' | 'nc' | 'pendencias'
-const ROTULO_ABA: Record<Aba, string> = { modelos: 'Modelos', execucoes: 'Execuções', nc: 'Não conformidades', pendencias: 'Pendências da rede' }
+type Aba = 'modelos' | 'execucoes' | 'nc' | 'pendencias' | 'vigencias'
+const ROTULO_ABA: Record<Aba, string> = { modelos: 'Modelos', execucoes: 'Execuções', nc: 'Não conformidades', pendencias: 'Pendências da rede', vigencias: 'Vigência por unidade' }
 const DIA = 86_400_000
 
 const formVazio: ModeloForm = {
@@ -51,20 +54,30 @@ function paraForm(m: ModeloChecklist): ModeloForm {
   }
 }
 
-/** Admin lê todas as unidades; a equipe da franqueadora usa as unidades que aparecem nas execuções. */
-function useUnidades(ehAdmin: boolean, vistas: { unidadeId: string; unidadeNome: string }[]) {
+function useUnidades(ehAdmin: boolean, gestor: boolean, vistas: { unidadeId: string; unidadeNome: string }[]) {
   const [unidades, setUnidades] = useState<{ id: string; nome: string; checklist: boolean }[]>([])
+  const [carregando, setCarregando] = useState(gestor && (ehAdmin || VIGENCIA_DISPONIVEL))
+  const [erro, setErro] = useState('')
+  const [tique, setTique] = useState(0)
   useEffect(() => {
-    if (!ehAdmin) return
-    void listarUnidades()
-      .then((lista) => setUnidades(lista.filter((u) => u.ativo).map((u) => ({ id: u.id, nome: u.nome, checklist: u.modulosLiberados.includes('checklist') }))))
-      .catch(() => undefined)
-  }, [ehAdmin])
-  return useMemo(() => {
+    if (!gestor || (!ehAdmin && !VIGENCIA_DISPONIVEL)) return
+    let ativo = true
+    setCarregando(true)
+    setErro('')
+    const consulta = ehAdmin
+      ? listarUnidades().then((lista) => lista.filter((u) => u.ativo).map((u) => ({ id: u.id, nome: u.nome, checklist: u.modulosLiberados.includes('checklist') })))
+      : listarUnidadesChecklistSb().then((lista) => (lista ?? []).map((u) => ({ ...u, checklist: true })))
+    void consulta.then((lista) => { if (ativo) setUnidades(lista) })
+      .catch(() => { if (ativo) setErro('Não foi possível carregar a lista de unidades.') })
+      .finally(() => { if (ativo) setCarregando(false) })
+    return () => { ativo = false }
+  }, [ehAdmin, gestor, tique])
+  const lista = useMemo(() => {
     const mapa = new Map(unidades.map((u) => [u.id, u]))
     for (const v of vistas) if (v.unidadeId && !mapa.has(v.unidadeId)) mapa.set(v.unidadeId, { id: v.unidadeId, nome: v.unidadeNome || v.unidadeId, checklist: true })
     return [...mapa.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
   }, [unidades, vistas])
+  return { lista, carregando, erro, recarregar: () => setTique((t) => t + 1) }
 }
 
 export function GestaoChecklistPage() {
@@ -74,8 +87,14 @@ export function GestaoChecklistPage() {
   const aba = (Object.keys(ROTULO_ABA).includes(params.get('aba') ?? '') ? params.get('aba') : 'modelos') as Aba
   const f = useFiltros(30)
   const [unidadeId, setUnidadeId] = useState('')
-  const dados = useChecklist({ unidadeId: unidadeId || undefined, deMs: f.deMs, ateMs: f.ateMs, maximo: 500 })
-  const unidades = useUnidades(ehAdmin, dados.execucoes)
+  const agora = useRelogioChecklist()
+  const abaVigencias = aba === 'vigencias' && VIGENCIA_DISPONIVEL
+  const dados = useChecklist(abaVigencias
+    ? { deMs: inicioPeriodo('diaria', agora) - 62 * DIA, maximo: 1000 }
+    : { unidadeId: unidadeId || undefined, deMs: f.deMs, ateMs: f.ateMs, maximo: 500 }, abaVigencias)
+  const fonteUnidades = useUnidades(ehAdmin, dados.gestor, dados.execucoes)
+  const unidades = fonteUnidades.lista
+  const [sugerirVigencia, setSugerirVigencia] = useState(false)
   const [editando, setEditando] = useState<ModeloChecklist | null>(null)
   const [form, setForm] = useState<ModeloForm | null>(null)
   const [salvando, setSalvando] = useState(false)
@@ -108,6 +127,7 @@ export function GestaoChecklistPage() {
   async function gravar() {
     if (!user || !form || salvando) return
     setOk('')
+    setSugerirVigencia(false)
     const erros = validarModelo(form)
     if (erros.length) {
       setErro(erros.join(' '))
@@ -117,6 +137,8 @@ export function GestaoChecklistPage() {
     setErro('')
     try {
       await salvarModelo(user, editando, form)
+      setSugerirVigencia(VIGENCIA_DISPONIVEL && Boolean(editando) && form.ativo && form.frequencia !== 'avulsa' &&
+        form.unidades.some((id) => !editando?.unidades.includes(id)))
       setOk(editando ? 'Modelo atualizado. Se os itens mudaram, a versão subiu e as execuções antigas guardam a versão que usaram.' : 'Modelo criado.')
       setForm(null)
       setEditando(null)
@@ -137,13 +159,13 @@ export function GestaoChecklistPage() {
           <p className="mt-0.5 max-w-2xl text-sm text-muted">Monte os modelos, acompanhe as execuções e o score das unidades, as não conformidades e quem está atrasado.</p>
         </div>
         <div className="flex flex-wrap rounded-xl border border-line bg-surface p-1" role="tablist" aria-label="Seções da gestão">
-          {(Object.keys(ROTULO_ABA) as Aba[]).map((item) => (
+          {(Object.keys(ROTULO_ABA) as Aba[]).filter((item) => item !== 'vigencias' || VIGENCIA_DISPONIVEL).map((item) => (
             <button
               key={item}
               type="button"
               role="tab"
               aria-selected={aba === item}
-              onClick={() => { setParams({ aba: item }); setErro(''); setOk('') }}
+              onClick={() => { setParams({ aba: item }); setErro(''); setOk(''); setSugerirVigencia(false) }}
               className={cx('rounded-lg px-3 py-1.5 text-sm font-semibold', aba === item ? 'bg-ink text-white' : 'text-muted hover:text-ink')}
             >
               {ROTULO_ABA[item]}
@@ -153,6 +175,12 @@ export function GestaoChecklistPage() {
       </header>
 
       {ok ? <Aviso tom="ok">{ok}</Aviso> : null}
+      {!VIGENCIA_DISPONIVEL && aba === 'modelos' ? <Aviso>Vigência por unidade disponível apenas no backend Supabase.</Aviso> : null}
+      {sugerirVigencia && aba === 'modelos' ? (
+        <Aviso>Defina o primeiro vencimento para as unidades adicionadas em{' '}
+          <button type="button" className="font-semibold underline" onClick={() => setParams({ aba: 'vigencias' })}>Vigência por unidade</button>.
+        </Aviso>
+      ) : null}
       {dados.erro ? <Aviso tom="erro"><p role="alert">{dados.erro}</p><Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button></Aviso> : null}
       {dados.carregando ? <Carregando texto="Carregando…" /> : null}
 
@@ -318,27 +346,41 @@ export function GestaoChecklistPage() {
       ) : null}
 
       {aba === 'pendencias' ? <PendenciasRede ehAdmin={ehAdmin} /> : null}
+      {abaVigencias ? <VigenciasUnidade dados={dados} unidades={fonteUnidades} agora={agora} /> : null}
+      {aba === 'vigencias' && !VIGENCIA_DISPONIVEL ? <Aviso>Disponível apenas no backend Supabase.</Aviso> : null}
 
     </div>
   )
 }
 
 function PendenciasRede({ ehAdmin }: { ehAdmin: boolean }) {
-  const agora = Date.now()
-  const dados = useChecklist({ deMs: inicioPeriodo('diaria', agora) - 62 * DIA, maximo: 1000 })
-  const unidades = useUnidades(ehAdmin, dados.execucoes).filter((u) => u.checklist)
+  const agora = useRelogioChecklist()
+  const dados = useChecklist({ deMs: inicioPeriodo('diaria', agora) - 62 * DIA, maximo: 1000 }, true)
+  const fonteUnidades = useUnidades(ehAdmin, dados.gestor, dados.execucoes)
+  const unidades = fonteUnidades.lista.filter((u) => u.checklist)
   const recorrentes = dados.modelos.filter((m) => m.ativo && m.frequencia !== 'avulsa')
-  if (dados.carregando) return <Carregando texto="Calculando pendências…" />
-  if (dados.erro) return null
+  if (dados.carregando || fonteUnidades.carregando) return <Carregando texto="Calculando pendências…" />
+  if (dados.erro || fonteUnidades.erro) return (
+    <Aviso tom="erro">
+      <p role="alert">{dados.erro || fonteUnidades.erro}</p>
+      <Button type="button" variant="secondary" className="mt-2" onClick={dados.erro ? dados.recarregar : fonteUnidades.recarregar}>Tentar novamente</Button>
+    </Aviso>
+  )
   if (!recorrentes.length) return <Vazio titulo="Nenhum checklist recorrente ativo" texto="Pendências e atrasos valem para checklists diários, semanais e mensais." />
   if (!unidades.length) return <Vazio titulo="Nenhuma unidade para acompanhar" texto="Libere o módulo Checklist para as unidades." />
   return (
     <section className="space-y-2">
       <p className="text-sm text-muted">
-        Atrasado: o período anterior ficou sem checklist. Pendente: ainda falta no período atual. Baseado nos últimos 2 meses.
-        {!ehAdmin ? ' Como equipe da franqueadora, você vê as unidades que já enviaram checklists.' : ''}
+        Quando há um primeiro vencimento, a rotina fica pendente até o fim desse dia se ainda não foi executada. No calendário regular, o atraso indica que faltou a execução no período anterior.
+        {!ehAdmin && !VIGENCIA_DISPONIVEL ? ' Como equipe da franqueadora, você vê as unidades que já enviaram checklists.' : ''}
       </p>
-      <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+      {dados.erroVigencias ? (
+        <Aviso tom="erro">
+          <p role="alert">Não foi possível carregar os primeiros vencimentos.</p>
+          <Button type="button" variant="secondary" className="mt-2" onClick={dados.recarregar}>Tentar novamente</Button>
+        </Aviso>
+      ) : null}
+      <div className="overflow-x-auto rounded-2xl border border-line bg-surface" tabIndex={0} role="region" aria-label="Pendências por unidade">
         <table className="w-full text-left text-sm">
           <thead className="bg-paper text-xs uppercase tracking-wide text-muted">
             <tr>
@@ -354,10 +396,14 @@ function PendenciasRede({ ehAdmin }: { ehAdmin: boolean }) {
                   <td className="px-4 py-2.5 font-medium">{u.nome}</td>
                   {recorrentes.map((m) => {
                     if (!modeloServeUnidade(m, u.id)) return <td key={m.id} className="px-4 py-2.5 text-ink/30">—</td>
-                    const s = situacaoModelo(m, daUnidade, agora)
+                    const v = vigenciaDe(dados.vigencias, m.id, u.id)
+                    const s = situacaoModelo(m, daUnidade, agora, v)
                     return (
                       <td key={m.id} className="px-4 py-2.5">
                         <SituacaoSelo situacao={s.situacao} />
+                        {v && s.primeiroVencimentoMs !== null ? (
+                          <span className="block text-xs text-ink-soft">1º venc. {v.primeiroVencimento.slice(5).split('-').reverse().join('/')}</span>
+                        ) : null}
                         <span className="block text-[11px] text-muted">{s.ultimaMs ? formatarData(s.ultimaMs) : 'nunca'}</span>
                       </td>
                     )

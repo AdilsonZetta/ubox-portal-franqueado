@@ -48,7 +48,7 @@ export function VisaoRedePage() {
     if (!dados) return []
     const agora = Date.now()
     return unidades.map((u) => {
-      const resumo = resumirUnidade(u, dados.fontes, agora)
+      const resumo = resumirUnidade(u, dados.fontes, agora, dados.vigenciasChecklist)
       const sinais = sinaisSaude(resumo, agora)
       return { u, resumo, sinais, saude: saudeDe(sinais), motivo: motivoSaude(sinais) }
     })

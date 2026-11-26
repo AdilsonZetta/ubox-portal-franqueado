@@ -102,7 +102,7 @@ function PainelUnidade({ id }: { id: string }) {
   if (!gestor) return <Navigate to="/" replace />
 
   const agora = Date.now()
-  const resumo = unidade && dados ? resumirUnidade(unidade, dados.fontes, agora) : null
+  const resumo = unidade && dados ? resumirUnidade(unidade, dados.fontes, agora, dados.vigenciasChecklist) : null
   const sinais = resumo ? sinaisSaude(resumo, agora) : []
   const saude = saudeDe(sinais)
   const motivo = motivoSaude(sinais)

@@ -46,6 +46,10 @@ describe('Acompanhamento no Supabase', () => {
     const tabelas: Record<string, Record<string, unknown>[]> = {
       checklist_modelos: [{ id: 'modelo' }],
       checklist_execucoes: [{ id: 'exec', unidade_id }],
+      checklist_vigencias: [{
+        id: 'vigencia', modelo_id: 'modelo', unidade_id, inicio: '2026-11-26',
+        primeiro_vencimento: '2026-11-27', registrado_por_nome: 'Consultora', registrado_em: data,
+      }],
       auditorias: [
         { id: 'aud', unidade_id, status: 'concluida' },
         { id: 'rascunho', unidade_id, status: 'rascunho' },
@@ -62,6 +66,7 @@ describe('Acompanhamento no Supabase', () => {
       acompanhamento_passos: [{ id: 'tarde', prazo: '2026-12-01T12:00:00Z', unidade_id }, { id: 'cedo', prazo: data, unidade_id }],
     }
     let fonteIndisponivel: string | undefined
+    let migracaoPendente = false
     from.mockImplementation((tabela: string) => {
       let linhas = tabelas[tabela]
       const consulta = {
@@ -80,7 +85,9 @@ describe('Acompanhamento no Supabase', () => {
         then: (resolver: (resposta: { count: number; error: null }) => void) => resolver({ count: linhas.length, error: null }),
         overrideTypes: vi.fn(async () => tabela === fonteIndisponivel
           ? { data: null, error: new Error('indisponível') }
-          : { data: linhas, error: null }),
+          : tabela === 'checklist_vigencias' && migracaoPendente
+            ? { data: null, error: { code: 'PGRST205' } }
+            : { data: linhas, error: null }),
       }
       return consulta
     })
@@ -94,6 +101,10 @@ describe('Acompanhamento no Supabase', () => {
       tentativas: [{ cursoId: 'curso' }], cursosPublicados: 1, progresso: [{ documentoId: 'manual' }],
       trilhaManuais: 1, pedidos: [{ id: 'pedido', unidadeId: unidade_id, status: 'aberta' }],
     })
+    expect(painel.vigenciasChecklist).toEqual([{
+      id: 'vigencia', modeloId: 'modelo', unidadeId: unidade_id, inicio: '2026-11-26',
+      primeiroVencimento: '2026-11-27', registradoPorNome: 'Consultora', registradoEmMs: Date.parse(data),
+    }])
     expect(painel.registros.map(({ id }) => id)).toEqual(['novo', 'antigo'])
     expect(painel.passos.map(({ id }) => id)).toEqual(['cedo', 'tarde'])
 
@@ -102,5 +113,10 @@ describe('Acompanhamento no Supabase', () => {
     expect(parcial.fontes.acoes).toBeNull()
     expect(parcial.fontes.auditorias).toEqual(painel.fontes.auditorias)
     expect(parcial.passos).toEqual(painel.passos)
+
+    migracaoPendente = true
+    const semMigracao = await carregarAcompanhamento(unidade_id)
+    expect(semMigracao.vigenciasChecklist).toEqual([])
+    expect(semMigracao.fontes.execucoes).toEqual(painel.fontes.execucoes)
   })
 })

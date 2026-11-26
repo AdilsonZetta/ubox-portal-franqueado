@@ -5,6 +5,9 @@ import {
   lerModeloSb,
   listarExecucoesSb,
   listarModelosSb,
+  listarVigenciasSb,
+  removerVigenciaSb,
+  salvarVigenciasSb,
   salvarModeloSb,
   salvarObsProprietarioSb,
 } from './checklistSupabase'
@@ -255,4 +258,23 @@ export async function salvarObsProprietario(autor: Usuario, id: string, textoObs
     obsProprietarioNome: autor.nome,
     obsProprietarioEm: serverTimestamp(),
   })
+}
+
+export const VIGENCIA_DISPONIVEL = BACKEND === 'supabase'
+
+export async function listarVigencias(pessoa: Pick<Usuario, 'unidadeId'>, comoGestor: boolean, unidadeId?: string) {
+  if (!VIGENCIA_DISPONIVEL) return []
+  const unidade = comoGestor ? unidadeId : pessoa.unidadeId
+  if (!comoGestor && !unidade) return []
+  return listarVigenciasSb(unidade || undefined)
+}
+
+export async function salvarVigencias(...args: Parameters<typeof salvarVigenciasSb>): Promise<void> {
+  if (!VIGENCIA_DISPONIVEL) throw new Error('Disponível apenas no backend Supabase.')
+  await salvarVigenciasSb(...args)
+}
+
+export async function removerVigencia(id: string): Promise<void> {
+  if (!VIGENCIA_DISPONIVEL) throw new Error('Disponível apenas no backend Supabase.')
+  await removerVigenciaSb(id)
 }

@@ -4,8 +4,9 @@ import type { PassoAc, RegistroAc, RegistroForm } from './acompanhamento'
 import { mapPasso, mapRegistro, type DadosAcompanhamento } from './acompanhamentoApi'
 import { mapAcaoSb, mapAuditoriaSb } from './auditoriaSupabase'
 import { mapChamadoSb } from './chamadosSupabase'
-import { mapExecucaoSb, mapModeloSb } from './checklistSupabase'
 import { entradaPrazoChamado } from './chamados'
+import { inicioHistoricoVigencias } from './checklist'
+import { listarVigenciasSb, mapExecucaoSb, mapModeloSb } from './checklistSupabase'
 import { mapProgressoSb } from './manuaisSupabase'
 import { mapPedidoSb } from './marketingSupabase'
 import { requireSupabase } from './supabase'
@@ -90,11 +91,18 @@ function ordenarListas(registros: RegistroAc[], passos: PassoAc[]) {
 
 export async function carregarAcompanhamentoSb(unidadeId?: string): Promise<DadosAcompanhamento> {
   const unidade = (q: Consulta) => unidadeId ? q.eq('unidade_id', unidadeId) : q
-  const inicio = new Date(Date.now() - 62 * 86_400_000).toISOString()
-  const [modelosChecklist, execucoes, auditorias, acoes, chamados, tentativas, cursosPublicados, progresso, trilhaManuais, pedidos, registros, passos] = await Promise.all([
-    seguro(listarLinhas('checklist_modelos').then((linhas) => linhas.map(mapModeloSb))),
-    seguro(listarLinhas('checklist_execucoes', (q) => unidade(q).gte('criado_em', inicio).order('criado_em', { ascending: false }), 3000)
-      .then((linhas) => linhas.map(mapExecucaoSb))),
+  const agora = Date.now()
+  const modelosVisiveis = seguro(listarLinhas('checklist_modelos').then((linhas) => linhas.map(mapModeloSb)))
+  const vigenciasVisiveis = seguro(listarVigenciasSb(unidadeId))
+  const [modelosChecklist, vigenciasChecklist, execucoes, auditorias, acoes, chamados, tentativas, cursosPublicados, progresso, trilhaManuais, pedidos, registros, passos] = await Promise.all([
+    modelosVisiveis,
+    vigenciasVisiveis,
+    seguro(Promise.all([modelosVisiveis, vigenciasVisiveis]).then(([modelos, vigencias]) => {
+      if (!vigencias) return null
+      const desde = inicioHistoricoVigencias(vigencias, modelos ?? [], agora, agora - 62 * 86_400_000)
+      return listarLinhas('checklist_execucoes', (q) => unidade(q).gte('criado_em', new Date(desde).toISOString()).order('criado_em', { ascending: false }), vigencias.length ? Infinity : 3000)
+        .then((linhas) => linhas.map(mapExecucaoSb))
+    })),
     seguro(listarLinhas('auditorias', (q) => unidade(q).in('status', ['aguardando_ciencia', 'concluida']))
       .then((linhas) => linhas.map(mapAuditoriaSb))),
     seguro(listarLinhas('auditoria_acoes', unidade).then((linhas) => linhas.map(mapAcaoSb))),
@@ -112,6 +120,7 @@ export async function carregarAcompanhamentoSb(unidadeId?: string): Promise<Dado
   ])
 
   return {
+    vigenciasChecklist: vigenciasChecklist ?? [],
     fontes: { modelosChecklist, execucoes, auditorias, acoes, chamados, tentativas, cursosPublicados, progresso, trilhaManuais, pedidos, registros, passos },
     ...ordenarListas(registros ?? [], passos ?? []),
   }

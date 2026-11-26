@@ -9,12 +9,13 @@ import {
   type ModeloChecklist,
   type ModeloForm,
   type Resposta,
+  type VigenciaChecklist,
 } from './checklist'
 import { mapExecucao, mapModelo, type ConsultaExecucoes } from './checklistApi'
 import { requireSupabase } from './supabase'
 
 type Linha = Record<string, unknown> & { id: string }
-type Tabela = 'checklist_modelos' | 'checklist_execucoes'
+type Tabela = 'checklist_modelos' | 'checklist_execucoes' | 'checklist_vigencias'
 type Consulta = ReturnType<ReturnType<ReturnType<typeof requireSupabase>['from']>['select']>
 type Unidade = Pick<Usuario, 'unidadeId'>
 
@@ -181,4 +182,59 @@ export function enviarExecucaoSb(autor: Usuario, modelo: ModeloChecklist, respos
 
 export async function salvarObsProprietarioSb(id: string, textoObs: string): Promise<void> {
   await gravarLinha('checklist_execucoes', id, { obs_proprietario: textoObs.trim().slice(0, 2000) })
+}
+
+function tabelaVigenciasAusente(erro: unknown): boolean {
+  if (!erro || typeof erro !== 'object') return false
+  if ('code' in erro && (erro.code === 'PGRST205' || erro.code === '42P01')) return true
+  return 'message' in erro && typeof erro.message === 'string' && erro.message.includes('Could not find the table') && erro.message.includes('checklist_vigencias')
+}
+
+export async function listarVigenciasSb(unidadeId?: string): Promise<VigenciaChecklist[]> {
+  try {
+    const linhas = await listarLinhas('checklist_vigencias', (q) => (unidadeId ? q.eq('unidade_id', unidadeId) : q).order('id'))
+    return linhas.map((linha) => ({
+      id: linha.id,
+      modeloId: String(linha.modelo_id),
+      unidadeId: String(linha.unidade_id),
+      inicio: String(linha.inicio),
+      primeiroVencimento: String(linha.primeiro_vencimento),
+      registradoPorNome: String(linha.registrado_por_nome),
+      registradoEmMs: dataSb(linha.registrado_em),
+    }))
+  } catch (erro) {
+    if (tabelaVigenciasAusente(erro)) return []
+    throw erro
+  }
+}
+
+export async function salvarVigenciasSb(unidadeId: string, modeloIds: string[], inicio: string, primeiroVencimento: string): Promise<void> {
+  if (!modeloIds.length) return
+  const linhas = [...new Set(modeloIds)].map((modeloId) => ({
+    unidade_id: unidadeId,
+    modelo_id: modeloId,
+    inicio,
+    primeiro_vencimento: primeiroVencimento,
+  }))
+  const { error } = await requireSupabase().from('checklist_vigencias')
+    .upsert(linhas, { onConflict: 'modelo_id,unidade_id', defaultToNull: false })
+  if (error) throw error
+}
+
+export async function removerVigenciaSb(id: string): Promise<void> {
+  const { error } = await requireSupabase().from('checklist_vigencias').delete().eq('id', id)
+  if (error) throw error
+}
+
+export async function listarUnidadesChecklistSb(): Promise<{ id: string; nome: string }[] | null> {
+  const unidades: { id: string; nome: string }[] = []
+  for (;;) {
+    const { data, error } = await requireSupabase().rpc('unidades_do_checklist')
+      .order('nome').order('id').range(unidades.length, unidades.length + 499)
+    if (error?.code === 'PGRST202') return null
+    if (error) throw error
+    const pagina = (data ?? []) as { id: string; nome: string }[]
+    unidades.push(...pagina)
+    if (pagina.length < 500) return unidades
+  }
 }

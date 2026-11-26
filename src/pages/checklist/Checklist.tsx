@@ -1,16 +1,18 @@
 import { Link, Navigate } from 'react-router-dom'
 import { ClipboardCheck, History, ShieldAlert } from 'lucide-react'
 import { Aviso, Button, Carregando, Selo, Vazio, cx } from '../../components/ui'
-import { formatarData } from '../../lib/format'
+import { formatarData, formatarDia } from '../../lib/format'
 import {
   ROTULO_FREQ,
   ROTULO_PERIODO,
   ROTULO_TIPO_CK,
+  dataLocalMs,
   inicioPeriodo,
   liberacaoChecklist,
   mediaScore,
   naoConformidades,
   situacaoModelo,
+  vigenciaDe,
   type Situacao,
 } from '../../lib/checklist'
 import { useVisao } from '../../lib/visao'
@@ -25,7 +27,7 @@ export function ChecklistPage() {
   const agora = useRelogioChecklist()
   const instante = new Date(agora)
   // Início do dia (estável entre renderizações) menos ~2 meses: cobre o período anterior do mensal.
-  const dados = useChecklist({ deMs: inicioPeriodo('diaria', agora) - 62 * DIA })
+  const dados = useChecklist({ deMs: inicioPeriodo('diaria', agora) - 62 * DIA }, true)
 
   if (dados.gestor) return <Navigate to="/checklist/gestao" replace />
   if (comoFranqueado && !simulado) return <Aviso>Escolha qual franqueado simular para ver o checklist dessa unidade.</Aviso>
@@ -33,7 +35,10 @@ export function ChecklistPage() {
 
   const cartoes = dados.modelos
     .filter((m) => m.ativo)
-    .map((m) => ({ modelo: m, ...situacaoModelo(m, dados.execucoes, agora), ...liberacaoChecklist(m, instante) }))
+    .map((m) => {
+      const vigencia = vigenciaDe(dados.vigencias, m.id, dados.pessoa?.unidadeId ?? '')
+      return { modelo: m, vigencia, ...situacaoModelo(m, dados.execucoes, agora, vigencia), ...liberacaoChecklist(m, instante) }
+    })
     .sort((a, b) => ORDEM[a.situacao] - ORDEM[b.situacao] || a.modelo.titulo.localeCompare(b.modelo.titulo, 'pt-BR'))
   const atrasados = cartoes.filter((c) => c.situacao === 'atrasado').length
   const pendentes = cartoes.filter((c) => c.situacao === 'pendente').length
@@ -66,7 +71,7 @@ export function ChecklistPage() {
       {!dados.carregando && !dados.erro ? (
         <>
           <section aria-label="Resumo" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Resumo titulo="Atrasados" valor={atrasados} destaque={atrasados > 0} texto="Período anterior sem checklist" />
+            <Resumo titulo="Atrasados" valor={atrasados} destaque={atrasados > 0} texto="Prazo anterior sem execução" />
             <Resumo titulo="Pendentes" valor={pendentes} texto="Ainda falta no período atual" />
             <Resumo titulo="Não conformidades" valor={ncs30} texto="Itens Não OK nos últimos 30 dias" destaque={ncs30 > 0} />
             <div className="rounded-2xl border border-line bg-surface p-4 shadow-sm">
@@ -79,7 +84,7 @@ export function ChecklistPage() {
             <h2 className="text-lg font-bold">Checklists da unidade</h2>
             {!cartoes.length ? <Vazio titulo="Nenhum checklist liberado" texto="A franqueadora ainda não publicou checklists para a sua unidade." /> : null}
             <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {cartoes.map(({ modelo, situacao, ultimaMs, liberado, horario }) => (
+              {cartoes.map(({ modelo, situacao, ultimaMs, liberado, horario, vigencia, aguardandoInicio, primeiroVencimentoMs, venceEmMs }) => (
                 <li key={modelo.id} className={cx('flex flex-col rounded-2xl border bg-surface p-4 shadow-sm', situacao === 'atrasado' ? 'border-red-300' : 'border-line')}>
                   <div className="flex flex-wrap gap-1.5">
                     {!liberado ? <Selo tom="alerta">Abre às {horario}</Selo> : null}
@@ -91,8 +96,15 @@ export function ChecklistPage() {
                   {modelo.descricao ? <p className="mt-0.5 line-clamp-2 text-sm text-muted">{modelo.descricao}</p> : null}
                   <p className="mt-1 text-xs text-muted">
                     {modelo.totalItens} itens · {ultimaMs ? `último em ${formatarData(ultimaMs)}` : 'nunca preenchido'}
-                    {modelo.frequencia !== 'avulsa' && situacao === 'em_dia' ? ` · feito ${ROTULO_PERIODO[modelo.frequencia]}` : ''}
+                    {modelo.frequencia !== 'avulsa' && situacao === 'em_dia' && !vigencia ? ` · feito ${ROTULO_PERIODO[modelo.frequencia]}` : ''}
                   </p>
+                  {aguardandoInicio && vigencia ? (
+                    <p className="mt-2 text-sm text-ink-soft">Começa em {formatarDia(dataLocalMs(vigencia.inicio))}</p>
+                  ) : primeiroVencimentoMs !== null && agora < primeiroVencimentoMs ? (
+                    <p className="mt-2 text-sm text-ink-soft">Primeiro vencimento: {formatarDia(primeiroVencimentoMs - 1)}</p>
+                  ) : venceEmMs !== null ? (
+                    <p className="mt-2 text-sm text-ink-soft">Vence: {formatarData(venceEmMs - 1)}</p>
+                  ) : null}
                   {horario ? <p className="mt-2 text-sm text-ink-soft">Disponível a partir das {horario} (Brasília)</p> : null}
                   <div className="mt-auto pt-3">
                     {dados.simulando ? null : !liberado ? (
