@@ -3,7 +3,6 @@ import { CalendarDays, Plus, X } from 'lucide-react'
 import { AREAS } from '../../data/areas'
 import { Aviso, Button, Carregando, Selo } from '../../components/ui'
 import { atrasada, PRIORIDADES_DEMANDA, type Demanda } from '../../lib/demandas'
-import type { PessoaRede } from '../../lib/demandasSupabase'
 import { useFocusTrap } from '../../lib/focusTrap'
 import { formatarDia } from '../../lib/format'
 
@@ -16,19 +15,19 @@ export interface ConsultaDemandas<T> {
 
 export function useConsultaDemandas<T>(consultar: () => Promise<T>): ConsultaDemandas<T> {
   const [versao, setVersao] = useState(0)
-  const [resultado, setResultado] = useState<Omit<ConsultaDemandas<T>, 'recarregar'>>({ carregando: true })
+  const [resultado, setResultado] = useState<Omit<ConsultaDemandas<T>, 'recarregar'> & { consulta?: () => Promise<T> }>({ carregando: true })
   useEffect(() => {
     let ativa = true
     void consultar()
-      .then((dados) => { if (ativa) setResultado({ dados, carregando: false }) })
-      .catch(() => { if (ativa) setResultado((anterior) => ({ ...anterior, erro: true, carregando: false })) })
+      .then((dados) => { if (ativa) setResultado({ dados, carregando: false, consulta: consultar }) })
+      .catch(() => { if (ativa) setResultado((anterior) => ({ dados: anterior.consulta === consultar ? anterior.dados : undefined, consulta: consultar, erro: true, carregando: false })) })
     return () => { ativa = false }
   }, [consultar, versao])
   function recarregar() {
-    setResultado((anterior) => ({ dados: anterior.dados, carregando: true }))
+    setResultado((anterior) => ({ ...anterior, erro: false, carregando: true }))
     setVersao((v) => v + 1)
   }
-  return { ...resultado, recarregar }
+  return resultado.consulta === consultar ? { ...resultado, recarregar } : { carregando: true, recarregar }
 }
 
 export function EstadoConsulta({ erro, recarregar, texto, falha }: {
@@ -79,6 +78,7 @@ export function MetadadosDemanda({ demanda, hoje }: { demanda: Demanda; hoje: st
   const vencida = atrasada(demanda, hoje)
   return (
     <div className="flex flex-wrap items-center gap-2">
+      {demanda.unidadeNome ? <Selo>{demanda.unidadeNome}</Selo> : null}
       {demanda.area ? <Selo>{AREAS[demanda.area]}</Selo> : null}
       <Selo tom={demanda.prioridade === 'urgente' ? 'alerta' : demanda.prioridade === 'alta' ? 'marca' : 'neutro'}>
         {PRIORIDADES_DEMANDA[demanda.prioridade]}
@@ -94,14 +94,14 @@ export function MetadadosDemanda({ demanda, hoje }: { demanda: Demanda; hoje: st
   )
 }
 
-export function IniciaisResponsaveis({ ids, pessoas }: { ids: string[]; pessoas: Map<string, PessoaRede> }) {
+export function IniciaisResponsaveis({ ids, pessoas }: { ids: string[]; pessoas: Record<string, string | null> }) {
   return (
     <span className="flex flex-wrap gap-1">
       {ids.slice(0, 4).map((id) => {
-        const nome = pessoas.get(id)?.nome || 'Pessoa indisponível'
+        const nome = pessoas[id] || 'Pessoa indisponível'
         return <span key={id} title={nome} className="grid size-7 place-items-center rounded-full bg-paper text-xs font-bold text-ink-soft">
           <span className="sr-only">{nome}</span>
-          <span aria-hidden="true">{pessoas.has(id) ? nome.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() : '—'}</span>
+          <span aria-hidden="true">{pessoas[id] ? nome.trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase() : '—'}</span>
         </span>
       })}
       {ids.length > 4 ? <span className="self-center text-xs text-muted">+{ids.length - 4}</span> : null}

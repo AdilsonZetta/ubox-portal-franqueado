@@ -8,11 +8,13 @@ describe('mapeadores de demandas no Supabase', () => {
     const anexos = [{ nome: 'Briefing', url: 'https://exemplo.test/briefing' }]
     expect(mapDemandaSb({
       id: 'demanda', titulo: 'Campanha', descricao: '', area: 'marketing', prioridade: 'alta', prazo: '2026-11-27',
-      status: 'a_fazer', anexos, demanda_responsaveis: [{ usuario_id: 'rede' }], criado_por: 'autor',
+      status: 'a_fazer', anexos, destino: 'unidade', unidade_id: 'a', demanda_unidade_nome: 'Unidade A',
+      grupo_id: 'grupo', tem_responsaveis_unidade: false, demanda_responsaveis: [{ usuario_id: 'rede', usuario_nome: 'Pessoa da rede' }], criado_por: 'autor',
       criado_por_nome: 'Pessoa autora', criado_em: criado, atualizado_em: criado, concluida_em: null,
     })).toEqual({
       id: 'demanda', titulo: 'Campanha', descricao: '', area: 'marketing', prioridade: 'alta', prazo: '2026-11-27',
-      status: 'a_fazer', anexos, responsaveis: ['rede'], criadoPor: 'autor', criadoPorNome: 'Pessoa autora',
+      status: 'a_fazer', anexos, destino: 'unidade', unidadeId: 'a', unidadeNome: 'Unidade A',
+      grupoId: 'grupo', temResponsaveisUnidade: false, responsaveisNomes: { rede: 'Pessoa da rede' }, responsaveis: ['rede'], criadoPor: 'autor', criadoPorNome: 'Pessoa autora',
       criadoEm: criado, atualizadoEm: criado, concluidaEm: null,
     })
   })

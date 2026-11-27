@@ -1,23 +1,51 @@
-import { useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Aviso, Button, Campo, inputClass } from '../../components/ui'
 import { AREAS, type Area } from '../../data/areas'
-import { PRIORIDADES_DEMANDA, type DadosDemanda, type Demanda, type PrioridadeDemanda } from '../../lib/demandas'
-import { salvarDemanda, type PessoaRede } from '../../lib/demandasSupabase'
+import { PRIORIDADES_DEMANDA, type DadosDemanda, type Demanda, type DestinoDemanda, type PrioridadeDemanda } from '../../lib/demandas'
+import { criarDemandaUnidades, listarPessoasUnidades, salvarDemanda, type PessoaRede, type UnidadeDemanda } from '../../lib/demandasSupabase'
 import { mensagemErro } from '../../lib/errors'
-import { acaoDemandaClass, EstadoConsulta, PainelDemanda, type ConsultaDemandas } from './partes'
+import { acaoDemandaClass, EstadoConsulta, PainelDemanda, type ConsultaDemandas, useConsultaDemandas } from './partes'
+
+import { OpcaoPessoa, PessoasDasUnidades, SelecionarUnidades } from './DestinatariosDemanda'
 
 const nova: DadosDemanda = { titulo: '', descricao: '', area: null, prioridade: 'media', prazo: null, anexos: [], responsaveis: [] }
 
-export function FormularioDemanda({ demanda, pessoas, fechar, aoSalvar }: {
-  demanda?: Demanda; pessoas: ConsultaDemandas<PessoaRede[]>; fechar: () => void; aoSalvar: (id: string) => void
+export function FormularioDemanda({ demanda, pessoas, unidades, fechar, aoSalvar }: {
+  demanda?: Demanda; pessoas: ConsultaDemandas<PessoaRede[]>; unidades: ConsultaDemandas<UnidadeDemanda[]>
+  fechar: () => void; aoSalvar: (id: string | null, totalUnidades?: number) => void
 }) {
   const [dados, setDados] = useState<DadosDemanda>(demanda ?? nova)
   const [erro, setErro] = useState('')
   const [ocupado, setOcupado] = useState(false)
   const emCurso = useRef(false)
-  const indisponiveis = pessoas.dados
-    ? dados.responsaveis.filter((id) => !pessoas.dados?.some((pessoa) => pessoa.id === id))
-    : []
+  const [destino, setDestino] = useState<DestinoDemanda>(demanda?.destino ?? 'interna')
+  const [selecionadas, setSelecionadas] = useState<string[]>(demanda?.unidadeId ? [demanda.unidadeId] : [])
+  const [pessoasMarcadas, setPessoasMarcadas] = useState<Record<string, string>>({})
+  const paraUnidades = destino === 'unidade'
+  const consultar = useCallback(() => listarPessoasUnidades(selecionadas), [selecionadas])
+  const pessoasUnidade = useConsultaDemandas(consultar)
+  const unidadesEscolhidas = demanda?.unidadeId
+    ? [{ id: demanda.unidadeId, nome: demanda.unidadeNome ?? 'Unidade' }]
+    : unidades.dados?.filter((u) => selecionadas.includes(u.id)) ?? []
+  const idsUnidade = demanda ? dados.responsaveis : Object.keys(pessoasMarcadas)
+  const podeValidar = Boolean(pessoas.dados && (!paraUnidades || pessoasUnidade.dados))
+  const indisponiveis = podeValidar ? dados.responsaveis.filter((id) =>
+    !pessoas.dados?.some((p) => p.id === id) && (!paraUnidades || !pessoasUnidade.dados?.some((p) => p.id === id))) : []
+
+  function alternarResponsavel(id: string) {
+    alterar('responsaveis', dados.responsaveis.includes(id)
+      ? dados.responsaveis.filter((pessoa) => pessoa !== id)
+      : [...dados.responsaveis, id])
+  }
+
+  function alternarUnidade(id: string) {
+    if (selecionadas.includes(id)) {
+      setSelecionadas(selecionadas.filter((unidade) => unidade !== id))
+      setPessoasMarcadas(Object.fromEntries(Object.entries(pessoasMarcadas).filter(([, unidade]) => unidade !== id)))
+    } else {
+      setSelecionadas([...selecionadas, id])
+    }
+  }
 
   function alterar<K extends keyof DadosDemanda>(campo: K, valor: DadosDemanda[K]) {
     setDados((anterior) => ({ ...anterior, [campo]: valor }))
@@ -36,7 +64,11 @@ export function FormularioDemanda({ demanda, pessoas, fechar, aoSalvar }: {
           setErro('Informe um título com pelo menos 2 caracteres.')
           return
         }
-        if (!dados.area && !dados.responsaveis.length) {
+        if (paraUnidades && !selecionadas.length) {
+          setErro('Selecione pelo menos uma unidade.')
+          return
+        }
+        if (!paraUnidades && !dados.area && !dados.responsaveis.length) {
           setErro('Escolha uma área ou pelo menos uma pessoa responsável.')
           return
         }
@@ -49,8 +81,13 @@ export function FormularioDemanda({ demanda, pessoas, fechar, aoSalvar }: {
         setOcupado(true)
         setErro('')
         try {
-          const id = await salvarDemanda({ ...dados, anexos }, demanda?.id)
-          aoSalvar(demanda?.id ?? String(id))
+          if (paraUnidades && !demanda) {
+            await criarDemandaUnidades({ ...dados, anexos }, selecionadas, idsUnidade)
+            aoSalvar(null, selecionadas.length)
+          } else {
+            const id = await salvarDemanda({ ...dados, anexos }, demanda?.id)
+            aoSalvar(demanda?.id ?? String(id))
+          }
         } catch (falha) {
           setErro(mensagemErro(falha))
         } finally {
@@ -59,6 +96,24 @@ export function FormularioDemanda({ demanda, pessoas, fechar, aoSalvar }: {
         }
       }}>
         <fieldset disabled={ocupado} className="space-y-4">
+          {!demanda ? <fieldset className="flex flex-wrap gap-2">
+            <legend className="mb-2 text-sm font-bold">Destino</legend>
+            {([['interna', 'Interna (equipe da franqueadora)'], ['unidade', 'Para unidades']] as const).map(([valor, nome]) =>
+              <Button key={valor} type="button" variant={destino === valor ? 'secondary' : 'ghost'} aria-pressed={destino === valor}
+                onClick={() => { setDestino(valor); setErro('') }}>{nome}</Button>)}
+          </fieldset> : null}
+          {paraUnidades && !demanda ? <SelecionarUnidades consulta={unidades} selecionadas={selecionadas} alternar={alternarUnidade} /> : null}
+          {paraUnidades && selecionadas.length ? <PessoasDasUnidades consulta={pessoasUnidade} unidades={unidadesEscolhidas}
+            ids={idsUnidade} alternar={(pessoa) => {
+              if (demanda) {
+                alternarResponsavel(pessoa.id)
+              } else {
+                const proximo = { ...pessoasMarcadas }
+                if (proximo[pessoa.id]) delete proximo[pessoa.id]
+                else proximo[pessoa.id] = pessoa.unidade_id
+                setPessoasMarcadas(proximo)
+              }
+            }} /> : null}
           <Campo label="Título"><input name="titulo" className={inputClass} value={dados.titulo} required minLength={2} maxLength={140}
             onChange={(e) => alterar('titulo', e.target.value)} /></Campo>
           <Campo label="Descrição"><textarea name="descricao" className={inputClass} value={dados.descricao} rows={4} maxLength={6000}
@@ -80,19 +135,15 @@ export function FormularioDemanda({ demanda, pessoas, fechar, aoSalvar }: {
           </div>
 
           <fieldset className="space-y-2 rounded-xl border border-line p-3">
-            <legend className="px-1 text-sm font-bold">Pessoas responsáveis</legend>
-            <p className="text-sm text-muted">Escolha pelo menos uma pessoa ou vincule a demanda a uma área.</p>
+            <legend className="px-1 text-sm font-bold">{paraUnidades ? 'Acompanhamento na franqueadora' : 'Pessoas responsáveis'}</legend>
+            <p className="text-sm text-muted">{paraUnidades ? 'Selecione quem vai acompanhar a demanda na franqueadora, se necessário.' : 'Escolha pelo menos uma pessoa ou vincule a demanda a uma área.'}</p>
             {pessoas.erro || !pessoas.dados ? (
               <EstadoConsulta {...pessoas} texto="Carregando pessoas…" falha="Não foi possível carregar as pessoas da franqueadora." />
-            ) : pessoas.dados.length === 0 ? <p className="text-sm text-muted">Nenhuma pessoa ativa. Escolha uma área para continuar.</p> : (
+            ) : pessoas.dados.length === 0 ? <p className="text-sm text-muted">{paraUnidades ? 'Nenhuma pessoa ativa para acompanhar.' : 'Nenhuma pessoa ativa. Escolha uma área para continuar.'}</p> : (
               <div className="grid max-h-56 gap-1 overflow-y-auto sm:grid-cols-2">
                 {pessoas.dados.map((pessoa) => (
-                  <label key={pessoa.id} className="flex items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-paper">
-                    <input type="checkbox" name="responsaveis" value={pessoa.id} checked={dados.responsaveis.includes(pessoa.id)}
-                      onChange={(e) => alterar('responsaveis', e.target.checked
-                        ? [...dados.responsaveis, pessoa.id] : dados.responsaveis.filter((id) => id !== pessoa.id))} />
-                    <span className="min-w-0 wrap-anywhere">{pessoa.nome}<span className="block text-xs text-muted">{pessoa.area ? AREAS[pessoa.area] : 'Sem área'}</span></span>
-                  </label>
+                  <OpcaoPessoa key={pessoa.id} nome={pessoa.nome} detalhe={pessoa.area ? AREAS[pessoa.area] : 'Sem área'}
+                    marcado={dados.responsaveis.includes(pessoa.id)} alternar={() => alternarResponsavel(pessoa.id)} />
                 ))}
               </div>
             )}
@@ -124,8 +175,8 @@ export function FormularioDemanda({ demanda, pessoas, fechar, aoSalvar }: {
           {erro ? <Aviso tom="erro"><span role="alert">{erro}</span></Aviso> : null}
           <div className="flex flex-wrap justify-end gap-2">
             <Button type="button" variant="ghost" onClick={fechar}>Cancelar</Button>
-            <Button type="submit" className={acaoDemandaClass} disabled={Boolean(indisponiveis.length)}>
-              {ocupado ? 'Salvando…' : demanda ? 'Salvar alterações' : 'Criar demanda'}
+            <Button type="submit" className={acaoDemandaClass} disabled={Boolean(indisponiveis.length) || (paraUnidades && selecionadas.length > 0 && !pessoasUnidade.dados)}>
+              {ocupado ? 'Salvando…' : demanda ? 'Salvar alterações' : paraUnidades ? 'Enviar demanda' : 'Criar demanda'}
             </Button>
           </div>
         </fieldset>

@@ -81,9 +81,10 @@ function Admin({ children }: { children: ReactNode }) {
 
 function RotaDemandas() {
   const { user } = useAuth()
-  const { comoFranqueado } = useVisao()
-  if (!podeAcessarDemandas(user, comoFranqueado)) return <Navigate to="/" replace />
-  return <Suspense fallback={<Carregando texto="Abrindo demandas…" />}><DemandasPage key={user?.uid} /></Suspense>
+  const { comoFranqueado, simulado, carregandoUnidades } = useVisao()
+  if (BACKEND === 'supabase' && comoFranqueado && carregandoUnidades) return <Carregando texto="Carregando a unidade simulada…" />
+  if (!podeAcessarDemandas(user, comoFranqueado, simulado)) return <Navigate to="/" replace />
+  return <Suspense fallback={<Carregando texto="Abrindo demandas…" />}><DemandasPage key={comoFranqueado ? simulado?.uid : user?.uid} /></Suspense>
 }
 
 function GestorManuais({ children }: { children: ReactNode }) {

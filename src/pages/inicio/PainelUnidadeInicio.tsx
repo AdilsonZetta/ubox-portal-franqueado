@@ -3,6 +3,8 @@ import { Boxes, ClipboardCheck, GraduationCap, Headset, UsersRound } from 'lucid
 import { PedidosUnidade } from '../../components/PedidosUnidade'
 import { Aviso } from '../../components/ui'
 import { carregarAcompanhamento } from '../../lib/acompanhamentoApi'
+import { podeAcessarDemandas } from '../../lib/demandas'
+import { useAuth } from '../../lib/auth'
 import { carregarEstoque } from '../../lib/estoqueApi'
 import { podeModulo } from '../../lib/modulosAcesso'
 import { chamadosDoPainel, estoqueDoPainel, rotinasDeHoje, treinamentoDaUnidade } from '../../lib/painelInicial'
@@ -11,12 +13,14 @@ import { useVisao } from '../../lib/visao'
 import type { Usuario } from '../../types'
 import { CompromissosUnidade } from '../CompromissosUnidade'
 import { CartaoUniversidade } from '../universidade/Universidade'
+import { DemandasUnidade } from './DemandasUnidade'
 import { AcoesRapidas } from './AcoesRapidas'
 import { PendenciasInicio } from './PendenciasInicio'
 import { Indicadores, type Indicador } from './indicadores'
 import { fontePainel, useDadosPainel } from './useDadosPainel'
 
 export function PainelUnidadeInicio({ pessoa }: { pessoa: Usuario }) {
+  const { user } = useAuth()
   const { comoFranqueado } = useVisao()
   const pessoal = pessoa.papel === 'equipe_franqueado'
   const unidadeId = pessoa.unidadeId
@@ -92,6 +96,8 @@ export function PainelUnidadeInicio({ pessoa }: { pessoa: Usuario }) {
       {!unidadeId ? <Aviso>Esta conta está sem unidade vinculada. Confirme o vínculo com a franqueadora.</Aviso> : null}
       <Indicadores rotulo={pessoal ? 'Indicadores pessoais' : 'Indicadores da unidade'} itens={itens} carregando={!dados} recarregar={recarregar} />
       <AcoesRapidas />
+      {unidadeId && podeAcessarDemandas(user, comoFranqueado, pessoa)
+        ? <DemandasUnidade unidadeId={unidadeId} franqueado={!pessoal} somenteLeitura={comoFranqueado} /> : null}
       {!comoFranqueado ? <PendenciasInicio pessoal={pessoal} /> : null}
       {!comoFranqueado && !pessoal ? <CompromissosUnidade pessoa={pessoa} /> : null}
       {!pessoal ? <PedidosUnidade /> : null}
