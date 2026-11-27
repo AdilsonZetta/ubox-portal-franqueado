@@ -23,25 +23,38 @@ Deno.serve(async (req) => {
     const url = Deno.env.get('SUPABASE_URL')!
     const opcoes = { auth: { persistSession: false, autoRefreshToken: false } }
     const admin = createClient(url, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!, opcoes)
+    const ip = (req.headers.get('x-forwarded-for') ?? '').split(',')[0].trim() || 'desconhecido'
+    const limite = { p_cpf: credenciais.cpf, p_ip: ip }
+    const { data: permitido } = await admin.rpc('login_cliente_permitido', limite)
+    if (permitido !== true) return responder(429, invalido)
+    const falhar = async () => {
+      await admin.rpc('login_cliente_falha', limite)
+      return responder(401, invalido)
+    }
+
     const { data: contas, error } = await admin.rpc('contas_login_cliente', {
       p_cpf: credenciais.cpf,
       p_unidade: credenciais.unidadeId ?? null,
     })
-    if (error || !contas?.length) return responder(401, invalido)
-    if (!credenciais.unidadeId && contas.length > 1) {
+    if (error || !contas?.length) return await falhar()
+
+    // A senha é conferida antes de revelar qualquer unidade ligada ao CPF.
+    type Conta = { uid: string; email: string; unidade_id: string; unidade_nome: string }
+    const validas: { conta: Conta; sessao: { access_token: string; refresh_token: string; expires_in: number } }[] = []
+    for (const conta of (contas as Conta[]).slice(0, 5)) {
+      const sb = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, opcoes)
+      const { data, error: falha } = await sb.auth.signInWithPassword({ email: conta.email, password: credenciais.senha })
+      if (!falha && data.session && data.user?.id === conta.uid) validas.push({ conta, sessao: data.session })
+    }
+    if (!validas.length) return await falhar()
+    if (!credenciais.unidadeId && validas.length > 1) {
       return responder(409, {
         precisaUnidade: true,
-        unidades: contas.map((conta: { unidade_id: string; unidade_nome: string }) => ({
-          id: conta.unidade_id, nome: conta.unidade_nome,
-        })),
+        unidades: validas.map(({ conta }) => ({ id: conta.unidade_id, nome: conta.unidade_nome })),
       })
     }
 
-    const conta = contas[0]
-    const sb = createClient(url, Deno.env.get('SUPABASE_ANON_KEY')!, opcoes)
-    const { data, error: falha } = await sb.auth.signInWithPassword({ email: conta.email, password: credenciais.senha })
-    if (falha || !data.session || data.user?.id !== conta.uid) return responder(401, invalido)
-    const { access_token, refresh_token, expires_in } = data.session
+    const { access_token, refresh_token, expires_in } = validas[0].sessao
     return responder(200, { access_token, refresh_token, expires_in })
   } catch {
     return responder(401, invalido)
