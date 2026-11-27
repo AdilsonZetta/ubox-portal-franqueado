@@ -8,6 +8,7 @@ import { podeAcessarDemandas } from '../lib/demandas'
 import { minhasDemandasAbertas } from '../lib/demandasSupabase'
 import { observarPendentes } from '../lib/chamados'
 import { podeModulo, podeMostrarModulo } from '../lib/modulosAcesso'
+import { expandidoAposNavegar, moduloMenuAberto, proximoModuloExpandido } from '../lib/menuLateral'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
 import { podeGerirUniversidade } from '../lib/universidade'
 import { podeGerirMarketing } from '../lib/marketing'
@@ -137,9 +138,10 @@ export function Layout() {
 
   useEffect(() => {
     const dono = moduloDaRota(pathname)
-    if (!dono) return
-    setExpandido(dono)
-    localStorage.setItem(CHAVE, dono)
+    const proximo = expandidoAposNavegar(pathname, dono)
+    if (proximo === undefined) return
+    setExpandido(proximo)
+    if (dono) localStorage.setItem(CHAVE, dono)
   }, [pathname])
 
   useEffect(() => {
@@ -171,7 +173,7 @@ export function Layout() {
 
   function alternarModulo(slug: string) {
     setExpandido((atual) => {
-      const proximo = atual === slug ? '' : slug
+      const proximo = proximoModuloExpandido(atual, slug)
       localStorage.setItem(CHAVE, proximo)
       return proximo
     })
@@ -247,7 +249,7 @@ export function Layout() {
             <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-sidebar-muted">{grupo}</p>
             <div className="mt-1 space-y-0.5">
               {doGrupo.map((modulo) => {
-                const aberto = pathname !== '/' && expandido === modulo.slug
+                const aberto = moduloMenuAberto(expandido, modulo.slug)
                 const Icone = modulo.icon
                 return (
                   <div key={modulo.slug}>
