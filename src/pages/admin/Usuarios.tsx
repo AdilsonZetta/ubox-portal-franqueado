@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { Aviso, Button, Carregando, Vazio, inputClass } from '../../components/ui'
+import { Aviso, Button, Carregando, Vazio, Selo, inputClass } from '../../components/ui'
 import { atualizarUsuario, listarUsuarios, reidratarAcessos } from '../../lib/api'
 import { mensagemErro } from '../../lib/errors'
 import type { Papel, Usuario } from '../../types'
 
-function rotuloPapel(papel: Papel): string {
-  if (papel === 'admin') return 'Admin da franqueadora'
+function rotuloPapel(papel: Exclude<Papel, 'admin'>): string {
   if (papel === 'equipe_franqueadora') return 'Equipe da franqueadora'
   if (papel === 'franqueado') return 'Franqueado'
   return 'Equipe do franqueado'
@@ -130,7 +129,7 @@ export function UsuariosPage() {
                     <Button type="submit" variant="ghost" disabled={gravando}>Salvar</Button>
                   </form>
                 </td>
-                <td className="px-3 py-3">{rotuloPapel(usuario.papel)}</td>
+                <td className="px-3 py-3">{usuario.papel === 'admin' ? <Selo tom="marca">Super admin</Selo> : rotuloPapel(usuario.papel)}</td>
                 <td className="px-3 py-3">{usuario.recusado ? 'Recusado' : usuario.ativo ? 'Ativo' : 'Pendente'}</td>
                 <td className="px-3 py-3">
                   <div className="flex flex-wrap gap-2">

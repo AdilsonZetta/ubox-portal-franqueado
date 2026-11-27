@@ -7,6 +7,7 @@ import { listarDesignados, listarUnidadesComEstoque } from '../../lib/adesaoApi'
 import { listarUsuarios } from '../../lib/api'
 import { podeGerirAuditoria } from '../../lib/auditoria'
 import { podeGerirChecklist } from '../../lib/checklist'
+import { podeAcessarDemandas } from '../../lib/demandas'
 import { podeGerirEstoque } from '../../lib/estoque'
 import { carregarEstoque } from '../../lib/estoqueApi'
 import { listarUnidades } from '../../lib/gestao'
@@ -22,12 +23,13 @@ import { useVisao } from '../../lib/visao'
 import type { Usuario } from '../../types'
 import { AtencaoRede } from './AtencaoRede'
 import { AtividadeRede, ConformidadeRede } from './DetalhesRede'
+import { MinhasDemandas } from './MinhasDemandas'
 import { PendenciasInicio } from './PendenciasInicio'
 import { Indicadores, linkPainel, type Indicador } from './indicadores'
 import { fontePainel, useDadosPainel } from './useDadosPainel'
 
 export function PainelRede({ pessoa }: { pessoa: Usuario }) {
-  const { ehAdmin } = useVisao()
+  const { ehAdmin, comoFranqueado } = useVisao()
   const acompanhamento = podeGerirAcompanhamento(pessoa, ehAdmin)
   const checklist = podeGerirChecklist(pessoa, ehAdmin)
   const chamados = podeModulo(pessoa, 'chamados', false)
@@ -147,6 +149,7 @@ export function PainelRede({ pessoa }: { pessoa: Usuario }) {
   return (
     <>
       <Indicadores rotulo="Indicadores da rede" itens={itens} carregando={!dados} recarregar={recarregar} />
+      {podeAcessarDemandas(pessoa, comoFranqueado) ? <MinhasDemandas uid={pessoa.uid} admin={ehAdmin} /> : null}
       {acompanhamento ? (
         <>
           <ConformidadeRede linhas={linhas} checklist={checklist} chamados={chamados} manuais={manuais}

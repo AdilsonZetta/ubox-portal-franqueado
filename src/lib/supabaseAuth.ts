@@ -16,6 +16,7 @@ export interface LinhaUsuario {
   papel: string
   ativo: boolean
   recusado: boolean
+  area?: Usuario['area']
   unidade: string | null
   cidade: string | null
   unidade_id: string | null
@@ -34,6 +35,7 @@ export function mapUsuarioSupabase(l: LinhaUsuario | null | undefined): Usuario 
     papel: l.papel as Papel,
     ativo: l.ativo === true,
     recusado: l.recusado === true,
+    area: l.area ?? null,
     unidade: l.unidade ?? '',
     cidade: l.cidade ?? '',
     unidadeId: l.unidade_id || null,

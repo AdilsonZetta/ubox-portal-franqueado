@@ -4,6 +4,7 @@ import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { Carregando } from './components/ui'
 import { podeGerirTrilha } from './lib/manuaisTrilha'
+import { podeAcessarDemandas } from './lib/demandas'
 import { BACKEND } from './lib/backend'
 import { firebaseConfigured } from './lib/firebase'
 import { AuthProvider, useAuth } from './lib/auth'
@@ -61,6 +62,7 @@ import { VisaoRedePage } from './pages/acompanhamento/VisaoRede'
 import { PainelUnidadePage } from './pages/acompanhamento/PainelUnidade'
 import { MeuAcompanhamentoPage } from './pages/acompanhamento/MeuAcompanhamento'
 
+const DemandasPage = lazy(() => import('./pages/demandas/Demandas'))
 const PainelPage = lazy(() => import('./pages/admin/Painel').then((mod) => ({ default: mod.PainelPage })))
 const UsuariosPage = lazy(() => import('./pages/admin/Usuarios').then((mod) => ({ default: mod.UsuariosPage })))
 const ConformidadePage = lazy(() => import('./pages/admin/Conformidade').then((mod) => ({ default: mod.ConformidadePage })))
@@ -75,6 +77,13 @@ function Admin({ children }: { children: ReactNode }) {
   const { ehAdmin } = useVisao()
   if (user?.papel !== 'admin' || !ehAdmin) return <Navigate to="/" replace />
   return <Suspense fallback={<Carregando />}>{children}</Suspense>
+}
+
+function RotaDemandas() {
+  const { user } = useAuth()
+  const { comoFranqueado } = useVisao()
+  if (!podeAcessarDemandas(user, comoFranqueado)) return <Navigate to="/" replace />
+  return <Suspense fallback={<Carregando texto="Abrindo demandas…" />}><DemandasPage key={user?.uid} /></Suspense>
 }
 
 function GestorManuais({ children }: { children: ReactNode }) {
@@ -173,6 +182,7 @@ function Area() {
           <Route path="/franqueadora/unidade/:id" element={<Admin><UnidadePage /></Admin>} />
           <Route path="/gestao-usuarios" element={<Admin><GestaoUsuariosPage /></Admin>} />
           <Route path="/minha-equipe" element={<MinhaEquipePage />} />
+          <Route path="/demandas" element={<RotaDemandas />} />
           <Route path="/chamados" element={<ChamadosPage />} />
           <Route path="/senhas" element={<SenhasPage />} />
           <Route path="/senhas/solicitacoes" element={<SenhasSolicitacoesPage />} />
