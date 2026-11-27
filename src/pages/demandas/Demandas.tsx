@@ -127,13 +127,13 @@ export default function DemandasPage() {
         {confirmacao ? <Aviso tom="ok">{confirmacao}</Aviso> : null}
       </div>
       <section className="space-y-3 rounded-2xl border border-line bg-surface p-3 sm:p-4" aria-label="Filtros de demandas">
-        <div className="flex flex-wrap gap-1 rounded-xl bg-paper p-1" role="group" aria-label="Escopo das demandas">
+        <div className="-mx-1 flex gap-1 overflow-x-auto rounded-xl bg-paper p-1 [scrollbar-width:thin] sm:mx-0" role="group" aria-label="Escopo das demandas">
           {opcoes.map(([valor, nome]) => (
-            <Button key={valor} variant={valor === aba ? 'secondary' : 'ghost'} aria-pressed={valor === aba}
+            <Button key={valor} className="shrink-0 whitespace-nowrap" variant={valor === aba ? 'secondary' : 'ghost'} aria-pressed={valor === aba}
               onClick={() => ajustar({ escopo: valor }, true)}>{nome}</Button>
           ))}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {rede ? <Campo label="Destino"><select name="destino" className={inputClass} value={destino}
             onChange={(e) => ajustar({ destino: e.target.value, unidade: null }, true)}>
             <option value="">Todas</option><option value="interna">Internas</option><option value="unidade">Para unidades</option>
@@ -172,7 +172,7 @@ export default function DemandasPage() {
               : rede ? <NovaDemandaBotao abrir={abrirNova} /> : null} />
         ) : visao === 'lista' ? <ListaDemandas demandas={filtradas} hoje={hoje} link={link}
             ordem={params.get('ordem')} ordenar={(ordem) => ajustar({ ordem, visao: 'lista' }, true)} /> : (
-          <div className="grid items-start gap-3 xl:grid-cols-4" aria-label="Quadro de demandas">
+          <div className="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Quadro de demandas">
             {Object.entries(STATUS_DEMANDA).map(([status, nome]) => {
               const lista = filtradas.filter((d) => d.status === status)
               return (

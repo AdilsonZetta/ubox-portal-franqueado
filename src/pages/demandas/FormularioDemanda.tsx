@@ -96,10 +96,10 @@ export function FormularioDemanda({ demanda, pessoas, unidades, fechar, aoSalvar
         }
       }}>
         <fieldset disabled={ocupado} className="space-y-4">
-          {!demanda ? <fieldset className="flex flex-wrap gap-2">
+          {!demanda ? <fieldset className="grid gap-2 sm:grid-cols-2">
             <legend className="mb-2 text-sm font-bold">Destino</legend>
             {([['interna', 'Interna (equipe da franqueadora)'], ['unidade', 'Para unidades']] as const).map(([valor, nome]) =>
-              <Button key={valor} type="button" variant={destino === valor ? 'secondary' : 'ghost'} aria-pressed={destino === valor}
+              <Button key={valor} type="button" className="w-full justify-center border border-line" variant={destino === valor ? 'secondary' : 'ghost'} aria-pressed={destino === valor}
                 onClick={() => { setDestino(valor); setErro('') }}>{nome}</Button>)}
           </fieldset> : null}
           {paraUnidades && !demanda ? <SelecionarUnidades consulta={unidades} selecionadas={selecionadas} alternar={alternarUnidade} /> : null}
