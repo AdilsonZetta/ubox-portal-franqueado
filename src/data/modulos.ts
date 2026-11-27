@@ -127,10 +127,10 @@ export const MODULOS: Modulo[] = [
     grupo: 'Módulos do franqueado',
     audiencia: 'franqueado',
     icon: ScanLine,
-    descricao: 'Consulta de boletos e integração facial da unidade.',
+    descricao: 'Gerencie cobranças Asaas, tolerância e liberações manuais por unidade. A conexão Hikvision está em preparação.',
     ativo: true,
     para: '/modulos/acesso',
-    recursos: ['Entradas e saídas', 'Contrato', 'Horários', 'Ocorrências'],
+    recursos: ['Conta Asaas da unidade', 'Tolerância de vencimento', 'Liberação manual', 'Configuração da API Hikvision'],
   },
   {
     slug: 'cliente',
