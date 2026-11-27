@@ -1,5 +1,5 @@
 import type { Area } from './data/areas'
-export type Papel = 'admin' | 'equipe_franqueadora' | 'franqueado' | 'equipe_franqueado'
+export type Papel = 'admin' | 'equipe_franqueadora' | 'franqueado' | 'equipe_franqueado' | 'cliente'
 export type TipoDocumento = 'pop' | 'manual' | 'processo' | 'politica' | 'checklist' | 'html'
 export type FormatoDocumento = 'richtext' | 'html'
 export type StatusDocumento = 'rascunho' | 'publicado'
@@ -7,6 +7,7 @@ export type TipoAnexo = 'link' | 'drive' | 'video'
 export type TipoAviso = 'novo' | 'atualizado' | 'geral'
 
 export interface Usuario {
+  clienteId?: string | null
   uid: string
   email: string
   nome: string

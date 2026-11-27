@@ -1,3 +1,5 @@
+import { cpfValido } from '../../supabase/functions/_shared/cpf'
+
 // Módulo 12: Painel do Cliente. Regras puras (sem Firebase) para cadastro, cobranças, visitas, recados e o link público.
 
 export type StatusCliente = 'ativo' | 'encerrado'
@@ -10,6 +12,8 @@ export const RECADOS_NO_LINK = 10
 
 /** Cadastro do locatário com dados pessoais: só a unidade lê. */
 export interface Cliente {
+  cpf?: string
+  asaasCustomerId?: string
   id: string
   unidadeId: string
   nome: string
@@ -81,6 +85,8 @@ export interface ItensPainel {
 export const ITENS_VAZIOS: ItensPainel = { cobrancas: [], visitas: [], recados: [] }
 
 export interface ClienteForm {
+  cpf?: string
+  asaasCustomerId?: string
   nome: string
   telefone: string
   email: string
@@ -207,8 +213,9 @@ function valorInformado(valor: string): boolean {
   return /\d/.test(valor) && /^(?:R\$\s*)?[\d.,-]+$/i.test(valor.trim())
 }
 
-export function validarCliente(f: ClienteForm): string[] {
+export function validarCliente(f: ClienteForm, exigirCpf = true): string[] {
   const erros: string[] = []
+  if (exigirCpf && !cpfValido(f.cpf ?? '')) erros.push('Informe um CPF válido.')
   if (f.nome.trim().length < 2) erros.push('Informe o nome do cliente.')
   if (!/^[0-9 ()+.-]{0,30}$/.test(f.telefone.trim())) erros.push('Telefone só com números, espaços, parênteses, + . e -.')
   if (f.email.trim() && !/^[^@ ]+@[^@ ]+[.][^@ ]+$/.test(f.email.trim())) erros.push('E-mail inválido.')

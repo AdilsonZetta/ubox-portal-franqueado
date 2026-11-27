@@ -1,11 +1,13 @@
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import { lazy, Suspense, type ReactNode } from 'react'
-import { HashRouter, Navigate, Route, Routes } from 'react-router-dom'
+import { HashRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { Carregando } from './components/ui'
 import { podeGerirTrilha } from './lib/manuaisTrilha'
 import { podeAcessarDemandas } from './lib/demandas'
 import { BACKEND } from './lib/backend'
+import { destinoPortal } from './lib/rotasCliente'
+import { PortalClientePage } from './pages/cliente/PortalCliente'
 import { firebaseConfigured } from './lib/firebase'
 import { AuthProvider, useAuth } from './lib/auth'
 import { useVisao, VisaoProvider } from './lib/visao'
@@ -95,7 +97,7 @@ function GestorManuais({ children }: { children: ReactNode }) {
 }
 
 function Area() {
-  const { status, recuperandoSenha, linkSenhaInvalido } = useAuth()
+  const { status, recuperandoSenha } = useAuth()
   if (recuperandoSenha) return <NovaSenhaPage />
   if (status === 'loading') {
     return (
@@ -104,9 +106,18 @@ function Area() {
       </div>
     )
   }
-  if (status === 'error' && !linkSenhaInvalido) return <AguardandoPage />
   return (
-    <HashRouter>
+    <HashRouter><RotasPortal /></HashRouter>
+  )
+}
+
+function RotasPortal() {
+  const { status, user } = useAuth()
+  const { pathname } = useLocation()
+  const destino = status === 'ready' ? destinoPortal(user?.papel, pathname) : null
+  if (destino) return <Navigate to={destino} replace />
+
+  return (
       <Routes>
         <Route path="/entrar" element={<EntrarPage />} />
         <Route path="/cadastro" element={<CadastroPage />} />
@@ -115,9 +126,13 @@ function Area() {
         <Route path="/completar" element={<CompletarPage />} />
         {/* Link público do locatário (Painel do Cliente): sem login, só lê o painel do token. */}
         <Route path="/painel/:token" element={<PainelClientePage />} />
+        {BACKEND === 'supabase' && <Route path="/portal" element={
+          status === 'ready' && user?.papel === 'cliente' ? <PortalClientePage key={user.uid} usuario={user} /> :
+            <Navigate to={status === 'signedOut' ? '/entrar' : '/aguardando'} replace />
+        } />}
         <Route
           element={
-            status === 'ready' ? (
+            status === 'ready' && user?.papel !== 'cliente' ? (
               <PortalProvider>
                 <Layout />
               </PortalProvider>
@@ -201,7 +216,6 @@ function Area() {
         </Route>
         <Route path="*" element={<Navigate to={status === 'ready' ? '/' : '/entrar'} replace />} />
       </Routes>
-    </HashRouter>
   )
 }
 

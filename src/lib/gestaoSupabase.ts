@@ -166,7 +166,7 @@ export type ContaCriadaSb = { uid: string } & (
 
 type RespostaCriarConta = { link?: string | null; expiraEm?: string; uid?: string; erro?: string; erroLink?: string }
 
-async function chamarCriarConta(pedido: PedidoCriarConta | { acao: 'link'; uid: string }) {
+async function chamarCriarConta(pedido: PedidoCriarConta | { acao: 'link'; uid: string } | { acao: 'criar-acesso-cliente'; clienteId: string }) {
   const { data, error } = await requireSupabase().functions.invoke<RespostaCriarConta>('criar-conta', { body: pedido })
   if (error) {
     let mensagem = error.message
@@ -186,6 +186,13 @@ export async function criarContaSb(pedido: PedidoCriarConta): Promise<ContaCriad
   return { uid: data.uid, link: null, erroLink: data.erroLink || 'Não foi possível gerar o link.' }
 }
 
+export async function gerarAcessoClienteSb(clienteId: string): Promise<ContaCriadaSb> {
+  const data = await chamarCriarConta({ acao: 'criar-acesso-cliente', clienteId })
+  if (!data?.uid) throw new Error('Não foi possível gerar o acesso do cliente.')
+  if (data.link && data.expiraEm) return { uid: data.uid, link: data.link, expiraEm: data.expiraEm }
+  return { uid: data.uid, link: null, erroLink: 'Não foi possível gerar o link.' }
+}
+
 export async function gerarLinkSenhaSb(uid: string): Promise<LinkSenhaGerado> {
   const data = await chamarCriarConta({ acao: 'link', uid })
   if (!data?.link || !data.expiraEm) throw new Error(data?.erro || 'Não foi possível gerar o link.')
@@ -193,6 +200,7 @@ export async function gerarLinkSenhaSb(uid: string): Promise<LinkSenhaGerado> {
 }
 
 export async function enviarRedefinicaoSb(email: string): Promise<void> {
+  if (email.trim().toLowerCase().endsWith('@clientes.ubox.local')) throw new Error('Peça um novo link de acesso na sua unidade UBOX.')
   const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined
   const { error } = await requireSupabase().auth.resetPasswordForEmail(email.trim(), { redirectTo })
   falhou(error)

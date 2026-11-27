@@ -83,8 +83,9 @@ describe('módulo 12: painel do cliente', () => {
   })
 
   it('valida o cadastro e o recado com IA', () => {
-    const f = { nome: 'Maria Silva', telefone: '(34) 99999-0000', email: '', box: 'Box 1', contratoInicio: '2026-11-01', contratoFim: '', valorMensal: '289,90', diaVencimento: '10', obs: '' }
+    const f = { cpf: '529.982.247-25', nome: 'Maria Silva', telefone: '', email: '', box: 'Box 1', contratoInicio: '2026-11-01', contratoFim: '', valorMensal: '289,90', diaVencimento: '10', obs: '' }
     expect(validarCliente(f)).toEqual([])
+    expect(validarCliente({ ...f, cpf: '' })).toEqual(['Informe um CPF válido.'])
     expect(validarCliente({ ...f, diaVencimento: '31' })).toHaveLength(1)
     expect(validarCliente({ ...f, contratoFim: '2026-10-01' })).toHaveLength(1)
     expect(validarCliente({ ...f, email: 'x@' })).toHaveLength(1)

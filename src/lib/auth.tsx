@@ -8,7 +8,7 @@ import { requireAuth, requireDb } from './firebase'
 import { tratarLinkSenha } from './linkSenha'
 import { concluirRecuperacao, iniciarRecuperacao, limparRecuperacao, restaurarRecuperacao } from './marcadorRecuperacao'
 import { requireSupabase } from './supabase'
-import { cadastrarSupabase, carregarEstado, definirNovaSenha, entrarSupabase, gravarPerfilProprio, recuperarSupabase, sairSupabase } from './supabaseAuth'
+import { cadastrarSupabase, carregarEstado, definirNovaSenha, entrarClienteSupabase, entrarSupabase, gravarPerfilProprio, recuperarSupabase, sairSupabase } from './supabaseAuth'
 import type { Usuario } from '../types'
 
 export type StatusAuth = 'loading' | 'signedOut' | 'incomplete' | 'pending' | 'rejected' | 'ready' | 'error'
@@ -25,6 +25,7 @@ interface AuthValue {
   definirSenha: (senha: string) => Promise<void>
   erro: string
   refresh: () => Promise<void>
+  entrarCliente: typeof entrarClienteSupabase
   entrar: (email: string, senha: string) => Promise<void>
   cadastrar: (dados: { nome: string; email: string; senha: string; unidade: string; cidade: string }) => Promise<void>
   completarCadastro: (dados: { nome: string; unidade: string; cidade: string }) => Promise<void>
@@ -70,7 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (BACKEND !== 'supabase') return
     const sb = requireSupabase()
     let vivo = true
+    let leitura = 0
     const aplicar = (sessao: Parameters<typeof carregarEstado>[0] | null) => {
+      const atual = ++leitura
       if (!sessao) {
         setUser(null)
         setStatus('signedOut')
@@ -79,13 +82,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setStatus('loading')
       void carregarEstado(sessao)
         .then((estado) => {
-          if (!vivo) return
+          if (!vivo || atual !== leitura) return
           setUser(estado.user)
           setNomeSupabase(estado.nomeSugerido)
           setStatus(estado.status)
         })
         .catch((falha: unknown) => {
-          if (!vivo) return
+          if (!vivo || atual !== leitura) return
           setErro(falha instanceof Error ? falha.message : 'Falha ao carregar o perfil.')
           setStatus('error')
         })
@@ -185,6 +188,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       erro,
       refresh: async () => setVersao((atual) => atual + 1),
+      entrarCliente: async (...args) => {
+        if (BACKEND !== 'supabase') throw new Error('Acesso do cliente indisponível.')
+        return entrarClienteSupabase(...args)
+      },
       entrar: async (email, senha) => {
         if (BACKEND === 'supabase') return entrarSupabase(email, senha)
         await signInWithEmailAndPassword(requireAuth(), email.trim(), senha)

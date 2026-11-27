@@ -11,10 +11,17 @@ interface PerfilAlvo {
 interface PerfilChamador extends PerfilAlvo {
   ativo: boolean
   recusado: boolean
+  unidade_ativa?: boolean
+  modulos_liberados?: string[]
 }
 
 export function podeGerarLink(chamador: PerfilChamador, alvo: PerfilAlvo): boolean {
   if (chamador.ativo !== true || chamador.recusado === true || alvo.id === chamador.id || alvo.papel === 'admin') return false
+  if (alvo.papel === 'cliente') {
+    return ['franqueado', 'equipe_franqueado'].includes(chamador.papel)
+      && Boolean(chamador.unidade_id) && chamador.unidade_id === alvo.unidade_id
+      && chamador.unidade_ativa === true && chamador.modulos_liberados?.includes('cliente') === true
+  }
   if (chamador.papel === 'admin') {
     return ['equipe_franqueadora', 'franqueado', 'equipe_franqueado'].includes(alvo.papel)
   }
