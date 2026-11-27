@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LinkCriado, type AcessoPorLink } from '../components/LinkCriado'
-import { Aviso, Button, Campo, Carregando, Vazio, inputClass } from '../components/ui'
+import { Aviso, Button, Campo, Carregando, Selo, Vazio, inputClass } from '../components/ui'
 import { SLUGS_FRANQUEADO, MODULOS, subconjunto } from '../data/modulos'
 import { atualizarModulosDoUsuario, criarUsuarioEquipe, enviarEmailRedefinicao, listarEquipeDaUnidade } from '../lib/gestao'
 import { listarUsuarios } from '../lib/api'
 import { useAuth } from '../lib/auth'
 import { mensagemErro } from '../lib/errors'
 import { BACKEND } from '../lib/backend'
-import { gerarLinkSenhaSb } from '../lib/gestaoSupabase'
+import { AREAS, type Area } from '../data/areas'
+import { atualizarUsuarioSb, definirAdmin, gerarLinkSenhaSb, listarEquipeFranqueadoraSb } from '../lib/gestaoSupabase'
 import type { Usuario } from '../types'
 
 export function useListaAcessos<T>(consultar: () => Promise<T[]>) {
@@ -69,6 +70,7 @@ function EstadoListaAcessos({ carregando, erroCarga, recarregar, vazio, equipe =
 }
 
 async function listarEquipeFranqueadora() {
+  if (BACKEND === 'supabase') return listarEquipeFranqueadoraSb()
   const lista = await listarUsuarios()
   return lista.filter((pessoa) => pessoa.papel === 'equipe_franqueadora')
 }
@@ -171,12 +173,15 @@ export function GerarNovoLink({ pessoa, estado, desabilitado, aoGerar }: {
 }
 
 export function GestaoUsuariosPage() {
-  const { user } = useAuth()
+  const { user, refresh } = useAuth()
   const [criada, setCriada] = useState<AcessoCriado | null>(null)
-  const [form, setForm] = useState({ nome: '', email: '', modulos: ['manuais'] as string[] })
+  const [form, setForm] = useState({ nome: '', email: '', modulos: ['manuais'] as string[], admin: false })
 
   const estado = useListaAcessos(listarEquipeFranqueadora)
   const { lista: equipe, erro, gravar, gravando, bloqueado } = estado
+
+  const gerenciaRede = BACKEND === 'supabase' && user?.papel === 'admin'
+  const adminsAtivos = equipe.filter((pessoa) => pessoa.papel === 'admin' && pessoa.ativo && !pessoa.recusado).length
 
   const teto = [...SLUGS_FRANQUEADO, ...MODULOS.filter((modulo) => modulo.audiencia === 'franqueadora' && modulo.slug !== 'gestao-franqueadora' && modulo.slug !== 'gestao-usuarios').map((modulo) => modulo.slug)]
 
@@ -206,7 +211,14 @@ export function GestaoUsuariosPage() {
               criadoPor: user.uid,
             })
             setCriada({ email: form.email.trim(), ...acesso })
-            setForm({ nome: '', email: '', modulos: ['manuais'] })
+            setForm({ nome: '', email: '', modulos: ['manuais'], admin: false })
+            if (gerenciaRede && form.admin && 'uid' in acesso) {
+              try {
+                await definirAdmin(acesso.uid, true)
+              } catch {
+                estado.setErro('A conta foi criada como equipe da franqueadora. Você pode promovê-la na lista de usuários.')
+              }
+            }
           })
         }}
       >
@@ -214,33 +226,77 @@ export function GestaoUsuariosPage() {
           <Campo label="Nome"><input className={inputClass} required value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} /></Campo>
           <Campo label="E-mail de login"><input className={inputClass} type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Campo>
         </div>
+        {gerenciaRede ? (
+          <label className="flex min-h-10 items-center gap-2 text-sm font-medium">
+            <input type="checkbox" checked={form.admin} disabled={bloqueado} onChange={(e) => setForm({ ...form, admin: e.target.checked })} />
+            Criar já como super admin (acesso total)
+          </label>
+        ) : null}
         <Checks valor={form.modulos} teto={teto} onChange={(modulos) => setForm({ ...form, modulos })} />
         <Button type="submit" disabled={bloqueado}>{gravando ? 'Gravando…' : 'Criar usuário da equipe'}</Button>
       </form>
       <EstadoListaAcessos {...estado} vazio={!equipe.length} equipe />
       <ul className="space-y-2">
-        {!estado.carregando && !estado.erroCarga && equipe.map((pessoa) => (
-          <li key={pessoa.uid} className="rounded-2xl border border-line bg-surface px-4 py-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span>
-                <span className="font-semibold">{pessoa.nome}</span>
-                <span className="block text-xs text-muted">{pessoa.email} · {pessoa.ativo ? 'Ativo' : 'Inativo'}</span>
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {user?.papel === 'admin' && pessoa.uid !== user.uid && <GerarNovoLink pessoa={pessoa} estado={estado} aoGerar={setCriada} />}
-                <Button variant="secondary" disabled={bloqueado} onClick={() => {
-                  if (pessoa.ativo && !window.confirm(`Desativar o acesso de ${pessoa.nome}?`)) return
-                  void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo }))
-                }}>
-                  {pessoa.ativo ? 'Desativar' : 'Ativar'}
-                </Button>
+        {!estado.carregando && !estado.erroCarga && equipe.map((pessoa) => {
+          const admin = pessoa.papel === 'admin'
+          const ultimoAdmin = admin && pessoa.ativo && !pessoa.recusado && adminsAtivos <= 1
+          const protecao = ultimoAdmin ? 'A rede precisa de pelo menos um admin ativo.' : undefined
+          return (
+            <li key={pessoa.uid} className="rounded-2xl border border-line bg-surface px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <span className="mr-2 font-semibold">{pessoa.nome}</span>
+                  {admin ? <Selo tom="marca">Super admin</Selo> : null}
+                  <span className="block text-xs text-muted">{pessoa.email} · {pessoa.recusado ? 'Recusado' : pessoa.ativo ? 'Ativo' : 'Inativo'}</span>
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {gerenciaRede && (admin || (pessoa.ativo && !pessoa.recusado)) ? (
+                    <span title={protecao}>
+                      <Button variant="secondary" aria-disabled={ultimoAdmin || undefined} className={ultimoAdmin ? 'cursor-not-allowed opacity-50' : undefined} disabled={bloqueado} onClick={() => {
+                        if (ultimoAdmin) return
+                        const efeito = admin
+                          ? 'A conta voltará a usar os módulos liberados para a equipe da franqueadora.'
+                          : 'A conta terá acesso total à gestão da rede.'
+                        if (!window.confirm(`${admin ? 'Remover o acesso de super admin de' : 'Tornar super admin'} ${pessoa.nome}? ${efeito}`)) return
+                        void gravar(async () => {
+                          await definirAdmin(pessoa.uid, !admin)
+                          if (pessoa.uid === user?.uid) await refresh()
+                        })
+                      }}>{admin ? 'Remover admin' : 'Tornar admin'}</Button>
+                    </span>
+                  ) : null}
+                  {user?.papel === 'admin' && pessoa.uid !== user.uid && <GerarNovoLink pessoa={pessoa} estado={estado} aoGerar={setCriada} />}
+                  <Button variant="secondary" disabled={bloqueado || ultimoAdmin} title={protecao} onClick={() => {
+                    if (pessoa.ativo && !window.confirm(`Desativar o acesso de ${pessoa.nome}?`)) return
+                    void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { ativo: !pessoa.ativo }))
+                  }}>
+                    {pessoa.ativo ? 'Desativar' : 'Ativar'}
+                  </Button>
+                </div>
               </div>
-            </div>
-            <div className="mt-3">
-              <Checks valor={pessoa.modulosLiberados ?? []} teto={teto} disabled={bloqueado} onChange={(modulos) => void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { modulosLiberados: modulos }))} />
-            </div>
-          </li>
-        ))}
+              {protecao ? <p className="mt-2 text-xs text-muted">{protecao}</p> : null}
+              {gerenciaRede ? (
+                <div className="mt-3 max-w-xs">
+                  <Campo label={`Área de ${pessoa.nome}`}>
+                    <select className={inputClass} value={pessoa.area ?? ''} disabled={bloqueado} onChange={(e) => {
+                      const area = (e.target.value || null) as Area | null
+                      void gravar(async () => {
+                        await atualizarUsuarioSb(pessoa.uid, { area })
+                        if (pessoa.uid === user?.uid) await refresh()
+                      })
+                    }}>
+                      <option value="">Sem área</option>
+                      {Object.entries(AREAS).map(([valor, nome]) => <option key={valor} value={valor}>{nome}</option>)}
+                    </select>
+                  </Campo>
+                </div>
+              ) : null}
+              {!admin ? <div className="mt-3">
+                <Checks valor={pessoa.modulosLiberados ?? []} teto={teto} disabled={bloqueado} onChange={(modulos) => void gravar(() => atualizarModulosDoUsuario(pessoa.uid, { modulosLiberados: modulos }))} />
+              </div> : null}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

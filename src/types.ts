@@ -1,3 +1,4 @@
+import type { Area } from './data/areas'
 export type Papel = 'admin' | 'equipe_franqueadora' | 'franqueado' | 'equipe_franqueado'
 export type TipoDocumento = 'pop' | 'manual' | 'processo' | 'politica' | 'checklist' | 'html'
 export type FormatoDocumento = 'richtext' | 'html'
@@ -12,6 +13,7 @@ export interface Usuario {
   papel: Papel
   ativo: boolean
   recusado: boolean
+  area?: Area | null
   unidade: string
   cidade: string
   unidadeId?: string | null

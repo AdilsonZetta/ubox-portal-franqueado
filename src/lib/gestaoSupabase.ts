@@ -42,12 +42,13 @@ export function mapUnidadeSupabase(l: LinhaUnidade): Unidade {
   }
 }
 
-type PatchUsuario = Partial<Pick<Usuario, 'nome' | 'papel' | 'ativo' | 'recusado' | 'unidade' | 'cidade' | 'modulosLiberados'>>
+type PatchUsuario = Partial<Pick<Usuario, 'nome' | 'papel' | 'area' | 'ativo' | 'recusado' | 'unidade' | 'cidade' | 'modulosLiberados'>>
 
 /** Converte o patch do app (camelCase) para as colunas; campos fora da lista são ignorados. */
 export function patchUsuarioParaLinha(patch: PatchUsuario): Record<string, unknown> {
   const linha: Record<string, unknown> = {}
   if (patch.nome !== undefined) linha.nome = patch.nome.trim()
+  if (patch.area !== undefined) linha.area = patch.area
   if (patch.papel !== undefined) linha.papel = patch.papel
   if (patch.ativo !== undefined) linha.ativo = patch.ativo
   if (patch.recusado !== undefined) linha.recusado = patch.recusado
@@ -69,6 +70,20 @@ export async function listarUsuariosSb(): Promise<Usuario[]> {
   const { data, error } = await requireSupabase().from('usuarios').select('*')
   falhou(error)
   return ((data ?? []) as LinhaUsuario[]).map(mapUsuarioSupabase).filter((u): u is Usuario => u !== null)
+}
+
+export async function listarEquipeFranqueadoraSb(): Promise<Usuario[]> {
+  const banco = requireSupabase()
+  const equipe: Usuario[] = []
+  const tamanho = 500
+  for (let inicio = 0; ; inicio += tamanho) {
+    const { data, error } = await banco.from('usuarios').select('*')
+      .in('papel', ['admin', 'equipe_franqueadora']).order('id').range(inicio, inicio + tamanho - 1)
+    falhou(error)
+    const linhas = (data ?? []) as LinhaUsuario[]
+    equipe.push(...linhas.map(mapUsuarioSupabase).filter((u): u is Usuario => u !== null))
+    if (linhas.length < tamanho) return equipe.sort(porNome)
+  }
 }
 
 export async function listarUnidadesSb(): Promise<Unidade[]> {
@@ -180,5 +195,10 @@ export async function gerarLinkSenhaSb(uid: string): Promise<LinkSenhaGerado> {
 export async function enviarRedefinicaoSb(email: string): Promise<void> {
   const redirectTo = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : undefined
   const { error } = await requireSupabase().auth.resetPasswordForEmail(email.trim(), { redirectTo })
+  falhou(error)
+}
+
+export async function definirAdmin(uid: string, admin: boolean): Promise<void> {
+  const { error } = await requireSupabase().rpc('definir_admin', { p_uid: uid, p_admin: admin })
   falhou(error)
 }

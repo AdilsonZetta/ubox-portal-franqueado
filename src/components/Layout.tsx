@@ -1,9 +1,11 @@
-import { Activity, Bell, BookOpen, ChevronDown, ClipboardCheck, Folder, Home, LayoutDashboard, LayoutTemplate, LogOut, Menu, MessageCircle, Route as RotaIcon, Search, Shield, SlidersHorizontal, Upload, UserRound, Users, X } from 'lucide-react'
+import { Activity, Bell, BookOpen, ChevronDown, ClipboardCheck, ClipboardList, Folder, Home, LayoutDashboard, LayoutTemplate, LogOut, Menu, MessageCircle, Route as RotaIcon, Search, Shield, SlidersHorizontal, Upload, UserRound, Users, X } from 'lucide-react'
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { GRUPOS, MODULOS } from '../data/modulos'
 import { destinoDaBusca, type ModoBusca } from '../lib/buscaPortal'
 import { useAuth } from '../lib/auth'
+import { podeAcessarDemandas } from '../lib/demandas'
+import { minhasDemandasAbertas } from '../lib/demandasSupabase'
 import { observarPendentes } from '../lib/chamados'
 import { podeModulo, podeMostrarModulo } from '../lib/modulosAcesso'
 import { podeGerirTrilha } from '../lib/manuaisTrilha'
@@ -55,6 +57,7 @@ function moduloDaRota(pathname: string): string | null {
   if (pathname.startsWith('/acompanhamento')) return 'acompanhamento'
   if (pathname.startsWith('/auditoria')) return 'auditoria'
   if (pathname.startsWith('/universidade') || pathname.startsWith('/trilhas') || pathname.startsWith('/certificado') || pathname.startsWith('/meus-certificados')) return 'universidade'
+  if (/^\/demandas\/?$/.test(pathname)) return null
   if (pathname.startsWith('/chamados')) return 'chamados'
   if (pathname.startsWith('/senhas')) return 'senhas'
   if (pathname.startsWith('/franqueadora')) return 'gestao-franqueadora'
@@ -78,6 +81,9 @@ export function Layout() {
   const [expandido, setExpandido] = useState(() => localStorage.getItem(CHAVE) || 'manuais')
   const navigate = useNavigate()
   const { pathname } = useLocation()
+  const podeDemandas = podeAcessarDemandas(user, comoFranqueado)
+  const uid = user?.uid
+  const [abertasDemandas, setAbertasDemandas] = useState(0)
   const imprimir = useMatch('/documento/:id/imprimir')
   const gereManuais = podeGerirTrilha(user, ehAdmin)
   const naoLidos = avisos.filter((aviso) => !avisosLidos.includes(aviso.id)).length
@@ -91,6 +97,27 @@ export function Layout() {
   const podeSenhas = Boolean(user && (ehAdmin || podeModulo(pessoa, 'senhas', comoFranqueado)))
   const [solicitacoesAbertas, setSolicitacoesAbertas] = useState(0)
   const areas = useMemo(() => filhosDe(categorias, null), [categorias])
+
+  useEffect(() => {
+    setAbertasDemandas(0)
+    if (!podeDemandas) return
+    let ativa = true
+    let consulta = 0
+    function atualizar() {
+      const atual = ++consulta
+      void minhasDemandasAbertas()
+        .then((total) => { if (ativa && atual === consulta) setAbertasDemandas(total) })
+        .catch(() => { if (ativa && atual === consulta) setAbertasDemandas(0) })
+    }
+    atualizar()
+    const timer = window.setInterval(atualizar, 180_000)
+    window.addEventListener('demandas:alteradas', atualizar)
+    return () => {
+      ativa = false
+      window.clearInterval(timer)
+      window.removeEventListener('demandas:alteradas', atualizar)
+    }
+  }, [podeDemandas, pathname, uid])
 
   useEffect(() => {
     if (!podeChamados || (!redeChamados && !unidadeChamados)) {
@@ -150,6 +177,15 @@ export function Layout() {
     })
   }
 
+  const linkDemandas = podeDemandas ? (
+    <NavLink to="/demandas" onClick={() => setMenuAberto(false)}
+      className={({ isActive }) => cx('flex min-h-9 items-center gap-2 rounded-lg px-2 py-1.5 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
+      <ClipboardList className="size-4 shrink-0" aria-hidden="true" />
+      <span className="flex-1">Demandas</span>
+      {abertasDemandas > 0 ? <span aria-label={`${abertasDemandas} em aberto`} className="rounded-full bg-brand px-1.5 text-xs font-bold text-ink tabular-nums">{abertasDemandas}</span> : null}
+    </NavLink>
+  ) : null
+
   const miolo = (
     <>
       <Link to="/" className="block w-fit rounded-xl outline-none ring-brand/30 focus-visible:ring-2" aria-label="Painel">
@@ -202,6 +238,7 @@ export function Layout() {
           <LayoutDashboard className="h-4 w-4 shrink-0" aria-hidden="true" />
           <span className="min-w-0 flex-1 wrap-anywhere">Painel</span>
         </NavLink>
+        {linkDemandas ? <div className="-mt-3">{linkDemandas}</div> : null}
         {GRUPOS.map((grupo) => {
           const doGrupo = MODULOS.filter((modulo) => modulo.grupo === grupo && podeMostrarModulo(pessoa, modulo.slug, { ehAdmin, simulando: comoFranqueado }))
           if (!doGrupo.length) return null
@@ -453,7 +490,7 @@ export function Layout() {
       <div className="mt-3 flex shrink-0 items-center gap-2 border-t border-surface/20 pt-3">
         <NavLink to="/perfil" className="min-w-0 flex-1" onClick={() => setMenuAberto(false)}>
           <span className="block truncate text-sm font-semibold">{pessoa?.nome || 'Escolha a unidade'}</span>
-          <span className="block truncate text-[11px] text-sidebar-muted">{ehAdmin ? 'Franqueadora' : pessoa?.unidade || 'Franqueado'}</span>
+          <span className="block truncate text-[11px] text-sidebar-muted">{ehAdmin ? 'Franqueadora' : pessoa?.papel === 'equipe_franqueadora' ? 'Equipe da franqueadora' : pessoa?.unidade || 'Franqueado'}</span>
         </NavLink>
         <button onClick={() => void sair()} className="rounded-lg p-2 text-line-strong hover:bg-surface/10" aria-label="Sair">
           <LogOut className="h-4 w-4" />
