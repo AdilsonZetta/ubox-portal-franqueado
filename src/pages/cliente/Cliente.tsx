@@ -1,3 +1,9 @@
+import { cpfValido } from '../../../supabase/functions/_shared/cpf'
+import { BACKEND } from '../../lib/backend'
+import { LinkCriado, type AcessoPorLink } from '../../components/LinkCriado'
+import { gerarAcessoClienteSb } from '../../lib/gestaoSupabase'
+import { FacialCliente } from './FacialCliente'
+import { removerFotosEncerradas } from '../../lib/facialCliente'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Copy, ExternalLink } from 'lucide-react'
@@ -35,18 +41,23 @@ import { CamposCliente } from './Clientes'
 import { SituacaoSelo, diaDe, useClientes } from './partes'
 
 const paraForm = (c: Cliente): ClienteForm => ({
-  nome: c.nome, telefone: c.telefone, email: c.email, box: c.box, contratoInicio: diaDe(c.contratoInicioMs), contratoFim: diaDe(c.contratoFimMs),
+  cpf: c.cpf, asaasCustomerId: c.asaasCustomerId, nome: c.nome, telefone: c.telefone, email: c.email, box: c.box, contratoInicio: diaDe(c.contratoInicioMs), contratoFim: diaDe(c.contratoFimMs),
   valorMensal: (c.valorMensalCentavos / 100).toFixed(2).replace('.', ','), diaVencimento: String(c.diaVencimento), obs: c.obs,
 })
 
 export function ClientePage() {
   const { id = '' } = useParams()
+  return <FichaCliente key={id} id={id} />
+}
+
+function FichaCliente({ id }: { id: string }) {
   const dados = useClientes({ incluirCobrancas: false })
   const cliente = dados.clientes.find((c) => c.id === id) ?? null
   const painel = cliente ? dados.paineis.get(cliente.id) ?? null : null
   const [ok, setOk] = useState('')
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [consultandoCpf, setConsultandoCpf] = useState(false)
   const [edit, setEdit] = useState<ClienteForm | null>(null)
   const [itens, setItens] = useState<ItensPainel>(ITENS_VAZIOS)
   const [estadoItens, setEstadoItens] = useState<{ token: string; tique: number; erro: boolean } | null>(null)
@@ -137,24 +148,32 @@ export function ClientePage() {
             contato={(contatoUnidade) => void mudar({ contatoUnidade: contatoUnidade.trim().slice(0, 120) }, 'Contato da unidade atualizado no link.')}
             podeTrocar={!!itensAtuais && !itensAtuais.erro && !atualizandoItens}
             trocar={() => pessoa && window.confirm('Gerar um link novo? O endereço anterior deixará de funcionar.') && void acao(() => trocarLink(pessoa, cliente, painel, itens), 'Link trocado. O endereço antigo deixou de funcionar.')} />
+          {BACKEND === 'supabase' && cliente.status === 'ativo' && <>
+            {cpfValido(cliente.cpf ?? '') && <AcessoCliente key={cliente.id} cliente={cliente} />}
+            <FacialCliente key={cliente.id} cliente={cliente} origem="unidade" />
+          </>}
           <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
             <h2 className="text-lg font-bold">Cadastro e contrato</h2>
-            <p className="text-xs text-ink/50">Telefone, e-mail, sobrenome e observação ficam só com a unidade.</p>
+            <p className="text-xs text-ink/50">O link público mostra apenas o primeiro nome e os dados do painel.</p>
             {edit ? (
               <>
-                <CamposCliente f={edit} setF={setEdit} />
+                <CamposCliente f={edit} setF={(atualizar) => setEdit((atual) => atual && atualizar(atual))} unidadeId={cliente.unidadeId} setConsultandoCpf={setConsultandoCpf} />
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" disabled={salvando} onClick={() => {
-                    const erros = validarCliente(edit)
+                  <Button type="button" disabled={salvando || consultandoCpf} onClick={() => {
+                    const erros = validarCliente(edit, BACKEND === 'supabase')
                     if (erros.length) { setErro(erros.join(' ')); return }
                     if (pessoa) void acao(() => salvarCliente(pessoa, cliente, edit, cliente.status), 'Cadastro salvo.').then((r) => r && setEdit(null))
-                  }}>Salvar</Button>
-                  <Button type="button" variant="ghost" disabled={salvando} onClick={() => setEdit(null)}>Cancelar</Button>
+                  }}>{consultandoCpf ? 'Consultando CPF…' : 'Salvar'}</Button>
+                  <Button type="button" variant="ghost" disabled={salvando} onClick={() => {
+                    setConsultandoCpf(false)
+                    setEdit(null)
+                  }}>Cancelar</Button>
                 </div>
               </>
             ) : (
               <>
                 <dl className="grid grid-cols-[110px_1fr] gap-y-1 text-sm">
+                  {BACKEND === 'supabase' && <><dt className="text-ink/50">CPF</dt><dd>{cliente.cpf || '—'}</dd></>}
                   <dt className="text-ink/50">Telefone</dt><dd>{cliente.telefone || '—'}</dd>
                   <dt className="text-ink/50">E-mail</dt><dd>{cliente.email || '—'}</dd>
                   <dt className="text-ink/50">Contrato</dt><dd>{formatarDiaISO(diaDe(cliente.contratoInicioMs))}{cliente.contratoFimMs ? ` a ${formatarDiaISO(diaDe(cliente.contratoFimMs))}` : ' · sem prazo'}</dd>
@@ -163,7 +182,10 @@ export function ClientePage() {
                 <div className="flex flex-wrap gap-2">
                   <Button type="button" variant="secondary" onClick={() => setEdit(paraForm(cliente))}>Editar</Button>
                   {cliente.status === 'ativo' ? (
-                    <Button type="button" variant="ghost" disabled={salvando} onClick={() => pessoa && window.confirm('Encerrar o contrato e desativar o link do cliente? O histórico será mantido.') && void acao(() => salvarCliente(pessoa, cliente, paraForm(cliente), 'encerrado'), 'Contrato encerrado e link desativado (nada é apagado).')}>Encerrar contrato</Button>
+                    <Button type="button" variant="ghost" disabled={salvando} onClick={() => pessoa && window.confirm('Encerrar o contrato e desativar o acesso do cliente?') && void acao(async () => {
+                      await salvarCliente(pessoa, cliente, paraForm(cliente), 'encerrado')
+                      if (BACKEND === 'supabase') void removerFotosEncerradas(cliente).catch(() => undefined)
+                    }, 'Contrato encerrado e acesso desativado.')}>Encerrar contrato</Button>
                   ) : (
                     <Button type="button" variant="ghost" disabled={salvando} onClick={() => pessoa && void acao(() => salvarCliente(pessoa, cliente, paraForm(cliente), 'ativo'), 'Contrato reativado.')}>Reativar contrato</Button>
                   )}
@@ -176,6 +198,32 @@ export function ClientePage() {
       </div>
     </div>
   )
+}
+
+function AcessoCliente({ cliente }: { cliente: Cliente }) {
+  const [acesso, setAcesso] = useState<AcessoPorLink | null>(null)
+  const [ocupado, setOcupado] = useState(false)
+  const [erro, setErro] = useState(false)
+
+  async function gerar() {
+    setOcupado(true)
+    setErro(false)
+    setAcesso(null)
+    try {
+      setAcesso({ ...await gerarAcessoClienteSb(cliente.id), nome: cliente.nome })
+    } catch {
+      setErro(true)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  return <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
+    <h2 className="text-lg font-bold">Acesso ao portal</h2>
+    {erro && <Aviso tom="erro">Não foi possível gerar o acesso. Tente novamente.</Aviso>}
+    {acesso ? <LinkCriado acesso={acesso} aoFechar={() => setAcesso(null)} /> :
+      <Button type="button" disabled={ocupado} onClick={() => void gerar()}>{ocupado ? 'Gerando…' : 'Gerar acesso do cliente'}</Button>}
+  </section>
 }
 
 type Item = (fn: () => Promise<unknown>, msg: string) => Promise<boolean>

@@ -29,7 +29,15 @@ select throws_ok($$update public.unidade_acesso_config set webhook_token_hash = 
 select is((select status from public.ubox_acesso_listar('u') where id = 'c'),'Sem facial','tabela facial ausente');
 reset role;
 create table if not exists public.cliente_faciais (cliente_id text, foto_path text, consentimento_em timestamptz, status text);
-insert into public.cliente_faciais (cliente_id, foto_path, consentimento_em, status) values ('c','fixture.jpg',now(),'ativo');
+insert into public.cliente_faciais (cliente_id, foto_path, consentimento_em, status)
+  select 'c','fixture.jpg',now(),'ativo'
+  where not exists (select 1 from information_schema.columns
+    where table_schema='public' and table_name='cliente_faciais' and column_name='unidade_id');
+insert into public.cliente_faciais (cliente_id, unidade_id, foto_path, consentimento_em, consentimento_texto_versao, cadastrado_por, status)
+  select 'c','u','u/c/00000000-0000-0000-0000-000000000099.jpg',now(),'2026-11-27-v1','unidade','enviado'
+  where exists (select 1 from information_schema.columns
+    where table_schema='public' and table_name='cliente_faciais' and column_name='unidade_id')
+    and not exists (select 1 from public.cliente_faciais where cliente_id='c');
 set local role authenticated;
 select is((select status from public.ubox_acesso_listar('u') where id = 'c'),'Liberado','último dia da tolerância');
 reset role;

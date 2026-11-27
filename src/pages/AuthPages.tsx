@@ -7,6 +7,7 @@ import { Aviso, Button, Campo, inputClass } from '../components/ui'
 import { BACKEND } from '../lib/backend'
 import { firebaseConfigured } from '../lib/firebase'
 import { useAuth } from '../lib/auth'
+import { PEDIR_LINK_CLIENTE, type UnidadeLoginCliente } from '../lib/supabaseAuth'
 import { mensagemErro } from '../lib/errors'
 
 function Moldura({ children }: { children: ReactNode }) {
@@ -47,12 +48,17 @@ export function ConfigPendentePage() {
 }
 
 export function EntrarPage() {
-  const { status, entrar } = useAuth()
+  const { status, entrar, entrarCliente, user } = useAuth()
+  const [cliente, setCliente] = useState(false)
+  const [cpf, setCpf] = useState('')
+  const [unidades, setUnidades] = useState<UnidadeLoginCliente[] | null>(null)
+  const [unidadeId, setUnidadeId] = useState('')
+  const [ajudaCliente, setAjudaCliente] = useState(false)
   const [email, setEmail] = useState('')
   const [senha, setSenha] = useState('')
   const [erro, setErro] = useState('')
   const [ocupado, setOcupado] = useState(false)
-  if (status === 'ready') return <Navigate to="/" replace />
+  if (status === 'ready') return <Navigate to={user?.papel === 'cliente' ? '/portal' : '/'} replace />
   if (status === 'pending' || status === 'rejected') return <Navigate to="/aguardando" replace />
   if (status === 'incomplete') return <Navigate to="/completar" replace />
 
@@ -61,23 +67,48 @@ export function EntrarPage() {
     setOcupado(true)
     setErro('')
     try {
-      await entrar(email, senha)
+      if (cliente) {
+        const opcoes = await entrarCliente(cpf, senha, unidadeId || undefined)
+        if (opcoes) setUnidades(opcoes)
+      } else await entrar(email, senha)
     } catch (falha) {
-      setErro(mensagemErro(falha))
+      setErro(cliente ? 'CPF ou senha inválidos.' : mensagemErro(falha))
     } finally {
       setOcupado(false)
     }
   }
 
+  function trocarModo(modoCliente: boolean) {
+    setCliente(modoCliente)
+    setSenha('')
+    setErro('')
+    setUnidades(null)
+    setUnidadeId('')
+    setAjudaCliente(false)
+  }
+
   return (
     <Moldura>
       <h2 className="text-2xl font-bold">Entrar</h2>
-      <p className="mt-1 text-sm text-muted">Use o e-mail cadastrado na franqueadora.</p>
+      {BACKEND === 'supabase' && <div className="mt-4 flex flex-wrap gap-2" role="group" aria-label="Tipo de acesso">
+        <Button type="button" variant={cliente ? 'secondary' : 'primary'} aria-pressed={!cliente} disabled={ocupado} onClick={() => trocarModo(false)}>Sou da equipe</Button>
+        <Button type="button" variant={cliente ? 'primary' : 'secondary'} aria-pressed={cliente} disabled={ocupado} onClick={() => trocarModo(true)}>Sou cliente</Button>
+      </div>}
+      <p className="mt-2 text-sm text-muted">{cliente ? 'Entre com seu CPF e a senha que você definiu.' : 'Use o e-mail cadastrado na franqueadora.'}</p>
       <form onSubmit={enviar} className="mt-6 space-y-4">
         {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
-        <Campo label="E-mail">
+        {cliente ? <Campo label="CPF">
+          <input className={inputClass} inputMode="numeric" autoComplete="username" maxLength={14} disabled={ocupado} required value={cpf}
+            onChange={(e) => { setCpf(e.target.value); setUnidades(null); setUnidadeId('') }} />
+        </Campo> : <Campo label="E-mail">
           <input className={inputClass} type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        </Campo>
+        </Campo>}
+        {unidades && <Campo label="Unidade UBOX">
+          <select className={inputClass} required value={unidadeId} disabled={ocupado} onChange={(e) => setUnidadeId(e.target.value)}>
+            <option value="">Escolha sua unidade</option>
+            {unidades.map((u) => <option key={u.id} value={u.id}>{u.nome}</option>)}
+          </select>
+        </Campo>}
         <Campo label="Senha">
           <input className={inputClass} type="password" autoComplete="current-password" required value={senha} onChange={(e) => setSenha(e.target.value)} />
         </Campo>
@@ -85,17 +116,22 @@ export function EntrarPage() {
           {ocupado ? 'Entrando…' : 'Entrar'}
         </Button>
       </form>
-      <p className="mt-4 text-sm">
-        <Link to="/recuperar" className="font-semibold text-brand">
-          Esqueci a senha
-        </Link>
-      </p>
-      <p className="mt-2 text-sm text-muted">
-        Ainda não tem acesso?{' '}
-        <Link to="/cadastro" className="font-semibold text-ink">
-          Criar conta
-        </Link>
-      </p>
+      {cliente ? <>
+        <Button type="button" variant="ghost" className="mt-3" onClick={() => setAjudaCliente(true)}>Esqueci a senha</Button>
+        {ajudaCliente && <Aviso tom="info">{PEDIR_LINK_CLIENTE}</Aviso>}
+      </> : <>
+        <p className="mt-4 text-sm">
+          <Link to="/recuperar" className="font-semibold text-brand">
+            Esqueci a senha
+          </Link>
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          Ainda não tem acesso?{' '}
+          <Link to="/cadastro" className="font-semibold text-ink">
+            Criar conta
+          </Link>
+        </p>
+      </>}
     </Moldura>
   )
 }
@@ -251,15 +287,15 @@ export function AguardandoPage() {
   const { status, user, sair } = useAuth()
   const navigate = useNavigate()
   useEffect(() => {
-    if (status === 'ready') navigate('/')
+    if (status === 'ready') navigate(user?.papel === 'cliente' ? '/portal' : '/')
     if (status === 'signedOut') navigate('/entrar')
-  }, [status, navigate])
+  }, [status, navigate, user?.papel])
   const recusado = status === 'rejected' || user?.recusado
   return (
     <Moldura>
-      <h2 className="text-2xl font-bold">{recusado ? 'Cadastro não aprovado' : 'Aguardando aprovação'}</h2>
+      <h2 className="text-2xl font-bold">{user?.papel === 'cliente' ? 'Acesso indisponível' : recusado ? 'Cadastro não aprovado' : 'Aguardando aprovação'}</h2>
       <p className="mt-3 text-sm leading-relaxed text-muted">
-        {recusado
+        {user?.papel === 'cliente' ? 'Fale com sua unidade UBOX para conferir o acesso.' : recusado
           ? 'A franqueadora não liberou este cadastro. Fale com o time Ubox se isso for um engano.'
           : `${user?.nome ?? 'Sua conta'} está na fila da franqueadora. Quando o acesso for liberado, a biblioteca abre neste mesmo login.`}
       </p>

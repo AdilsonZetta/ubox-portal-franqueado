@@ -1,6 +1,7 @@
+import { normalizarCpf } from '../../supabase/functions/_shared/cpf'
 // Feito por Codex (ChatGPT) + Grok Bot no Cursor (Antigravity sem cota).
 import {
-  centavos, gerarToken, ordenarCobrancas, ordenarRecados, ordenarVisitas, primeiroNomeDe, tokenValido,
+  RECADOS_NO_LINK, centavos, gerarToken, ordenarCobrancas, ordenarRecados, ordenarVisitas, primeiroNomeDe, tokenValido,
   type Cliente, type ClienteForm, type Cobranca, type ItensPainel, type Painel, type StatusVisita, type Visita,
 } from './cliente'
 import { mapCliente, mapPainel, type MudancaPainel } from './clienteApi'
@@ -25,12 +26,13 @@ function contratoDaLinha(linha: Linha) {
 }
 
 export function mapClienteSb(linha: Linha): Cliente {
-  return mapCliente(texto(linha.id), {
+  const cliente = mapCliente(texto(linha.id), {
     ...linha, ...contratoDaLinha(linha),
     unidadeId: linha.unidade_id, painelToken: linha.painel_token,
     criadoEm: dataSb(linha.criado_em), atualizadoEm: dataSb(linha.atualizado_em),
     atualizadoPorNome: linha.atualizado_por_nome,
   })
+  return { ...cliente, cpf: texto(linha.cpf), asaasCustomerId: texto(linha.asaas_customer_id) }
 }
 
 export function mapPainelSb(token: string, linha: Linha): Painel {
@@ -180,6 +182,8 @@ const contrato = (f: ClienteForm) => ({
   dia_vencimento: Number(f.diaVencimento),
 })
 const pessoais = (f: ClienteForm) => ({
+  ...(f.cpf !== undefined && { cpf: normalizarCpf(f.cpf) || null }),
+  ...(f.asaasCustomerId !== undefined && { asaas_customer_id: f.asaasCustomerId || null }),
   nome: f.nome.trim().slice(0, 120), telefone: f.telefone.trim().slice(0, 30),
   email: f.email.trim().slice(0, 120), obs: f.obs.trim().slice(0, 1000),
 })
@@ -193,6 +197,7 @@ export async function criarClienteSb(autor: Usuario, f: ClienteForm, contatoUnid
       primeiro_nome: primeiroNomeDe(f.nome), ativo: false,
     },
   })
+  if (error?.code === '23505' && error.message.includes('cpf')) throw new Error('Já existe um cliente com este CPF na unidade.')
   if (error) throw error
   return data
 }
@@ -202,6 +207,7 @@ export async function salvarClienteSb(cliente: Cliente, f: ClienteForm, status: 
     p_id: cliente.id, p_token: cliente.painelToken, p_dados: { ...pessoais(f), ...contrato(f), status },
     p_primeiro_nome: primeiroNomeDe(f.nome),
   })
+  if (error?.code === '23505' && error.message.includes('cpf')) throw new Error('Já existe um cliente com este CPF na unidade.')
   if (error) throw error
 }
 
@@ -219,4 +225,49 @@ export async function trocarLinkSb(cliente: Cliente, painel: Painel): Promise<st
   })
   if (error) throw error
   return data
+}
+
+export async function carregarMeuContrato(clienteId: string): Promise<Cliente | null> {
+  const { data, error } = await requireSupabase().from('clientes')
+    .select('id,unidade_id,box,contrato_inicio,contrato_fim,valor_mensal_centavos,dia_vencimento,painel_token')
+    .eq('id', clienteId).maybeSingle()
+  if (error) throw error
+  return data ? mapClienteSb(data) : null
+}
+
+export async function carregarMeusRecados(token: string) {
+  const { data, error } = await requireSupabase().from('cliente_painel_recados').select('*')
+    .eq('painel_token', token).order('criado_em', { ascending: false }).order('id').limit(RECADOS_NO_LINK)
+  if (error) throw error
+  return mapItens([], [], data).recados
+}
+
+export async function carregarMinhasCobrancas(token: string): Promise<Cobranca[]> {
+  return ordenarCobrancas((await listar('cliente_painel_cobrancas', 'painel_token', token)).map(mapCobrancaSb))
+}
+
+const ROTULOS_ACESSO: Record<string, string> = {
+  liberado: 'Liberado',
+  bloqueado_inadimplencia: 'Bloqueado por inadimplência',
+  bloqueado_por_inadimplencia: 'Bloqueado por inadimplência',
+  liberado_manualmente: 'Liberado manualmente',
+  liberado_manual: 'Liberado manualmente',
+  sem_facial: 'Sem facial',
+}
+
+export async function consultarStatusAcesso(clienteId: string): Promise<string | null> {
+  const sb = requireSupabase()
+  const args = { p_cliente_id: clienteId }
+  try {
+    const publico = await sb.rpc('status_acesso_do_cliente', args)
+    const resultado = publico.error ? await sb.schema('app').rpc('status_acesso_do_cliente', args) : publico
+    if (resultado.error) return null
+    const linha = Array.isArray(resultado.data) ? resultado.data[0] : resultado.data
+    const status = typeof linha === 'string' ? linha : linha?.status
+    if (typeof status !== 'string') return null
+    if (Object.values(ROTULOS_ACESSO).includes(status)) return status
+    return Object.hasOwn(ROTULOS_ACESSO, status) ? ROTULOS_ACESSO[status] : null
+  } catch {
+    return null
+  }
 }

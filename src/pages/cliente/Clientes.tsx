@@ -1,6 +1,9 @@
+import { cpfValido, normalizarCpf } from '../../../supabase/functions/_shared/cpf'
+import { AVISO_ASAAS, consultarCpfAsaas } from '../../lib/asaasUnidade'
+import { BACKEND } from '../../lib/backend'
 import { normalizar } from '../../lib/text'
 import { BotaoCsv } from '../../components/BotaoCsv'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 import { Aviso, Button, Campo, Carregando, Vazio, cx, inputClass } from '../../components/ui'
@@ -111,18 +114,56 @@ export function ClientesPage() {
 
 export const FORM_VAZIO: ClienteForm = { nome: '', telefone: '', email: '', box: '', contratoInicio: hojeISO(), contratoFim: '', valorMensal: '', diaVencimento: '10', obs: '' }
 
-export function CamposCliente({ f, setF }: { f: ClienteForm; setF: (f: ClienteForm) => void }) {
+export function CamposCliente({ f, setF, unidadeId, setConsultandoCpf }: {
+  f: ClienteForm
+  setF: (atualizar: (form: ClienteForm) => ClienteForm) => void
+  unidadeId?: string
+  setConsultandoCpf: (consultando: boolean) => void
+}) {
+  const busca = useRef(0)
+  const [aviso, setAviso] = useState('')
+  useEffect(() => () => { busca.current++ }, [])
+  const campo = (patch: Partial<ClienteForm>) => setF((atual) => ({ ...atual, ...patch }))
+
+  async function buscarCpf() {
+    const cpf = f.cpf ?? ''
+    if (!unidadeId || !cpfValido(cpf) || f.asaasCustomerId) return
+    const pedido = ++busca.current
+    setConsultandoCpf(true)
+    const retorno = await consultarCpfAsaas(unidadeId, normalizarCpf(cpf))
+    if (pedido !== busca.current) return
+    setConsultandoCpf(false)
+    if (!retorno) { setAviso(AVISO_ASAAS); return }
+    if (!retorno.encontrado) return
+    setF((atual) => atual.cpf !== cpf ? atual : {
+      ...atual,
+      asaasCustomerId: retorno.asaas_customer_id ?? '',
+      nome: atual.nome || retorno.nome || '',
+      email: atual.email || retorno.email || '',
+      telefone: atual.telefone || retorno.telefone || '',
+    })
+  }
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      <Campo label="Nome completo"><input className={inputClass} maxLength={120} value={f.nome} onChange={(e) => setF({ ...f, nome: e.target.value })} /></Campo>
-      <Campo label="Telefone"><input className={inputClass} maxLength={30} value={f.telefone} onChange={(e) => setF({ ...f, telefone: e.target.value })} /></Campo>
-      <Campo label="E-mail (opcional)"><input className={inputClass} maxLength={120} value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} /></Campo>
-      <Campo label="Box"><input className={inputClass} maxLength={60} placeholder="Ex.: Box 12 (6 m²)" value={f.box} onChange={(e) => setF({ ...f, box: e.target.value })} /></Campo>
-      <Campo label="Início do contrato"><input className={inputClass} type="date" value={f.contratoInicio} onChange={(e) => setF({ ...f, contratoInicio: e.target.value })} /></Campo>
-      <Campo label="Fim do contrato (opcional)"><input className={inputClass} type="date" value={f.contratoFim} onChange={(e) => setF({ ...f, contratoFim: e.target.value })} /></Campo>
-      <Campo label="Mensalidade (R$)"><input className={inputClass} inputMode="decimal" placeholder="289,90" value={f.valorMensal} onChange={(e) => setF({ ...f, valorMensal: e.target.value })} /></Campo>
-      <Campo label="Dia de vencimento"><input className={inputClass} type="number" min={1} max={28} value={f.diaVencimento} onChange={(e) => setF({ ...f, diaVencimento: e.target.value })} /></Campo>
-      <Campo label="Observação interna (não vai para o cliente)"><input className={inputClass} maxLength={1000} value={f.obs} onChange={(e) => setF({ ...f, obs: e.target.value })} /></Campo>
+      {BACKEND === 'supabase' && <Campo label="CPF">
+        <input className={inputClass} inputMode="numeric" maxLength={14} required value={f.cpf ?? ''}
+          onBlur={() => void buscarCpf()} onChange={(e) => {
+            busca.current++
+            setConsultandoCpf(false)
+            setAviso('')
+            campo({ cpf: e.target.value, asaasCustomerId: normalizarCpf(e.target.value) === normalizarCpf(f.cpf ?? '') ? f.asaasCustomerId : '' })
+          }} />
+      </Campo>}
+      {aviso && <div className="sm:col-span-2 lg:col-span-3"><Aviso tom="info">{aviso}</Aviso></div>}
+      <Campo label="Nome completo"><input className={inputClass} maxLength={120} value={f.nome} onChange={(e) => campo({ nome: e.target.value })} /></Campo>
+      <Campo label="Telefone (opcional)"><input className={inputClass} maxLength={30} value={f.telefone} onChange={(e) => campo({ telefone: e.target.value })} /></Campo>
+      <Campo label="E-mail (opcional)"><input className={inputClass} maxLength={120} value={f.email} onChange={(e) => campo({ email: e.target.value })} /></Campo>
+      <Campo label="Box"><input className={inputClass} maxLength={60} placeholder="Ex.: Box 12 (6 m²)" value={f.box} onChange={(e) => campo({ box: e.target.value })} /></Campo>
+      <Campo label="Início do contrato"><input className={inputClass} type="date" value={f.contratoInicio} onChange={(e) => campo({ contratoInicio: e.target.value })} /></Campo>
+      <Campo label="Fim do contrato (opcional)"><input className={inputClass} type="date" value={f.contratoFim} onChange={(e) => campo({ contratoFim: e.target.value })} /></Campo>
+      <Campo label="Mensalidade (R$)"><input className={inputClass} inputMode="decimal" placeholder="289,90" value={f.valorMensal} onChange={(e) => campo({ valorMensal: e.target.value })} /></Campo>
+      <Campo label="Dia de vencimento"><input className={inputClass} type="number" min={1} max={28} value={f.diaVencimento} onChange={(e) => campo({ diaVencimento: e.target.value })} /></Campo>
+      <Campo label="Observação interna (não vai para o cliente)"><input className={inputClass} maxLength={1000} value={f.obs} onChange={(e) => campo({ obs: e.target.value })} /></Campo>
     </div>
   )
 }
@@ -133,11 +174,12 @@ function NovoCliente({ dados, onFechar }: { dados: UsoClientes; onFechar: () => 
   const [contato, setContato] = useState(() => [...dados.paineis.values()].find((p) => p.contatoUnidade)?.contatoUnidade ?? '')
   const [erro, setErro] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [consultandoCpf, setConsultandoCpf] = useState(false)
 
   async function gravar() {
-    if (salvando) return
+    if (salvando || consultandoCpf) return
     if (!dados.pessoa) return
-    const erros = validarCliente(f)
+    const erros = validarCliente(f, BACKEND === 'supabase')
     if (erros.length) { setErro(erros.join(' ')); return }
     setSalvando(true)
     setErro('')
@@ -155,11 +197,11 @@ function NovoCliente({ dados, onFechar }: { dados: UsoClientes; onFechar: () => 
     <section className="space-y-3 rounded-3xl border border-line bg-white p-5 shadow-sm">
       <h2 className="text-lg font-bold">Novo cliente</h2>
       {erro ? <Aviso tom="erro">{erro}</Aviso> : null}
-      <CamposCliente f={f} setF={setF} />
+      <CamposCliente f={f} setF={setF} unidadeId={dados.pessoa?.unidadeId ?? undefined} setConsultandoCpf={setConsultandoCpf} />
       <Campo label="Contato da unidade (aparece no link do cliente)"><input className={inputClass} maxLength={120} placeholder="Ex.: WhatsApp (34) 3333-0000" value={contato} onChange={(e) => setContato(e.target.value)} /></Campo>
       <p className="text-xs text-ink/55">O link do cliente nasce desativado; ative quando for enviar.</p>
       <div className="flex gap-2">
-        <Button type="button" onClick={() => void gravar()} disabled={salvando}>{salvando ? 'Salvando…' : 'Cadastrar e abrir'}</Button>
+        <Button type="button" onClick={() => void gravar()} disabled={salvando || consultandoCpf}>{salvando ? 'Salvando…' : consultandoCpf ? 'Consultando CPF…' : 'Cadastrar e abrir'}</Button>
         <Button type="button" variant="ghost" onClick={onFechar} disabled={salvando}>Cancelar</Button>
       </div>
     </section>

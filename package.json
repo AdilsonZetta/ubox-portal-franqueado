@@ -8,7 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "node scripts/check-rules.mjs && vitest run && node --test supabase/functions/consultar-boletos/*.test.mjs supabase/functions/asaas-unidade/*.test.mjs && npm run test:rules",
+    "test": "node scripts/check-rules.mjs && vitest run && node --test supabase/functions/consultar-boletos/*.test.mjs supabase/functions/asaas-unidade/*.test.mjs supabase/functions/entrar-cliente/*.test.mjs supabase/functions/criar-conta/*.test.mjs && npm run test:rules",
     "test:rules": "npx -y firebase-tools@latest emulators:exec --only firestore --project demo-ubox \"node tests/regras.mjs\"",
     "deploy:rules": "npx -y firebase-tools@latest deploy --only firestore:rules,firestore:indexes --project ubox-portal-franqueado",
     "make-admin": "node scripts/make-admin.mjs",
