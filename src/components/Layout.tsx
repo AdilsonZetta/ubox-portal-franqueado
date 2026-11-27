@@ -81,7 +81,7 @@ export function Layout() {
   const [expandido, setExpandido] = useState(() => localStorage.getItem(CHAVE) || 'manuais')
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const podeDemandas = podeAcessarDemandas(user, comoFranqueado)
+  const podeDemandas = podeAcessarDemandas(user, comoFranqueado, simulado)
   const uid = user?.uid
   const [abertasDemandas, setAbertasDemandas] = useState(0)
   const imprimir = useMatch('/documento/:id/imprimir')
@@ -100,7 +100,7 @@ export function Layout() {
 
   useEffect(() => {
     setAbertasDemandas(0)
-    if (!podeDemandas) return
+    if (!podeDemandas || comoFranqueado) return
     let ativa = true
     let consulta = 0
     function atualizar() {
@@ -117,7 +117,7 @@ export function Layout() {
       window.clearInterval(timer)
       window.removeEventListener('demandas:alteradas', atualizar)
     }
-  }, [podeDemandas, pathname, uid])
+  }, [podeDemandas, comoFranqueado, pathname, uid])
 
   useEffect(() => {
     if (!podeChamados || (!redeChamados && !unidadeChamados)) {
@@ -182,7 +182,7 @@ export function Layout() {
       className={({ isActive }) => cx('flex min-h-9 items-center gap-2 rounded-lg px-2 py-1.5 text-sm', isActive ? 'bg-lime font-semibold text-ink' : 'text-line-strong hover:bg-surface/10 hover:text-surface')}>
       <ClipboardList className="size-4 shrink-0" aria-hidden="true" />
       <span className="flex-1">Demandas</span>
-      {abertasDemandas > 0 ? <span aria-label={`${abertasDemandas} em aberto`} className="rounded-full bg-brand px-1.5 text-xs font-bold text-ink tabular-nums">{abertasDemandas}</span> : null}
+      {!comoFranqueado && abertasDemandas > 0 ? <span aria-label={`${abertasDemandas} em aberto`} className="rounded-full bg-brand px-1.5 text-xs font-bold text-ink tabular-nums">{abertasDemandas}</span> : null}
     </NavLink>
   ) : null
 
